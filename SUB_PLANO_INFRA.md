@@ -250,23 +250,90 @@ python run_all.py
 
 ---
 
-## 6. Estrutura de diretórios adicionais
+## 6. Estrutura de Diretórios Completa
 
 ```text
 agente_imobiliario/
+├── app.py                        # Streamlit (chat simulador + dashboard)
+├── run_telegram.py               # Bot Telegram (polling + scheduler)
+├── run_all.py                    # Supervisor: inicia ambos os processos
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
-├── alembic/                    # Migrations (se adotado)
-│   ├── alembic.ini
-│   ├── env.py
+├── README.md
+├── requirements.txt
+├── PLANO_DE_IMPLEMENTACAO.md
+├── data/
+│   └── imoveis.json
+├── src/
+│   ├── config.py
+│   ├── schemas/
+│   │   ├── lead.py
+│   │   ├── imovel.py
+│   │   ├── agendamento.py
+│   │   └── agent.py
+│   ├── db/
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   └── session.py
+│   ├── services/
+│   │   ├── catalog_service.py
+│   │   ├── lead_service.py
+│   │   ├── scheduling_service.py
+│   │   ├── summary_service.py
+│   │   └── followup_service.py
+│   ├── agent/
+│   │   ├── sdr_agent.py
+│   │   ├── prompts.py
+│   │   └── tools.py
+│   ├── channels/
+│   │   └── telegram_bot.py       # Adaptador Telegram (handlers + despacho)
+│   ├── scheduler/
+│   │   └── followup_scheduler.py # APScheduler com job de follow-up periódico
+│   └── ui/
+│       ├── chat.py
+│       └── dashboard.py
+├── config/
+│   └── credentials.yaml          # Credenciais bcrypt (autenticação Streamlit)
+├── scripts/
+│   └── generate_password_hash.py # Utilitário para gerar hashes de senha
+├── alembic/                      # Migrations de schema PostgreSQL
 │   └── versions/
-└── ...
+└── tests/
+    ├── test_catalog_service.py
+    ├── test_scoring.py
+    ├── test_followup.py
+    └── test_agent_tools.py
 ```
 
 ---
 
-## 7. Checklist de implementação
+## 7. Dependências Sugeridas (`requirements.txt`)
+
+```text
+streamlit
+streamlit-authenticator
+pydantic>=2
+pydantic-ai
+sqlalchemy
+psycopg[binary]>=3.1
+alembic
+python-dotenv
+pyyaml
+rapidfuzz
+python-dateutil
+phonenumbers
+python-telegram-bot>=21
+apscheduler>=3.10
+pytest
+freezegun
+ruff
+logfire
+```
+
+---
+
+## 8. Checklist de implementação
 
 - [ ] Instalar `psycopg[binary]` e `alembic` no `requirements.txt`.
 - [ ] Atualizar `src/db/session.py` para ler `DATABASE_URL` do ambiente.

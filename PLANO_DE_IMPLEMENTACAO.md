@@ -141,7 +141,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 A solução opera em **dois processos independentes** que compartilham a mesma camada de negócio e o mesmo banco PostgreSQL:
 
 ```mermaid
-flowchart TD
+flowchart LR
     subgraph Proc1 ["Processo 1: streamlit run app.py"]
         ChatTab["💬 Chat Simulador"]
         DashTab["📊 Dashboard do Corretor"]
@@ -220,292 +220,29 @@ flowchart TD
 
 ## 8. Estratégia de Agente e Tool Calling
 
-### Papel do agente
-O agente deve atuar como um SDR consultivo, com foco em:
-- entender a intenção do lead;
-- identificar lacunas de informação;
-- fazer a próxima pergunta mais útil;
-- recomendar imóveis quando houver contexto suficiente;
-- propor agendamento no momento adequado;
-- registrar e resumir o atendimento;
-- **manter atualizado o perfil narrativo do lead** a cada interação significativa.
+O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via conversa natural, mantém um `perfil_narrativo` incremental (artefato principal do SDR), busca imóveis quando há contexto suficiente e propõe agendamento no momento adequado. Expõe 6 tools tipadas ao modelo (buscar, qualificar, atualizar perfil, agendar, gerar resumo, gerar follow-up).
 
-### Estratégia conversacional
-O agente não deve despejar um questionário completo de uma vez. O fluxo ideal é:
-
-1. identificar intenção principal;
-2. coletar apenas o próximo dado mais relevante;
-3. atualizar o estado estruturado do lead;
-4. **atualizar o perfil narrativo** com novas informações, objeções ou preferências capturadas;
-5. buscar imóveis quando houver contexto mínimo suficiente;
-6. oferecer agendamento quando houver aderência e interesse.
-
-### Estratégia de perfil narrativo incremental
-O `perfil_narrativo` é tratado como um artefato vivo:
-- O agente recebe o perfil narrativo atual como parte do seu contexto a cada turno.
-- Quando a conversa revela informações novas (preferência, restrição, objeção, reação a um imóvel), o agente chama a tool `atualizar_perfil_lead` com o texto atualizado.
-- **Rejeições são dados valiosos**: "rejeitou o AP-007 porque achou a cozinha pequena" é tão importante quanto "gostou do AP-003".
-- O perfil é o **produto principal do SDR** — o artefato que justifica sua existência ao entregar contexto completo ao corretor.
-
-### Tools do agente
-
-| Tool | Responsabilidade |
-|---|---|
-| `buscar_imoveis` | Consulta catálogo com filtros e ranking textual |
-| `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
-| `atualizar_perfil_lead` | **Atualiza o perfil narrativo textual** com novas informações da conversa |
-| `agendar_reuniao` | Registra visita ou reunião no banco |
-| `gerar_resumo_corretor` | Sintetiza briefing executivo final a partir do perfil e histórico |
-| `gerar_followup` | Gera mensagem de reengajamento contextual |
-
-### Boas práticas de tool calling adotadas
-- Tools pequenas, específicas e com nomes claros.
-- Schemas estritos e tipados.
-- Poucas tools expostas por vez.
-- Sem parâmetros redundantes que o sistema já conhece.
-- Retornos estruturados para facilitar rastreabilidade e UI.
+> Detalhamento completo e estratégia de busca em camadas: [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md)
 
 ---
 
 ## 9. Modelagem de Dados da POC
 
-### Entidades principais
+Entidades principais: **Lead** (qualificação + `perfil_narrativo` evolutivo), **Mensagem** (histórico), **Agendamento** (visitas/reuniões), **Imóvel** (catálogo) e **LLMUsage** (tracking de consumo). O `perfil_narrativo` é um campo TEXT mantido pela LLM que acumula contexto rico do lead — o produto principal do SDR.
 
-#### Lead
-- `id`
-- `nome`
-- `telefone`
-- `status`
-- `intencao`
-- `tipologia_interesse` — apto, casa, studio, lote, cobertura, comercial
-- `orcamento_min`
-- `orcamento_max`
-- `forma_pagamento` — à vista, financiamento, FGTS, permuta
-- `regiao_interesse`
-- `bairro_interesse`
-- `quartos`
-- `urgencia`
-- `motivo_busca` — mudança, investimento, casamento, expansão familiar, etc.
-- `perfil` (`residencial`, `investidor`)
-- `canal_origem` — portal, meta_ads, site, organico, indicação
-- `amenidades_desejadas` — pets, piscina, varanda, elevador, academia
-- `score`
-- `perfil_narrativo` — **campo TEXT rico e evolutivo, gerado e atualizado pela LLM** (ver detalhamento abaixo)
-- `resumo` — briefing executivo final para o corretor
-- `created_at`
-- `updated_at`
-
-#### Mensagem
-- `id`
-- `lead_id`
-- `role` (`user`, `assistant`, `system`, `tool`)
-- `content`
-- `timestamp`
-
-#### Agendamento
-- `id`
-- `lead_id`
-- `tipo` (`visita`, `reuniao`)
-- `data_hora`
-- `observacoes`
-- `status`
-
-#### Imóvel
-- `id`
-- `titulo`
-- `tipo`
-- `finalidade`
-- `bairro`
-- `zona`
-- `preco`
-- `quartos`
-- `area_m2`
-- `vaga_garagem`
-- `descricao`
-- `tags`
-- `perfil_indicado`
-
-### Enums recomendados
-- `LeadStatus`: `novo`, `em_qualificacao`, `qualificado`, `agendado`, `inativo`
-- `LeadIntent`: `compra`, `aluguel`, `investimento`
-- `Urgencia`: `baixa`, `media`, `alta`
-
-### O campo `perfil_narrativo`: o produto principal do SDR
-
-Inspirado nas práticas das principais ferramentas de mercado (Lais.ai, Maya/Plaza, Squad/Inner AI), o schema do Lead inclui um campo textual narrativo **escrito e mantido pela LLM** ao longo da conversa.
-
-**O que é:** Um texto estruturado em blocos semânticos que acumula tudo que se sabe sobre o lead — incluindo nuances que campos estruturados não capturam: objeções ("achou a cozinha do AP-007 pequena"), preferências implícitas, imóveis rejeitados com motivo, contexto de vida e próximos passos sugeridos.
-
-**Exemplo ilustrativo:**
-```text
-## Perfil do Lead: Maria Santos
-Atualizado em: 2026-09-08 15:32
-
-### Contexto e Motivação
-Casada, dois filhos (8 e 12 anos). Mora de aluguel no Butantã.
-Contrato vence em dezembro — quer comprar para não renovar.
-Marido trabalha remoto, ela presencial na Faria Lima.
-
-### Preferências Declaradas
-- Apartamento 3 dormitórios (1 suíte), preferencialmente com varanda
-- Bairros: Pinheiros, Vila Madalena ou Perdizes (aceita Pompeia)
-- 2 vagas de garagem (têm 2 carros)
-- Pet-friendly obrigatório (golden retriever)
-
-### Capacidade Financeira
-- Orçamento: R$ 800k a R$ 1.100k
-- Financiamento bancário (pré-aprovação Itaú ~R$ 750k)
-- Entrada: R$ 200k + FGTS do marido (~R$ 80k)
-
-### Restrições e Objeções
-- Não quer térreo (segurança e cachorro)
-- Rejeitou AP-007 (Vila Madalena, R$ 920k): cozinha muito pequena
-- Teto de condomínio: R$ 1.200/mês
-
-### Imóveis de Interesse
-- AP-003 (Pinheiros, 3q, R$ 980k): gostou, visita agendada ✅
-- AP-011 (Perdizes, 3q, R$ 870k): quer ver fotos da varanda
-
-### Urgência
-- Alta: precisa resolver até nov/2026
-```
-
-**Distinção entre `perfil_narrativo` e `resumo`:**
-
-| Aspecto | `perfil_narrativo` | `resumo` |
-|---|---|---|
-| **Quando é gerado** | Progressivamente, a cada interação significativa | No final da qualificação ou sob demanda |
-| **Quem consome** | O próprio agente (como contexto) + corretor | O corretor como briefing executivo |
-| **Tamanho típico** | Médio-longo (300-800 palavras) | Curto-médio (100-300 palavras) |
-| **Conteúdo** | Tudo que se sabe, com nuances e objeções | Síntese: perfil, score, recomendação e próximos passos |
-| **Atualização** | Contínua (incremental) | Pontual (snapshot) |
+> Detalhamento completo dos schemas, enums e exemplo ilustrativo: [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md)
 
 ---
 
-## 10. Estratégia de Busca de Imóveis
+## 10. Estrutura de Diretórios e Dependências
 
-Embora o desafio cite RAG, para o tamanho do catálogo da POC a abordagem mais eficiente será uma busca em camadas:
+A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compose.yml` e todas as variáveis de ambiente necessárias estão documentadas no sub-plano de infraestrutura.
 
-### Camada 1 — Filtros estruturados
-Aplicar filtros por:
-- intenção/finalidade
-- faixa de preço
-- região ou bairro
-- quantidade de quartos
-- perfil do lead
-
-### Camada 2 — Ranking textual
-Ordenar os resultados por aderência textual usando:
-- descrição do imóvel
-- tags
-- perfil indicado
-- termos mencionados pelo lead
-
-### Evolução opcional
-Se houver tempo, adicionar embeddings para busca semântica real. Isso deve ser tratado como **incremento**, não como requisito do MVP.
+> Detalhamento: [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md)
 
 ---
 
-## 11. Estrutura de Diretórios Proposta
-
-```text
-agente_imobiliario/
-├── app.py                        # Streamlit (chat simulador + dashboard)
-├── run_telegram.py               # Bot Telegram (polling + scheduler)
-├── run_all.py                    # Supervisor: inicia ambos os processos
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
-├── README.md
-├── requirements.txt
-├── PLANO_DE_IMPLEMENTACAO.md
-├── data/
-│   └── imoveis.json
-├── src/
-│   ├── config.py
-│   ├── schemas/
-│   │   ├── lead.py
-│   │   ├── imovel.py
-│   │   ├── agendamento.py
-│   │   └── agent.py
-│   ├── db/
-│   │   ├── models.py
-│   │   ├── repository.py
-│   │   └── session.py
-│   ├── services/
-│   │   ├── catalog_service.py
-│   │   ├── lead_service.py
-│   │   ├── scheduling_service.py
-│   │   ├── summary_service.py
-│   │   └── followup_service.py
-│   ├── agent/
-│   │   ├── sdr_agent.py
-│   │   ├── prompts.py
-│   │   └── tools.py
-│   ├── channels/
-│   │   └── telegram_bot.py       # Adaptador Telegram (handlers + despacho)
-│   ├── scheduler/
-│   │   └── followup_scheduler.py # APScheduler com job de follow-up periódico
-│   └── ui/
-│       ├── chat.py
-│       └── dashboard.py
-├── config/
-│   └── credentials.yaml          # Credenciais bcrypt (autenticação Streamlit)
-├── scripts/
-│   └── generate_password_hash.py # Utilitário para gerar hashes de senha
-├── alembic/                      # Migrations de schema PostgreSQL
-│   └── versions/
-└── tests/
-    ├── test_catalog_service.py
-    ├── test_scoring.py
-    ├── test_followup.py
-    └── test_agent_tools.py
-```
-
----
-
-## 12. Dependências Sugeridas
-
-Exemplo inicial de `requirements.txt`:
-
-```text
-streamlit
-streamlit-authenticator
-pydantic>=2
-pydantic-ai
-sqlalchemy
-psycopg[binary]>=3.1
-alembic
-python-dotenv
-pyyaml
-rapidfuzz
-python-dateutil
-phonenumbers
-python-telegram-bot>=21
-apscheduler>=3.10
-pytest
-freezegun
-ruff
-logfire
-```
-
-### Variáveis de ambiente esperadas
-
-Documentação completa no `.env.example` (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md)).
-
-- `DATABASE_URL` — connection string PostgreSQL
-- `LLM_PROVIDER`, `LLM_MODEL`
-- `OPENAI_API_KEY` ou equivalente do provider escolhido
-- `OPENAI_BASE_URL` (se usar endpoint compatível)
-- `TELEGRAM_BOT_TOKEN` — obtido via @BotFather no Telegram
-- `AUTH_COOKIE_KEY` — chave secreta para cookies de sessão
-- `LLM_DAILY_TOKEN_BUDGET`, `LLM_MONTHLY_TOKEN_BUDGET` — limites de consumo
-- `LLM_MAX_TURNS_PER_CONVERSATION`, `LLM_MAX_TOKENS_PER_CONVERSATION` — limites por conversa
-- `LOGFIRE_TOKEN` (opcional)
-
----
-
-## 13. Fases de Execução
+## 11. Fases de Execução
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
 - [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md)).
@@ -605,7 +342,7 @@ Documentação completa no `.env.example` (ver [SUB_PLANO_INFRA.md](file:///C:/U
 
 ---
 
-## 14. Riscos, Limitações e Mitigações
+## 12. Riscos, Limitações e Mitigações
 
 ### Riscos principais
 - Respostas inconsistentes do modelo em cenários ambíguos.
@@ -627,7 +364,7 @@ Documentação completa no `.env.example` (ver [SUB_PLANO_INFRA.md](file:///C:/U
 
 ---
 
-## 15. Próximos Passos Pós-Hackathon
+## 13. Próximos Passos Pós-Hackathon
 
 - Migrar canal de mensageria do Telegram para **WhatsApp Business API** (padrão do mercado imobiliário brasileiro).
 - Integrar com CRM imobiliário (Vista, Kenlo, Jetimob ou HubSpot).
@@ -639,56 +376,30 @@ Documentação completa no `.env.example` (ver [SUB_PLANO_INFRA.md](file:///C:/U
 
 ---
 
-## 16. Referências de Mercado (Benchmarks)
+## 14. Referências de Mercado
 
-A arquitetura e as decisões de design deste projeto foram informadas pela análise de três plataformas comerciais que atuam como SDR imobiliário com IA no Brasil. Embora a POC não tenha a mesma amplitude dessas ferramentas, compreender o estado da arte orientou escolhas críticas — especialmente a adoção do `perfil_narrativo` como artefato central.
+O design do projeto foi informado pela análise de 3 ferramentas comerciais de SDR imobiliário com IA (Lais.ai, Maya/Plaza, Squad/Inner AI). Os padrões convergentes incorporados: qualificação progressiva, perfil narrativo rico, rejeições como dado, dossier como produto, follow-up contextual e scoring transparente.
 
-### Lais.ai (Lastro)
-- **Site:** [lais.ai](https://lais.ai)
-- **Escala:** 1.000+ clientes, 5M+ pessoas atendidas, 150+ integrações com CRMs imobiliários.
-- **Financiamento:** Série A de R$ 85M liderada pela Prosus (Canary, QED Investors, FJ Labs).
-- **Relevância para o projeto:** Referência em qualificação progressiva via conversa natural, resumo executivo gerado por IA com pontos-chave/objeções/rejeições, integração em tempo real com catálogo de imóveis, e réguas de follow-up contextuais (não genéricas). Possui módulo DataLais de inteligência de mercado agregada.
-
-### Maya (Plaza Technologies)
-- **Site:** [useplaza.com.br](https://useplaza.com.br)
-- **Fundadores:** Julio Viana (ex-InfoProp/Grupo ZAP), Pedro de Cicco, Vicente Alencar Jr.
-- **Financiamento:** Pre-seed de R$ 5,5M (Magma Partners, Latitud).
-- **Relevância para o projeto:** Referência em dossier de lead enviado diretamente via WhatsApp ao corretor (nome, telefone, orçamento, imóvel de interesse, link para conversa completa), matching em tempo real com portfólio, e Plaza Score com análise de crédito integrada (Serasa/BigDataCorp). Possui módulo Maya ADM para operações pós-locação.
-
-### Squad (Inner AI)
-- **Site:** [squad.com](https://squad.com)
-- **Fundadores:** Pedro Salles Leite (ex-CTO QuintoAndar), Eduardo Mitelman.
-- **Financiamento:** Seed de R$ 42M+, valuation de R$ 500M.
-- **Relevância para o projeto:** Referência em arquitetura multi-agente com memória compartilhada ("Digital Employees"), CRM embutido com pipeline visual, follow-up autônomo e proativo com réguas por etapa do funil, e "Sales Coach" que audita diálogos e aponta pendências.
-
-### Padrões convergentes adotados na POC
-
-As três plataformas convergem em práticas que orientaram diretamente o design deste projeto:
-
-| Padrão | Como foi incorporado |
-|---|---|
-| Qualificação progressiva e contextual | Estratégia conversacional do agente (seção 8) |
-| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do Lead (seção 9) |
-| Rejeições como dado valioso | Captura de objeções e imóveis descartados no perfil narrativo |
-| Dossier como produto principal do SDR | Destaque do perfil narrativo no dashboard (seção 13, Fase 5) |
-| Follow-up contextual com réguas por etapa | Réguas diferenciadas na Fase 4 (seção 13) |
-| Scoring transparente | Critérios explícitos na Fase 3 (seção 13) |
+> Detalhamento dos benchmarks: [SUB_PLANO_BENCHMARKS.md](SUB_PLANO_BENCHMARKS.md)
 
 ---
 
-## 17. Documentos Complementares (Sub-planos)
+## 15. Documentos Complementares (Sub-planos)
 
-Os detalhamentos técnicos de infraestrutura, autenticação e controle de custos estão em documentos independentes para manter este plano conciso:
+Os detalhamentos técnicos foram extraídos para manter este plano principal como um roteiro conciso:
 
 | Documento | Conteúdo |
 |---|---|
-| [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md) | Docker Compose, Dockerfile, PostgreSQL, variáveis de ambiente, opções de deploy cloud |
-| [SUB_PLANO_AUTENTICACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_AUTENTICACAO.md) | `streamlit-authenticator`, credenciais bcrypt, proteção total da UI, integração no `app.py` |
-| [SUB_PLANO_CUSTOS_LLM.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_CUSTOS_LLM.md) | Tabela `llm_usage`, limites por conversa/globais, integração com PydanticAI, dashboard de consumo |
+| [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md) | Estratégia de agente, tools, perfil narrativo e busca em camadas |
+| [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md) | Schemas, entidades, enums e exemplo de `perfil_narrativo` |
+| [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md) | Docker Compose, Dockerfile, PostgreSQL, deps e deploy |
+| [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md) | `streamlit-authenticator`, credenciais bcrypt e proteção total |
+| [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md) | Tabela `llm_usage`, limites por conversa/globais e tracking |
+| [SUB_PLANO_BENCHMARKS.md](SUB_PLANO_BENCHMARKS.md) | Análise de mercado (Lais.ai, Maya, Squad) e padrões adotados |
 
 ---
 
-## 18. Conclusão
+## 16. Conclusão
 
 Esta POC propõe um **Agente SDR Imobiliário com IA** focado em resolver um problema real de negócio: a perda de leads por demora, falta de qualificação e ausência de follow-up consistente.
 
@@ -696,7 +407,7 @@ A solução foi planejada para ser:
 - **simples o suficiente para hackathon**;
 - **moderna o suficiente para demonstrar boas práticas de agentes com IA**;
 - **estruturada o suficiente para evoluir depois da entrega**;
-- **alinhada com o estado da arte do mercado**, incorporando o conceito de perfil narrativo evolutivo praticado pelas principais ferramentas comerciais (Lais.ai, Maya, Squad);
+- **alinhada com o estado da arte do mercado** (perfil narrativo evolutivo);
 - **pronta para produção**, com PostgreSQL, Docker, autenticação e controle de custos desde o início.
 
 Ao adotar **PydanticAI + Streamlit + PostgreSQL + Docker + Telegram**, o projeto entrega uma POC funcional que pode ser publicada na internet para avaliação real. O `perfil_narrativo` — um texto rico e incremental mantido pela LLM — é o diferencial central: transforma o agente de um simples chatbot de triagem no verdadeiro **produto de pré-venda** que entrega contexto completo e acionável ao corretor humano.
