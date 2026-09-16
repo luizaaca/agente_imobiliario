@@ -176,8 +176,7 @@ flowchart LR
     end
 
     subgraph Data ["Camada de Dados"]
-        DB[("PostgreSQL")]
-        Catalog[("imoveis.json")]
+        DB[("PostgreSQL\n(Leads, Imóveis, etc.)")]
     end
 
     ChatTab <--> SDRAgent
@@ -194,7 +193,7 @@ flowchart LR
     Resumo --> SummaryService
     FollowUp --> SummaryService
     FollowUpService --> SDRAgent
-    CatalogService <--> Catalog
+    CatalogService <--> DB
     LeadService <--> DB
     SchedulingService <--> DB
     SummaryService <--> DB
@@ -246,7 +245,7 @@ A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compos
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
 - [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md)).
-- [ ] Criar `data/imoveis.json` com 12 a 15 imóveis diversificados.
+- [ ] Importar dataset Kaggle de imóveis para tabela no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
 - [ ] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
 - [ ] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
 - [ ] Configurar autenticação do Streamlit (ver [SUB_PLANO_AUTENTICACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_AUTENTICACAO.md)).

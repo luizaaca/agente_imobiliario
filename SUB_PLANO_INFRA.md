@@ -264,7 +264,7 @@ agente_imobiliario/
 ├── requirements.txt
 ├── PLANO_DE_IMPLEMENTACAO.md
 ├── data/
-│   └── imoveis.json
+│   └── imoveis_dataset.csv       # Dataset Kaggle brutou ou limpo
 ├── src/
 │   ├── config.py
 │   ├── schemas/
@@ -296,7 +296,8 @@ agente_imobiliario/
 ├── config/
 │   └── credentials.yaml          # Credenciais bcrypt (autenticação Streamlit)
 ├── scripts/
-│   └── generate_password_hash.py # Utilitário para gerar hashes de senha
+│   ├── generate_password_hash.py # Utilitário para gerar hashes de senha
+│   └── seed_imoveis.py           # Script para importar o CSV para o PostgreSQL
 ├── alembic/                      # Migrations de schema PostgreSQL
 │   └── versions/
 └── tests/

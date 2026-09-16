@@ -45,7 +45,7 @@
 - `observacoes`
 - `status`
 
-### Imóvel
+### Imóvel (Tabela PostgreSQL / Dataset)
 - `id`
 - `titulo`
 - `tipo`

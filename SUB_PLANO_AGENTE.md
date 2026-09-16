@@ -57,22 +57,20 @@ O `perfil_narrativo` é tratado como um artefato vivo:
 
 ## 6. Estratégia de Busca de Imóveis
 
-Embora o desafio cite RAG, para o tamanho do catálogo da POC a abordagem mais eficiente será uma busca em camadas:
+Com a adoção do PostgreSQL e um volume maior de dados (dataset importado), a abordagem de busca acontecerá diretamente no banco de dados em camadas:
 
-### Camada 1 — Filtros estruturados
-Aplicar filtros por:
+### Camada 1 — Filtros estruturados (SQL)
+Filtros diretos via `WHERE` clause:
 - intenção/finalidade
-- faixa de preço
-- região ou bairro
-- quantidade de quartos
-- perfil do lead
+- faixa de preço (`BETWEEN`)
+- região ou bairro (`IN` ou `=`)
+- quantidade de quartos (`>=`)
 
-### Camada 2 — Ranking textual
-Ordenar os resultados por aderência textual usando:
+### Camada 2 — Ranking textual (FTS)
+Ordenar os resultados restantes por aderência semântica e textual, utilizando o Full-Text Search do PostgreSQL (`to_tsvector` e `to_tsquery`):
 - descrição do imóvel
-- tags
-- perfil indicado
-- termos mencionados pelo lead
+- tags associadas
+- termos-chave extraídos do `perfil_narrativo` do lead
 
 ### Evolução opcional
-Se houver tempo, adicionar embeddings para busca semântica real. Isso deve ser tratado como **incremento**, não como requisito do MVP.
+Adicionar colunas `pgvector` para armazenar embeddings da descrição do imóvel, permitindo busca semântica real (cosine similarity). Isso deve ser tratado como **incremento** para a POC.
