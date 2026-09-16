@@ -287,7 +287,7 @@ agente_imobiliario/
 │   │   ├── prompts.py
 │   │   └── tools.py
 │   ├── channels/
-│   │   └── telegram_bot.py       # Adaptador Telegram (handlers + despacho)
+│   │   └── telegram_bot.py       # Adaptador Telegram (handlers + despacho para o agente)
 │   ├── scheduler/
 │   │   └── followup_scheduler.py # APScheduler com job de follow-up periódico
 │   └── ui/

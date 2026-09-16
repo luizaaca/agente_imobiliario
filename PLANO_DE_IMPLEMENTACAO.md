@@ -237,6 +237,19 @@ A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compos
 
 > Detalhamento: [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md)
 
+### Documentação complementar de engenharia
+
+Além dos sub-planos funcionais, a especificação técnica complementar da solução está organizada nos seguintes documentos:
+
+| Documento | Finalidade |
+|---|---|
+| [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) | Requisitos não funcionais, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
+| [docs/runtime_scenarios.md](docs/runtime_scenarios.md) | Cenários de runtime arquiteturalmente relevantes |
+| [docs/tool_contracts.md](docs/tool_contracts.md) | Contratos funcionais das tools do agente |
+| [docs/test_strategy.md](docs/test_strategy.md) | Estratégia de testes por camadas e regressão dos cenários obrigatórios |
+| [docs/traceability_matrix.md](docs/traceability_matrix.md) | Rastreabilidade entre requisitos, componentes, testes e evidências |
+| [docs/adr/](docs/adr/) | Registro das principais decisões arquiteturais (ADRs) |
+
 ---
 
 ## 11. Fases de Execução
@@ -331,6 +344,8 @@ A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compos
 - [ ] Validar os 3 cenários obrigatórios ponta a ponta.
 - [ ] Testar fluxo completo: Telegram → agente → banco → dashboard (sincronização entre processos).
 
+> Critérios de qualidade, cenários mensuráveis e estratégia de testes: [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) e [docs/test_strategy.md](docs/test_strategy.md)
+
 ### Fase 8: Documentação e Entrega
 - [ ] Elaborar `README.md` com visão do problema, arquitetura, stack e instruções de execução.
 - [ ] Documentar limitações da POC e próximos passos.
@@ -383,7 +398,9 @@ O design do projeto foi informado pela análise de 3 ferramentas comerciais de S
 
 ## 15. Documentos Complementares (Sub-planos)
 
-Os detalhamentos técnicos foram extraídos para manter este plano principal como um roteiro conciso:
+Os detalhamentos técnicos foram extraídos para manter este plano principal como um roteiro conciso. Eles estão divididos entre **sub-planos funcionais** e **documentos complementares de engenharia**.
+
+### 15.1 Sub-planos funcionais
 
 | Documento | Conteúdo |
 |---|---|
@@ -393,6 +410,17 @@ Os detalhamentos técnicos foram extraídos para manter este plano principal com
 | [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md) | `streamlit-authenticator`, credenciais bcrypt e proteção total |
 | [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md) | Tabela `llm_usage`, limites por conversa/globais e tracking |
 | [SUB_PLANO_BENCHMARKS.md](SUB_PLANO_BENCHMARKS.md) | Análise de mercado (Lais.ai, Maya, Squad) e padrões adotados |
+
+### 15.2 Documentos complementares de engenharia
+
+| Documento | Conteúdo |
+|---|---|
+| [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) | Requisitos de qualidade, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
+| [docs/runtime_scenarios.md](docs/runtime_scenarios.md) | Fluxos de runtime críticos para implementação, testes e demo |
+| [docs/tool_contracts.md](docs/tool_contracts.md) | Contratos das tools do agente com inputs, outputs, regras e erros tratáveis |
+| [docs/test_strategy.md](docs/test_strategy.md) | Estratégia de testes unitários, integração, contratos e E2E |
+| [docs/traceability_matrix.md](docs/traceability_matrix.md) | Matriz de rastreabilidade entre requisitos, cenários, componentes e evidências |
+| [docs/adr/](docs/adr/) | ADRs com decisões arquiteturais e trade-offs principais |
 
 ---
 

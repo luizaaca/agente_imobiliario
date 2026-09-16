@@ -43,7 +43,8 @@ O `perfil_narrativo` é tratado como um artefato vivo:
 | `atualizar_perfil_lead` | **Atualiza o perfil narrativo textual** com novas informações da conversa |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
 | `gerar_resumo_corretor` | Sintetiza briefing executivo final a partir do perfil e histórico |
-| `gerar_followup` | Gera mensagem de reengajamento contextual |
+
+> **Nota de escopo da POC:** a capacidade de geração de follow-up contextual existe no sistema, mas **não será exposta como tool do agente conversacional com o cliente**. Na POC, ela será usada exclusivamente pelo `FollowUpService`, que controla a régua, a elegibilidade, as tentativas e o envio, acionando a LLM apenas para compor a mensagem.
 
 ## 5. Boas práticas de tool calling adotadas
 
