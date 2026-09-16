@@ -21,7 +21,7 @@ No contexto comercial e imobiliário, o SDR é o profissional ou agente respons�
 
 O objetivo deste projeto é construir uma **Prova de Conceito (POC)** funcional e escalável de um **Agente SDR Imobiliário** impulsionado por Inteligência Artificial Generativa.
 
-O agente automatiza o primeiro atendimento de leads imobiliários, qualificando interesses, oferecendo recomendações com base em catálogo simulado de imóveis, realizando follow-ups inteligentes para leads inativos, agendando reuniões com corretores e gerando relatórios executivos em um dashboard.
+O agente automatiza o primeiro atendimento de leads imobiliários, qualificando interesses, oferecendo recomendações com base em catálogo amplo de imóveis (dataset importado), realizando follow-ups inteligentes para leads inativos, agendando reuniões com corretores e gerando relatórios executivos em um dashboard.
 
 O foco da solução não é substituir o corretor, mas **aumentar a velocidade e a qualidade da pré-venda**, garantindo que o corretor receba leads mais bem qualificados, com contexto consolidado e próximos passos sugeridos.
 
@@ -56,7 +56,7 @@ Construir um agente conversacional capaz de atuar como SDR imobiliário digital,
 | :--- | :--- |
 | **Atendimento Conversacional & Humanizado** | Persona consultiva, empática e profissional com instruções de comportamento e respostas contextualizadas. |
 | **Qualificação de Leads** | Extração estruturada de intenção, orçamento, quartos, localização, urgência e perfil de compra/investimento. |
-| **RAG / Base Simulada de Imóveis** | Catálogo estruturado (`imoveis.json`) com filtros por metadados e ranking textual por aderência. |
+| **RAG / Base de Imóveis** | Catálogo estruturado no PostgreSQL (centenas/milhares de registros) com busca SQL e Full-Text Search. |
 | **Agendamento de Reuniões / Visitas** | Tool calling para registrar visita ou reunião no banco local. |
 | **Follow-up Automático** | Módulo de reengajamento com base no histórico e no estágio do funil. |
 | **Resumo Inteligente para Corretores** | Geração de dossiê com score, preferências, objeções, imóveis sugeridos e próximos passos. |
@@ -101,20 +101,19 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 - **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [SUB_PLANO_CUSTOS_LLM.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_CUSTOS_LLM.md))
 
 ### Persistência e dados
-- **PostgreSQL 16** como banco de dados (substituindo SQLite para suportar deploy em produção)
+- **PostgreSQL 16** como banco de dados principal (dados e catálogo)
 - **SQLAlchemy** para modelagem e acesso organizado ao banco
 - **`psycopg[binary]`** como driver PostgreSQL
 - **Alembic** para migrations de schema
-- **JSON** para catálogo simulado de imóveis
 
 ### Infraestrutura e deploy
 - **Docker Compose** para desenvolvimento local (postgres + app + telegram-bot)
 - Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md))
 
 ### Busca e recomendação
-- **Filtros estruturados por metadados** como estratégia principal
-- **RapidFuzz** para ranking textual leve sobre descrição, bairro, tags e perfil indicado
-- **Embeddings / busca vetorial** ficam como evolução opcional, não como dependência do MVP
+- **Filtros estruturados por metadados** (SQL nativo) como estratégia inicial
+- **Full-Text Search (FTS) do PostgreSQL** para ranking textual sobre descrição e tags
+- **Embeddings / busca vetorial** (`pgvector`) ficam como evolução opcional
 
 ### Automação e scheduling
 - **APScheduler** para job periódico de follow-up automático de leads inativos
@@ -129,9 +128,8 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 - **PydanticAI** reduz parsing manual, facilita tool calling tipado e garante saídas estruturadas.
 - **Streamlit** acelera a entrega visual da POC sem exigir frontend separado.
 - **Telegram Bot** adiciona canal real de mensageria com zero custo e setup mínimo (~3h, ~130 LOC).
-- **PostgreSQL** permite deploy em produção com dados persistentes e acesso concorrente nativo.
+- **PostgreSQL** unifica o armazenamento do catálogo e dados conversacionais, garantindo acesso concorrente nativo e recursos de FTS.
 - **Docker Compose** padroniza o ambiente e simplifica o onboarding.
-- **RapidFuzz** resolve bem o problema de matching textual em um catálogo pequeno, sem complexidade desnecessária.
 - **APScheduler** automatiza follow-up sem depender de ação manual do corretor.
 
 ---
@@ -345,15 +343,15 @@ A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compos
 
 ### Riscos principais
 - Respostas inconsistentes do modelo em cenários ambíguos.
-- Catálogo pequeno gerar sensação de baixa variedade.
+- Dataset importado (Kaggle) possuir descrições textuais pobres, limitando a eficácia do matching textual do SDR.
 - Follow-up parecer genérico ou repetitivo.
 - Escopo crescer demais para o tempo do hackathon.
 
 ### Mitigações
 - Usar saída estruturada e tools tipadas.
-- Priorizar MVP com filtros + ranking textual antes de embeddings.
+- Utilizar o PostgreSQL Full-Text Search (FTS) para ranking textual como alternativa viável e eficiente à busca em banco vetorial no MVP.
 - Limitar escopo a poucos fluxos muito bem executados.
-- Criar dados simulados ricos o suficiente para boa demonstração.
+- Garantir que o script de seed (`seed_imoveis.py`) enriqueça ou filtre os dados importados, garantindo que contenham descrições ricas o suficiente para boa demonstração.
 
 ### Limitações assumidas da POC
 - Sem integração real com CRM externo.
@@ -367,7 +365,7 @@ A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compos
 
 - Migrar canal de mensageria do Telegram para **WhatsApp Business API** (padrão do mercado imobiliário brasileiro).
 - Integrar com CRM imobiliário (Vista, Kenlo, Jetimob ou HubSpot).
-- Adicionar embeddings e busca vetorial para catálogos maiores.
+- Evoluir a busca Full-Text Search (FTS) nativa para **busca vetorial com embeddings** (`pgvector`), aprimorando o cruzamento semântico de longo alcance.
 - Incluir agenda real com Google Calendar ou Microsoft 365.
 - Evoluir autenticação para SSO/OAuth com perfis de corretor individuais.
 - Evoluir dashboard com métricas históricas e conversão por etapa.

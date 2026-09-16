@@ -321,7 +321,6 @@ psycopg[binary]>=3.1
 alembic
 python-dotenv
 pyyaml
-rapidfuzz
 python-dateutil
 phonenumbers
 python-telegram-bot>=21
