@@ -1,10 +1,14 @@
 # Sub-plano: Modelagem de Dados
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/PLANO_DE_IMPLEMENTACAO.md)**
+**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
 
 ---
 
 ## 1. Entidades principais
+
+> **Complemento importante:** a modelagem lógica detalhada de persistência, incluindo tipos SQL, constraints, índices, identidade de canal, enriquecimento de `mensagens`, tentativas de follow-up, score e status, está em [docs/database_logical_model.md](docs/database_logical_model.md).
+
+> A decisão de negócio/modelagem para identidade de canal e a ausência deliberada de uma entidade explícita de `conversation` / `session` na POC está em [docs/channel_identity_and_conversation_decision.md](docs/channel_identity_and_conversation_decision.md).
 
 ### Lead
 - `id`

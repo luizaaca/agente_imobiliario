@@ -1,6 +1,6 @@
 # Sub-plano: Controle de Consumo e Custos de LLM
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/PLANO_DE_IMPLEMENTACAO.md)**
+**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
 
 ---
 

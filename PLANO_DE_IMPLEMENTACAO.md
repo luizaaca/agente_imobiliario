@@ -87,7 +87,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 ### Aplicação e interface
 - **Python 3.11+**
 - **Streamlit** para chat simulador e dashboard do corretor na mesma aplicação
-- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [SUB_PLANO_AUTENTICACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_AUTENTICACAO.md))
+- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md))
 
 ### Canal de mensageria real
 - **Telegram Bot API** via `python-telegram-bot` (v21+, asyncio nativo)
@@ -98,7 +98,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 - **PydanticAI** como framework principal do agente
 - **Pydantic v2** para validação, schemas e saídas estruturadas
 - **Provider OpenAI-compatible configurável por `.env`** para permitir troca de modelo/provedor sem reescrever a aplicação
-- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [SUB_PLANO_CUSTOS_LLM.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_CUSTOS_LLM.md))
+- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md))
 
 ### Persistência e dados
 - **PostgreSQL 16** como banco de dados principal (dados e catálogo)
@@ -108,7 +108,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 
 ### Infraestrutura e deploy
 - **Docker Compose** para desenvolvimento local (postgres + app + telegram-bot)
-- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md))
+- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md))
 
 ### Busca e recomendação
 - **Filtros estruturados por metadados** (SQL nativo) como estratégia inicial
@@ -229,6 +229,10 @@ Entidades principais: **Lead** (qualificação + `perfil_narrativo` evolutivo), 
 
 > Detalhamento completo dos schemas, enums e exemplo ilustrativo: [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md)
 
+> Modelagem lógica detalhada de persistência, incluindo tipos SQL, constraints, índices, identidade de canal, histórico de mensagens, tentativas de follow-up, score e status: [docs/database_logical_model.md](docs/database_logical_model.md)
+
+> Decisão de negócio/modelagem para identidade de canal e ausência deliberada de entidade explícita de `conversation` / `session` na POC: [docs/channel_identity_and_conversation_decision.md](docs/channel_identity_and_conversation_decision.md)
+
 ---
 
 ## 10. Estrutura de Diretórios e Dependências
@@ -255,12 +259,12 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 ## 11. Fases de Execução
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
-- [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [SUB_PLANO_INFRA.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_INFRA.md)).
+- [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md)).
 - [ ] Importar dataset Kaggle de imóveis para tabela no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
 - [ ] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
 - [ ] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
-- [ ] Configurar autenticação do Streamlit (ver [SUB_PLANO_AUTENTICACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_AUTENTICACAO.md)).
-- [ ] Implementar controle de custos LLM (ver [SUB_PLANO_CUSTOS_LLM.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/SUB_PLANO_CUSTOS_LLM.md)).
+- [ ] Configurar autenticação do Streamlit (ver [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md)).
+- [ ] Implementar controle de custos LLM (ver [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md)).
 - [ ] Criar seed inicial e funções de leitura/escrita.
 - [ ] Implementar serviço de catálogo com filtros estruturados e ranking textual.
 
@@ -416,6 +420,8 @@ Os detalhamentos técnicos foram extraídos para manter este plano principal com
 | Documento | Conteúdo |
 |---|---|
 | [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) | Requisitos de qualidade, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
+| [docs/database_logical_model.md](docs/database_logical_model.md) | Modelagem lógica do banco com tipos, constraints, índices, identidade de canal, mensagens, follow-up, score e status |
+| [docs/channel_identity_and_conversation_decision.md](docs/channel_identity_and_conversation_decision.md) | Decisão de modelagem para identidade de canal e estratégia de conversa/sessão na POC |
 | [docs/runtime_scenarios.md](docs/runtime_scenarios.md) | Fluxos de runtime críticos para implementação, testes e demo |
 | [docs/tool_contracts.md](docs/tool_contracts.md) | Contratos das tools do agente com inputs, outputs, regras e erros tratáveis |
 | [docs/test_strategy.md](docs/test_strategy.md) | Estratégia de testes unitários, integração, contratos e E2E |

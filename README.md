@@ -100,6 +100,8 @@ Ambos usam a mesma camada de domínio:
 
 ### Documentação complementar de engenharia
 - [`SDD_QUALIDADE_E_CRITERIOS.md`](./SDD_QUALIDADE_E_CRITERIOS.md)
+- [`docs/database_logical_model.md`](./docs/database_logical_model.md)
+- [`docs/channel_identity_and_conversation_decision.md`](./docs/channel_identity_and_conversation_decision.md)
 - [`docs/runtime_scenarios.md`](./docs/runtime_scenarios.md)
 - [`docs/tool_contracts.md`](./docs/tool_contracts.md)
 - [`docs/test_strategy.md`](./docs/test_strategy.md)
@@ -159,6 +161,10 @@ Lead interrompe a conversa antes do agendamento, e o sistema retoma o contato co
 
 Os requisitos não funcionais e critérios de aceite estão em:
 - [`SDD_QUALIDADE_E_CRITERIOS.md`](./SDD_QUALIDADE_E_CRITERIOS.md)
+
+A modelagem lógica detalhada de persistência e as decisões de identidade/canal estão em:
+- [`docs/database_logical_model.md`](./docs/database_logical_model.md)
+- [`docs/channel_identity_and_conversation_decision.md`](./docs/channel_identity_and_conversation_decision.md)
 
 Lá estão definidos, entre outros:
 - metas de performance da POC;

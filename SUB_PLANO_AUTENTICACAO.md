@@ -1,6 +1,6 @@
 # Sub-plano: Autenticação do Painel Streamlit
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](file:///C:/Users/LuizAlbertodeAndrade/source/repos/agente_imobiliario/PLANO_DE_IMPLEMENTACAO.md)**
+**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
 
 ---
 
