@@ -227,7 +227,7 @@ O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via
 
 Entidades principais: **Lead** (qualificação + `perfil_narrativo` evolutivo), **Mensagem** (histórico), **Agendamento** (visitas/reuniões), **Imóvel** (catálogo) e **LLMUsage** (tracking de consumo). O `perfil_narrativo` é um campo TEXT mantido pela LLM que acumula contexto rico do lead — o produto principal do SDR.
 
-> Detalhamento completo dos schemas, enums e exemplo ilustrativo: [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md)
+> Detalhamento completo da modelagem conceitual e lógica, incluindo schemas, enums, exemplo de `perfil_narrativo`, tipos SQL, constraints, índices, identidade de canal, mensagens, follow-up, score e status: [docs/database_logical_model.md](docs/database_logical_model.md)
 
 > Modelagem lógica detalhada de persistência, incluindo tipos SQL, constraints, índices, identidade de canal, histórico de mensagens, tentativas de follow-up, score e status: [docs/database_logical_model.md](docs/database_logical_model.md)
 
@@ -409,7 +409,6 @@ Os detalhamentos técnicos foram extraídos para manter este plano principal com
 | Documento | Conteúdo |
 |---|---|
 | [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md) | Estratégia de agente, tools, perfil narrativo e busca em camadas |
-| [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md) | Schemas, entidades, enums e exemplo de `perfil_narrativo` |
 | [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md) | Docker Compose, Dockerfile, PostgreSQL, deps e deploy |
 | [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md) | `streamlit-authenticator`, credenciais bcrypt e proteção total |
 | [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md) | Tabela `llm_usage`, limites por conversa/globais e tracking |

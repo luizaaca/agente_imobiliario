@@ -254,7 +254,7 @@ A POC será considerada pronta quando:
 ## 10. Relação com outros documentos
 
 - Estratégia do agente: [`SUB_PLANO_AGENTE.md`](./SUB_PLANO_AGENTE.md)
-- Modelagem de dados: [`SUB_PLANO_MODELAGEM.md`](./SUB_PLANO_MODELAGEM.md)
+- Modelagem de dados: [`docs/database_logical_model.md`](./docs/database_logical_model.md)
 - Infraestrutura: [`SUB_PLANO_INFRA.md`](./SUB_PLANO_INFRA.md)
 - Autenticação: [`SUB_PLANO_AUTENTICACAO.md`](./SUB_PLANO_AUTENTICACAO.md)
 - Custos LLM: [`SUB_PLANO_CUSTOS_LLM.md`](./SUB_PLANO_CUSTOS_LLM.md)

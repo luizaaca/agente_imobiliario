@@ -39,7 +39,7 @@ As três plataformas convergem em práticas que orientaram diretamente o design 
 | Padrão | Como foi incorporado |
 |---|---|
 | Qualificação progressiva e contextual | Estratégia conversacional do agente (agora em [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md)) |
-| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do Lead (agora em [SUB_PLANO_MODELAGEM.md](SUB_PLANO_MODELAGEM.md)) |
+| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do Lead (agora em [docs/database_logical_model.md](docs/database_logical_model.md)) |
 | Rejeições como dado valioso | Captura de objeções e imóveis descartados no perfil narrativo |
 | Dossier como produto principal do SDR | Destaque do perfil narrativo no dashboard (Fase 5) |
 | Follow-up contextual com réguas por etapa | Réguas diferenciadas na Fase 4 |

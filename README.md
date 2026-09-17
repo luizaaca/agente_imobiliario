@@ -92,7 +92,6 @@ Ambos usam a mesma camada de domínio:
 
 ### Sub-planos funcionais
 - [`SUB_PLANO_AGENTE.md`](./SUB_PLANO_AGENTE.md)
-- [`SUB_PLANO_MODELAGEM.md`](./SUB_PLANO_MODELAGEM.md)
 - [`SUB_PLANO_INFRA.md`](./SUB_PLANO_INFRA.md)
 - [`SUB_PLANO_AUTENTICACAO.md`](./SUB_PLANO_AUTENTICACAO.md)
 - [`SUB_PLANO_CUSTOS_LLM.md`](./SUB_PLANO_CUSTOS_LLM.md)

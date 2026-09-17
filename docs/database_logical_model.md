@@ -1,49 +1,196 @@
-# Modelagem Lógica do Banco — Tipos, Constraints e Índices
+# Modelagem de Dados e Modelagem Lógica do Banco
 
-**Objetivo:** fechar a primeira lacuna da modelagem persistente da POC, definindo tipos SQL, nulabilidade, constraints e índices das tabelas principais, sem ainda implementar código.
-
-**Escopo desta etapa:**
-- `leads`
-- `mensagens`
-- `agendamentos`
-- `llm_usage`
-
-**Fora do escopo desta etapa:**
-- enriquecimento da entidade `mensagens` com campos adicionais;
-- entidade de sessão/conversa;
-- identidade de canal;
-- tentativas de follow-up;
-- detalhamento final de score/status.
+**Objetivo:** consolidar em um único documento a visão conceitual das entidades da POC e a modelagem lógica de persistência, incluindo tipos SQL, nulabilidade, constraints, índices, identidade de canal, histórico de mensagens, tentativas de follow-up, score e status.
 
 ---
 
-## 1. Decisões-base desta etapa
+## 1. Visão conceitual das entidades
 
-### 1.1 Identificadores
+### 1.1 Entidades principais
+
+#### Lead
+- `id`
+- `nome`
+- `telefone`
+- `status`
+- `intencao`
+- `tipologia_interesse`
+- `orcamento_min`
+- `orcamento_max`
+- `forma_pagamento`
+- `regiao_interesse`
+- `bairro_interesse`
+- `quartos`
+- `urgencia`
+- `motivo_busca`
+- `perfil`
+- `canal_origem`
+- `amenidades_desejadas`
+- `score`
+- `perfil_narrativo`
+- `resumo`
+- `created_at`
+- `updated_at`
+
+#### Mensagem
+- `id`
+- `lead_id`
+- `channel`
+- `channel_identity_id`
+- `role`
+- `message_type`
+- `content`
+- `status`
+- `external_message_id`
+- `in_reply_to_message_id`
+- `metadata_json`
+- `timestamp`
+- `sent_at`
+
+#### Agendamento
+- `id`
+- `lead_id`
+- `tipo`
+- `data_hora`
+- `observacoes`
+- `status`
+
+#### Imóvel
+- `id`
+- `titulo`
+- `tipo`
+- `finalidade`
+- `bairro`
+- `zona`
+- `preco`
+- `quartos`
+- `area_m2`
+- `vaga_garagem`
+- `descricao`
+- `tags`
+- `perfil_indicado`
+
+#### LLMUsage
+- `id`
+- `lead_id`
+- `conversation_turn`
+- `model`
+- `tokens_input`
+- `tokens_output`
+- `tokens_total`
+- `estimated_cost_usd`
+- `operation`
+- `created_at`
+
+#### LeadChannelIdentity
+- `id`
+- `lead_id`
+- `channel`
+- `external_user_id`
+- `external_chat_id`
+- `is_primary`
+- `created_at`
+- `last_seen_at`
+
+#### FollowUpAttempt
+- `id`
+- `lead_id`
+- `message_id`
+- `regua`
+- `attempt_number`
+- `status`
+- `failure_reason`
+- `scheduled_for`
+- `executed_at`
+- `created_at`
+
+### 1.2 Enums recomendados
+- `LeadStatus`: `novo`, `em_qualificacao`, `qualificado`, `agendado`, `inativo`
+- `LeadIntent`: `compra`, `aluguel`, `investimento`
+- `Urgencia`: `baixa`, `media`, `alta`
+
+---
+
+## 2. O campo `perfil_narrativo`: o produto principal do SDR
+
+Inspirado nas práticas das principais ferramentas de mercado (Lais.ai, Maya/Plaza, Squad/Inner AI), o schema do Lead inclui um campo textual narrativo **escrito e mantido pela LLM** ao longo da conversa.
+
+**O que é:** Um texto estruturado em blocos semânticos que acumula tudo que se sabe sobre o lead — incluindo nuances que campos estruturados não capturam: objeções ("achou a cozinha do AP-007 pequena"), preferências implícitas, imóveis rejeitados com motivo, contexto de vida e próximos passos sugeridos.
+
+### Exemplo ilustrativo
+
+```text
+## Perfil do Lead: Maria Santos
+Atualizado em: 2026-09-08 15:32
+
+### Contexto e Motivação
+Casada, dois filhos (8 e 12 anos). Mora de aluguel no Butantã.
+Contrato vence em dezembro — quer comprar para não renovar.
+Marido trabalha remoto, ela presencial na Faria Lima.
+
+### Preferências Declaradas
+- Apartamento 3 dormitórios (1 suíte), preferencialmente com varanda
+- Bairros: Pinheiros, Vila Madalena ou Perdizes (aceita Pompeia)
+- 2 vagas de garagem (têm 2 carros)
+- Pet-friendly obrigatório (golden retriever)
+
+### Capacidade Financeira
+- Orçamento: R$ 800k a R$ 1.100k
+- Financiamento bancário (pré-aprovação Itaú ~R$ 750k)
+- Entrada: R$ 200k + FGTS do marido (~R$ 80k)
+
+### Restrições e Objeções
+- Não quer térreo (segurança e cachorro)
+- Rejeitou AP-007 (Vila Madalena, R$ 920k): cozinha muito pequena
+- Teto de condomínio: R$ 1.200/mês
+
+### Imóveis de Interesse
+- AP-003 (Pinheiros, 3q, R$ 980k): gostou, visita agendada ✅
+- AP-011 (Perdizes, 3q, R$ 870k): quer ver fotos da varanda
+
+### Urgência
+- Alta: precisa resolver até nov/2026
+```
+
+### Distinção entre `perfil_narrativo` e `resumo`
+
+| Aspecto | `perfil_narrativo` | `resumo` |
+|---|---|---|
+| **Quando é gerado** | Progressivamente, a cada interação significativa | No final da qualificação ou sob demanda |
+| **Quem consome** | O próprio agente (como contexto) + corretor | O corretor como briefing executivo |
+| **Tamanho típico** | Médio-longo (300-800 palavras) | Curto-médio (100-300 palavras) |
+| **Conteúdo** | Tudo que se sabe, com nuances e objeções | Síntese: perfil, score, recomendação e próximos passos |
+| **Atualização** | Contínua (incremental) | Pontual (snapshot) |
+
+---
+
+## 3. Decisões-base da modelagem lógica
+
+### 3.1 Identificadores
 - Usar `BIGSERIAL` para chaves primárias.
 - Usar `BIGINT` para chaves estrangeiras.
 
-### 1.2 Datas e horários
+### 3.2 Datas e horários
 - Usar `TIMESTAMP WITH TIME ZONE` em todos os campos temporais persistidos.
 - Usar `DEFAULT now()` quando fizer sentido para criação automática.
 
-### 1.3 Valores monetários
+### 3.3 Valores monetários
 - Usar `NUMERIC(12,2)` para valores financeiros.
 
-### 1.4 Score
+### 3.4 Score
 - Usar `NUMERIC(4,2)` para permitir granularidade sem exagero.
 - Faixa válida da POC: $0 \leq score \leq 10$.
 
-### 1.5 Campos categóricos
+### 3.5 Campos categóricos
 - Para a POC, usar `VARCHAR` + `CHECK`, em vez de enums nativos do PostgreSQL.
 - Motivo: simplifica migrations e reduz atrito de evolução durante o hackathon.
 
-### 1.6 Texto longo
+### 3.6 Texto longo
 - Usar `TEXT` para conteúdo narrativo, mensagens, observações e resumos.
 
 ---
 
-## 2. Tabela `leads`
+## 4. Tabela `leads`
 
 ### 2.1 Finalidade
 Representa o lead e seu estado consolidado de qualificação.
