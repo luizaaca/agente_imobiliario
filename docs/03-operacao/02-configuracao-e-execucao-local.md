@@ -20,9 +20,10 @@ Para executar a POC localmente, o ambiente deve ter:
 As variáveis esperadas incluem:
 
 - `DATABASE_URL`
+- `LLM_PROVIDER`
+- `LLM_MODEL`
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL` (opcional)
-- `LLM_MODEL`
 - `TELEGRAM_BOT_TOKEN`
 - `AUTH_COOKIE_KEY`
 

@@ -432,9 +432,185 @@ CREATE INDEX idx_llm_usage_lead_operation_created_at ON llm_usage(lead_id, opera
 
 ---
 
-## 6. Convenções transversais
+## 6. Tabela `imoveis`
 
-### 6.1 Nomes de tabelas
+### 6.1 Finalidade
+Catálogo de imóveis disponíveis para busca, recomendação e referência pelo agente SDR.
+
+### 6.2 Fonte de dados (Dataset Kaggle)
+
+O catálogo será populado a partir de um dataset público do Kaggle. O dataset recomendado é o **"São Paulo Real Estate Sales and Rentals (2020–2026)"** (~85.000 anúncios), que oferece boa cobertura de campos e volume adequado para demonstração com FTS.
+
+> **URL sugerida:** [kaggle.com/datasets/…/sao-paulo-real-estate](https://www.kaggle.com/datasets/) (buscar por "São Paulo real estate sales rentals 2020 2026")
+>
+> **Alternativa menor:** "Discover São Paulo: Apartment Prices Insights" (~28.000 registros do Zap Imóveis), com menos campos mas suficiente para a POC.
+
+#### Mapeamento esperado: CSV → tabela `imoveis`
+
+| Coluna do CSV (típica) | Coluna na tabela | Observação |
+|---|---|---|
+| `price` / `preco` | `preco` | Converter para `NUMERIC(12,2)` em BRL |
+| `area` / `area_m2` | `area_m2` | |
+| `bedrooms` / `quartos` | `quartos` | |
+| `bathrooms` / `banheiros` | `banheiros` | |
+| `parking_spaces` / `vagas` | `vaga_garagem` | |
+| `neighborhood` / `bairro` | `bairro` | |
+| `district` / `zona` | `zona` | Se ausente, inferir da região/bairro |
+| `condominio` / `condo_fee` | `condominio` | Pode estar ausente em alguns datasets |
+| `iptu` | `iptu_anual` | Pode estar ausente |
+| `type` / `tipo` | `tipo` | Ex.: `apartamento`, `casa`, `studio`, `cobertura` |
+| `transaction_type` | `finalidade` | Ex.: `venda`, `aluguel` |
+
+#### Campos que precisam de **geração sintética** pelo script de seed
+
+| Campo | Estratégia de geração |
+|---|---|
+| `titulo` | Compor a partir de `tipo`, `quartos`, `bairro` e `area_m2`. Ex.: "Apartamento 3 quartos em Pinheiros — 92m²" |
+| `descricao` | Gerar via template ou LLM com base nos metadados do imóvel. Essencial para FTS rico |
+| `tags` | Extrair de amenities ou gerar a partir de `tipo`, `finalidade`, features binárias do CSV |
+| `perfil_indicado` | Inferir: quartos ≥ 3 → `residencial_familia`; studio → `investidor`; área > 150m² → `alto_padrao` |
+| `imagem_url` | Usar imagens placeholder por tipo (ex.: `https://placehold.co/600x400?text=Apartamento+3q`) |
+
+### 6.3 Colunas propostas
+
+| Coluna | Tipo SQL | Null | Default | Observações |
+|---|---|---:|---|---|
+| `id` | `BIGSERIAL` | Não | auto | PK |
+| `titulo` | `VARCHAR(200)` | Não |  | Gerado sinteticamente a partir dos metadados |
+| `tipo` | `VARCHAR(30)` | Não |  | Ex.: `apartamento`, `casa`, `studio`, `cobertura` |
+| `finalidade` | `VARCHAR(20)` | Não |  | Ex.: `venda`, `aluguel` |
+| `bairro` | `VARCHAR(100)` | Não |  | Bairro do imóvel |
+| `zona` | `VARCHAR(50)` | Sim |  | Ex.: `zona_sul`, `zona_oeste`, `centro` |
+| `cidade` | `VARCHAR(100)` | Não | `'São Paulo'` | Cidade |
+| `estado` | `VARCHAR(2)` | Não | `'SP'` | UF |
+| `preco` | `NUMERIC(12,2)` | Não |  | Preço em BRL |
+| `quartos` | `SMALLINT` | Não |  | Quantidade de quartos |
+| `suites` | `SMALLINT` | Sim |  | Quantidade de suítes (se disponível) |
+| `banheiros` | `SMALLINT` | Sim |  | Quantidade de banheiros |
+| `vaga_garagem` | `SMALLINT` | Sim |  | Vagas de garagem |
+| `area_m2` | `NUMERIC(10,2)` | Não |  | Área em m² |
+| `condominio` | `NUMERIC(10,2)` | Sim |  | Valor do condomínio mensal |
+| `iptu_anual` | `NUMERIC(10,2)` | Sim |  | IPTU anual |
+| `descricao` | `TEXT` | Sim |  | Descrição textual rica (essencial para FTS) |
+| `tags` | `TEXT` | Sim |  | Tags ou amenidades em texto livre (separadas por vírgula ou espaço) |
+| `perfil_indicado` | `VARCHAR(30)` | Sim |  | Ex.: `residencial`, `investidor`, `alto_padrao` |
+| `disponivel` | `BOOLEAN` | Não | `true` | Se o imóvel está disponível |
+| `imagem_url` | `VARCHAR(500)` | Sim |  | URL da imagem principal (placeholder na POC) |
+| `search_vector` | `TSVECTOR` | Sim |  | Vetor de busca FTS, gerado automaticamente |
+| `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
+| `updated_at` | `TIMESTAMPTZ` | Não | `now()` | Última atualização |
+
+### 6.4 Constraints recomendadas
+
+```sql
+CHECK (tipo IN ('apartamento', 'casa', 'studio', 'cobertura'))
+CHECK (finalidade IN ('venda', 'aluguel'))
+CHECK (preco > 0)
+CHECK (area_m2 > 0)
+CHECK (quartos >= 0)
+CHECK (suites IS NULL OR suites >= 0)
+CHECK (banheiros IS NULL OR banheiros >= 0)
+CHECK (vaga_garagem IS NULL OR vaga_garagem >= 0)
+CHECK (condominio IS NULL OR condominio >= 0)
+CHECK (iptu_anual IS NULL OR iptu_anual >= 0)
+```
+
+### 6.5 Índices recomendados
+
+```sql
+CREATE INDEX idx_imoveis_bairro ON imoveis(bairro);
+CREATE INDEX idx_imoveis_tipo ON imoveis(tipo);
+CREATE INDEX idx_imoveis_finalidade ON imoveis(finalidade);
+CREATE INDEX idx_imoveis_quartos ON imoveis(quartos);
+CREATE INDEX idx_imoveis_preco ON imoveis(preco);
+CREATE INDEX idx_imoveis_disponivel ON imoveis(disponivel);
+CREATE INDEX idx_imoveis_perfil_indicado ON imoveis(perfil_indicado);
+CREATE INDEX idx_imoveis_search ON imoveis USING GIN (search_vector);
+```
+
+### 6.6 Full-Text Search (FTS)
+
+O FTS é o mecanismo central de ranking textual para a tool `buscar_imoveis`.
+
+#### Trigger para manter `search_vector` atualizado
+
+```sql
+CREATE OR REPLACE FUNCTION update_imoveis_search_vector()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.search_vector := to_tsvector('portuguese',
+        COALESCE(NEW.titulo, '') || ' ' ||
+        COALESCE(NEW.descricao, '') || ' ' ||
+        COALESCE(NEW.bairro, '') || ' ' ||
+        COALESCE(NEW.tipo, '') || ' ' ||
+        COALESCE(NEW.finalidade, '') || ' ' ||
+        COALESCE(NEW.tags, '') || ' ' ||
+        COALESCE(NEW.perfil_indicado, '')
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_imoveis_search_vector
+    BEFORE INSERT OR UPDATE ON imoveis
+    FOR EACH ROW EXECUTE FUNCTION update_imoveis_search_vector();
+```
+
+#### Trigger para `updated_at`
+
+```sql
+CREATE TRIGGER trg_imoveis_updated_at
+    BEFORE UPDATE ON imoveis
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+```
+
+> A função `update_updated_at()` é compartilhada com outras tabelas.
+
+#### Query de busca em camadas (conceitual)
+
+```sql
+-- Camada 1: filtros estruturados
+SELECT * FROM imoveis
+WHERE disponivel = true
+  AND finalidade = $1
+  AND preco BETWEEN $2 AND $3
+  AND bairro = ANY($4)
+  AND quartos >= $5
+
+-- Camada 2: ranking textual sobre os resultados
+ORDER BY ts_rank(search_vector, plainto_tsquery('portuguese', $6)) DESC
+LIMIT $7;
+```
+
+### 6.7 Observações sobre o script de seed
+
+O script `scripts/seed_imoveis.py` deve:
+
+1. Ler o CSV do dataset Kaggle (`data/imoveis_dataset.csv`).
+2. Filtrar registros com dados mínimos (preço, bairro, quartos, área).
+3. Normalizar campos (tipos, finalidade, bairro).
+4. Gerar sinteticamente: `titulo`, `descricao`, `tags`, `perfil_indicado`.
+5. Atribuir `imagem_url` placeholder por tipo de imóvel.
+6. Inserir no PostgreSQL via SQLAlchemy.
+7. Alvo: **≥ 200 imóveis** com descrições ricas o suficiente para demonstração do FTS.
+
+> Descrições ricas são essenciais para a qualidade do FTS. Se o dataset original tiver descrições pobres, o script de seed deve enriquecê-las com templates ou geração via LLM.
+
+### 6.8 Volume esperado
+
+| Cenário | Volume |
+|---|---|
+| POC / Demo | 200–500 imóveis |
+| Piloto | 1.000–5.000 imóveis |
+| Produção | 10.000+ imóveis |
+
+> Os índices e a estratégia de FTS são suficientes para todos os cenários acima.
+
+---
+
+## 7. Convenções transversais
+
+### 7.1 Nomes de tabelas
 Usar nomes no plural e em minúsculas:
 - `leads`
 - `mensagens`
@@ -442,17 +618,17 @@ Usar nomes no plural e em minúsculas:
 - `imoveis`
 - `llm_usage`
 
-### 6.2 Chaves estrangeiras
+### 7.2 Chaves estrangeiras
 Usar padrão `<entidade>_id`.
 
-### 6.3 Auditoria mínima
+### 7.3 Auditoria mínima
 Nesta etapa, toda tabela operacional principal deve ter ao menos:
 - PK estável
 - timestamp de criação
 
 `leads` deve ter também `updated_at`.
 
-### 6.4 Observabilidade e rastreabilidade
+### 7.4 Observabilidade e rastreabilidade
 A modelagem deve permitir correlação mínima por:
 - `lead_id`
 - tempo (`timestamp` / `created_at`)
@@ -460,7 +636,7 @@ A modelagem deve permitir correlação mínima por:
 
 ---
 
-## 7. Tabela `lead_channel_identities`
+## 8. Tabela `lead_channel_identities`
 
 ### 7.1 Finalidade
 Representar identidades externas de canal vinculadas a um lead.
@@ -545,7 +721,7 @@ FOREIGN KEY (channel_identity_id) REFERENCES lead_channel_identities(id)
 
 ---
 
-## 8. Decisão sobre `conversation` / `session`
+## 9. Decisão sobre `conversation` / `session`
 
 ### 8.1 Decisão adotada para a POC
 **Não criar, nesta fase, uma tabela obrigatória de `conversations` ou `sessions`.**
@@ -594,7 +770,7 @@ O campo `conversation_turn` em `llm_usage` permanece válido na POC como contado
 
 ---
 
-## 9. Tabela `followup_attempts`
+## 10. Tabela `followup_attempts`
 
 ### 9.1 Finalidade
 Registrar cada tentativa operacional de follow-up executada pelo `FollowUpService`.
@@ -678,7 +854,7 @@ Recomendação conceitual:
 
 ---
 
-## 10. Definição de `score` e `status`
+## 11. Definição de `score` e `status`
 
 ### 10.1 Objetivo
 Definir como o lead será classificado operacionalmente na POC, tanto para priorização comercial quanto para automações de follow-up e visualização no dashboard.
@@ -871,7 +1047,7 @@ Exemplos:
 
 ---
 
-## 11. Decisões explicitamente adiadas
+## 12. Decisões explicitamente adiadas
 
 As decisões abaixo serão tratadas nas próximas lacunas:
 
@@ -879,7 +1055,7 @@ As decisões abaixo serão tratadas nas próximas lacunas:
 
 ---
 
-## 12. Resultado desta etapa
+## 13. Resultado desta etapa
 
 Com este documento, a POC passa a ter uma **modelagem lógica mínima definida** para as tabelas principais, suficiente para orientar:
 - schemas Pydantic;

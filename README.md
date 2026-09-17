@@ -227,9 +227,10 @@ Consulte:
 
 Variáveis principais esperadas:
 - `DATABASE_URL`
+- `LLM_PROVIDER` (ex.: `openai`, `groq`, `gemini`, `ollama`)
+- `LLM_MODEL`
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL` (opcional)
-- `LLM_MODEL`
 - `TELEGRAM_BOT_TOKEN`
 - `AUTH_COOKIE_KEY`
 

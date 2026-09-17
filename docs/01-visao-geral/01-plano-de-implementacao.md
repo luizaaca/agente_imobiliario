@@ -190,7 +190,7 @@ flowchart LR
     Agendar --> SchedulingService
     Resumo --> SummaryService
     FollowUp --> SummaryService
-    FollowUpService --> SDRAgent
+    FollowUpService -.->|"composição textual via LLM"| LLM["LLM Provider"]
     CatalogService <--> DB
     LeadService <--> DB
     SchedulingService <--> DB
