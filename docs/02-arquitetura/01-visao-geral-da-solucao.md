@@ -15,8 +15,8 @@ Organizar a documentação técnica da POC em uma estrutura estável, navegável
 - Estratégia do agente e tools: [`02-estrategia-de-agente-e-tools.md`](./02-estrategia-de-agente-e-tools.md)
 - Cenários de runtime: [`03-cenarios-de-runtime.md`](./03-cenarios-de-runtime.md)
 - Contratos das tools: [`04-contratos-das-tools.md`](./04-contratos-das-tools.md)
-- Modelagem de dados: [`../04-dados/01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
-- Decisões arquiteturais: [`../06-decisoes/adr/`](../06-decisoes/adr/)
+- Modelagem de dados: [`01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
+- Decisões arquiteturais: [`adr/`](../06-decisoes/adr/)
 
 ---
 
@@ -32,4 +32,4 @@ Organizar a documentação técnica da POC em uma estrutura estável, navegável
 
 ## 4. Relação com o plano principal
 
-O plano completo de execução permanece em [`../01-visao-geral/01-plano-de-implementacao.md`](../01-visao-geral/01-plano-de-implementacao.md).
+O plano completo de execução permanece em [`01-plano-de-implementacao.md`](../01-visao-geral/01-plano-de-implementacao.md).

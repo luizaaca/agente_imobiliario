@@ -253,13 +253,13 @@ A POC será considerada pronta quando:
 
 ## 10. Relação com outros documentos
 
-- Estratégia do agente: [`../02-arquitetura/02-estrategia-de-agente-e-tools.md`](../02-arquitetura/02-estrategia-de-agente-e-tools.md)
-- Modelagem de dados: [`../04-dados/01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
-- Infraestrutura: [`../03-operacao/01-infraestrutura-e-deploy.md`](../03-operacao/01-infraestrutura-e-deploy.md)
-- Autenticação: [`../03-operacao/03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md)
-- Custos LLM: [`../03-operacao/04-governanca-de-custos-llm.md`](../03-operacao/04-governanca-de-custos-llm.md)
-- ADRs: [`../06-decisoes/adr/`](../06-decisoes/adr/)
-- Runtime: [`../02-arquitetura/03-cenarios-de-runtime.md`](../02-arquitetura/03-cenarios-de-runtime.md)
-- Contratos: [`../02-arquitetura/04-contratos-das-tools.md`](../02-arquitetura/04-contratos-das-tools.md)
-- Testes: [`../05-engenharia/01-estrategia-de-testes.md`](../05-engenharia/01-estrategia-de-testes.md)
-- Rastreabilidade: [`../05-engenharia/02-matriz-de-rastreabilidade.md`](../05-engenharia/02-matriz-de-rastreabilidade.md)
+- Estratégia do agente: [`02-estrategia-de-agente-e-tools.md`](../02-arquitetura/02-estrategia-de-agente-e-tools.md)
+- Modelagem de dados: [`01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
+- Infraestrutura: [`01-infraestrutura-e-deploy.md`](../03-operacao/01-infraestrutura-e-deploy.md)
+- Autenticação: [`03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md)
+- Custos LLM: [`04-governanca-de-custos-llm.md`](../03-operacao/04-governanca-de-custos-llm.md)
+- ADRs: [`adr/`](../06-decisoes/adr/)
+- Runtime: [`03-cenarios-de-runtime.md`](../02-arquitetura/03-cenarios-de-runtime.md)
+- Contratos: [`04-contratos-das-tools.md`](../02-arquitetura/04-contratos-das-tools.md)
+- Testes: [`01-estrategia-de-testes.md`](../05-engenharia/01-estrategia-de-testes.md)
+- Rastreabilidade: [`02-matriz-de-rastreabilidade.md`](../05-engenharia/02-matriz-de-rastreabilidade.md)

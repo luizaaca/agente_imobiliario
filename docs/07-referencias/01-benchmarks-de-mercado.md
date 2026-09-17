@@ -38,8 +38,8 @@ As três plataformas convergem em práticas que orientaram diretamente o design 
 
 | Padrão | Como foi incorporado |
 |---|---|
-| Qualificação progressiva e contextual | Estratégia conversacional do agente (agora em [02-estrategia-de-agente-e-tools.md](../02-arquitetura/02-estrategia-de-agente-e-tools.md)) |
-| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do lead (agora em [01-modelagem-logica-do-banco.md](../04-dados/01-modelagem-logica-do-banco.md)) |
+| Qualificação progressiva e contextual | Estratégia conversacional do agente (agora em [`02-estrategia-de-agente-e-tools.md`](../02-arquitetura/02-estrategia-de-agente-e-tools.md)) |
+| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do lead (agora em [`01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)) |
 | Rejeições como dado valioso | Captura de objeções e imóveis descartados no perfil narrativo |
 | Dossier como produto principal do SDR | Destaque do perfil narrativo no dashboard (Fase 5) |
 | Follow-up contextual com réguas por etapa | Réguas diferenciadas na Fase 4 |

@@ -87,7 +87,7 @@ Para evitar reinventar a roda e acelerar a implementação da prova de conceito,
 ### Aplicação e interface
 - **Python 3.11+**
 - **Streamlit** para chat simulador e dashboard do corretor na mesma aplicação
-- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [`03-autenticacao-da-ui.md`](docs/03-operacao/03-autenticacao-da-ui.md))
+- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [`03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md))
 
 ### Canal de mensageria real
 - **Telegram Bot API** via `python-telegram-bot` (v21+, asyncio nativo)
@@ -98,7 +98,7 @@ Para evitar reinventar a roda e acelerar a implementação da prova de conceito,
 - **PydanticAI** como framework principal do agente
 - **Pydantic v2** para validação, schemas e saídas estruturadas
 - **Provider OpenAI-compatible configurável por `.env`** para permitir troca de modelo/provedor sem reescrever a aplicação
-- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [`04-governanca-de-custos-llm.md`](docs/03-operacao/04-governanca-de-custos-llm.md))
+- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [`04-governanca-de-custos-llm.md`](../03-operacao/04-governanca-de-custos-llm.md))
 
 ### Persistência e dados
 - **PostgreSQL 16** como banco de dados principal (dados e catálogo)
@@ -108,7 +108,7 @@ Para evitar reinventar a roda e acelerar a implementação da prova de conceito,
 
 ### Infraestrutura e deploy
 - **Docker Compose** para desenvolvimento local (postgres + app + telegram-bot)
-- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [`01-infraestrutura-e-deploy.md`](docs/03-operacao/01-infraestrutura-e-deploy.md))
+- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [`01-infraestrutura-e-deploy.md`](../03-operacao/01-infraestrutura-e-deploy.md))
 
 ### Busca e recomendação
 - **Filtros estruturados por metadados** (SQL nativo) como estratégia inicial
@@ -219,7 +219,7 @@ flowchart LR
 
 O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via conversa natural, mantém um `perfil_narrativo` incremental, busca imóveis quando há contexto suficiente e propõe agendamento no momento adequado.
 
-> Detalhamento completo e estratégia de busca em camadas: [`02-estrategia-de-agente-e-tools.md`](docs/02-arquitetura/02-estrategia-de-agente-e-tools.md)
+> Detalhamento completo e estratégia de busca em camadas: [`02-estrategia-de-agente-e-tools.md`](../02-arquitetura/02-estrategia-de-agente-e-tools.md)
 
 ---
 
@@ -227,9 +227,9 @@ O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via
 
 Entidades principais: **Lead** (qualificação + `perfil_narrativo` evolutivo), **Mensagem** (histórico), **Agendamento** (visitas/reuniões), **Imóvel** (catálogo) e **LLMUsage** (tracking de consumo). O `perfil_narrativo` é um campo TEXT mantido pela LLM que acumula contexto rico do lead — o produto principal do SDR.
 
-> Modelagem conceitual e lógica, incluindo schemas, enums, exemplo de `perfil_narrativo`, tipos SQL, constraints, índices, identidade de canal, mensagens, follow-up, score e status: [`01-modelagem-logica-do-banco.md`](docs/04-dados/01-modelagem-logica-do-banco.md)
+> Modelagem conceitual e lógica, incluindo schemas, enums, exemplo de `perfil_narrativo`, tipos SQL, constraints, índices, identidade de canal, mensagens, follow-up, score e status: [`01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
 
-> Decisão de modelagem para identidade de canal e ausência deliberada de entidade explícita de `conversation` / `session`: [`02-identidade-de-canal-e-conversa.md`](docs/04-dados/02-identidade-de-canal-e-conversa.md)
+> Decisão de modelagem para identidade de canal e ausência deliberada de entidade explícita de `conversation` / `session`: [`02-identidade-de-canal-e-conversa.md`](../04-dados/02-identidade-de-canal-e-conversa.md)
 
 ---
 
