@@ -1,4 +1,4 @@
-# Decisão de Identidade de Canal e Conversa — POC
+# Identidade de Canal e Estratégia de Conversa
 
 **Objetivo:** registrar a decisão de negócio e modelagem para identificar leads no Telegram e orientar as próximas lacunas de modelagem (`mensagens`, sessão/conversa e identidade de canal).
 

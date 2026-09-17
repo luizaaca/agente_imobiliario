@@ -1,8 +1,10 @@
 # Estratégia de Testes
 
+**Objetivo:** definir uma estratégia de testes pragmática para a POC, cobrindo os fluxos mais críticos com foco em confiança para demo, regressão mínima e validação de contratos.
+
 ---
 
-## 1. Objetivo
+## 1. Diretriz geral
 
 Definir uma estratégia de testes pragmática para a POC, cobrindo os fluxos mais críticos sem transformar o projeto em um festival de mocks tristes e lágrimas de CI.
 

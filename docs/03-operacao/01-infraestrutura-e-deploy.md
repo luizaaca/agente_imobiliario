@@ -1,6 +1,6 @@
-# Sub-plano: Infraestrutura — PostgreSQL, Docker e Deploy
+# Infraestrutura, Containers e Deploy
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
+**Objetivo:** consolidar as decisões e instruções de infraestrutura da POC, cobrindo banco de dados, containers, dependências e opções de deploy.
 
 ---
 
@@ -262,7 +262,9 @@ agente_imobiliario/
 ├── .env.example
 ├── README.md
 ├── requirements.txt
-├── PLANO_DE_IMPLEMENTACAO.md
+├── docs/
+│   └── 01-visao-geral/
+│       └── 01-plano-de-implementacao.md
 ├── data/
 │   └── imoveis_dataset.csv       # Dataset Kaggle brutou ou limpo
 ├── src/

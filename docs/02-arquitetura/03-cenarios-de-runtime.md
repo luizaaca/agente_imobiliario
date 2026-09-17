@@ -1,6 +1,6 @@
-# Runtime Scenarios
+# Cenários de Runtime
 
-**Complementa o plano principal com cenários de execução arquiteturalmente relevantes.**
+**Objetivo:** documentar os principais fluxos de execução da solução para alinhar implementação, testes, observabilidade e demonstração.
 
 ---
 

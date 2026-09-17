@@ -1,12 +1,12 @@
-# Sub-plano: Referências de Mercado (Benchmarks)
+# Benchmarks de Mercado
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
+**Objetivo:** registrar as referências de mercado que informaram as decisões de design da prova de conceito e explicitar os padrões convergentes incorporados à solução.
 
 ---
 
 ## 1. Contexto
 
-A arquitetura e as decisões de design deste projeto foram informadas pela análise de três plataformas comerciais que atuam como SDR imobiliário com IA no Brasil. Embora a POC não tenha a mesma amplitude dessas ferramentas, compreender o estado da arte orientou escolhas críticas — especialmente a adoção do `perfil_narrativo` como artefato central.
+A arquitetura e as decisões de design deste projeto foram informadas pela análise de três plataformas comerciais que atuam como SDR imobiliário com IA no Brasil. Embora a prova de conceito não tenha a mesma amplitude dessas ferramentas, compreender o estado da arte orientou escolhas críticas — especialmente a adoção do `perfil_narrativo` como artefato central.
 
 ---
 
@@ -34,12 +34,12 @@ A arquitetura e as decisões de design deste projeto foram informadas pela anál
 
 ## 3. Padrões convergentes adotados na POC
 
-As três plataformas convergem em práticas que orientaram diretamente o design deste projeto:
+As três plataformas convergem em práticas que orientaram diretamente o design desta solução:
 
 | Padrão | Como foi incorporado |
 |---|---|
-| Qualificação progressiva e contextual | Estratégia conversacional do agente (agora em [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md)) |
-| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do Lead (agora em [docs/database_logical_model.md](docs/database_logical_model.md)) |
+| Qualificação progressiva e contextual | Estratégia conversacional do agente (agora em [02-estrategia-de-agente-e-tools.md](../02-arquitetura/02-estrategia-de-agente-e-tools.md)) |
+| Perfil textual rico gerado pela LLM | Campo `perfil_narrativo` no schema do lead (agora em [01-modelagem-logica-do-banco.md](../04-dados/01-modelagem-logica-do-banco.md)) |
 | Rejeições como dado valioso | Captura de objeções e imóveis descartados no perfil narrativo |
 | Dossier como produto principal do SDR | Destaque do perfil narrativo no dashboard (Fase 5) |
 | Follow-up contextual com réguas por etapa | Réguas diferenciadas na Fase 4 |

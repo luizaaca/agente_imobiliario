@@ -1,5 +1,7 @@
 # Matriz de Rastreabilidade
 
+**Objetivo:** relacionar requisitos, cenários, componentes, testes e evidências esperadas para facilitar revisão de cobertura e preparação da demo.
+
 ---
 
 ## 1. Objetivo

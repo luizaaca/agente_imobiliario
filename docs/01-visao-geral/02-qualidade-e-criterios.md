@@ -1,6 +1,6 @@
 # SDD Complementar — Qualidade, Critérios e Governança Técnica
 
-**Complementa o [`PLANO_DE_IMPLEMENTACAO.md`](./PLANO_DE_IMPLEMENTACAO.md)**
+**Complementa o [`01-plano-de-implementacao.md`](./01-plano-de-implementacao.md)**
 
 ---
 
@@ -253,13 +253,13 @@ A POC será considerada pronta quando:
 
 ## 10. Relação com outros documentos
 
-- Estratégia do agente: [`SUB_PLANO_AGENTE.md`](./SUB_PLANO_AGENTE.md)
-- Modelagem de dados: [`docs/database_logical_model.md`](./docs/database_logical_model.md)
-- Infraestrutura: [`SUB_PLANO_INFRA.md`](./SUB_PLANO_INFRA.md)
-- Autenticação: [`SUB_PLANO_AUTENTICACAO.md`](./SUB_PLANO_AUTENTICACAO.md)
-- Custos LLM: [`SUB_PLANO_CUSTOS_LLM.md`](./SUB_PLANO_CUSTOS_LLM.md)
-- ADRs: [`docs/adr/`](./docs/adr/)
-- Runtime: [`docs/runtime_scenarios.md`](./docs/runtime_scenarios.md)
-- Contratos: [`docs/tool_contracts.md`](./docs/tool_contracts.md)
-- Testes: [`docs/test_strategy.md`](./docs/test_strategy.md)
-- Rastreabilidade: [`docs/traceability_matrix.md`](./docs/traceability_matrix.md)
+- Estratégia do agente: [`../02-arquitetura/02-estrategia-de-agente-e-tools.md`](../02-arquitetura/02-estrategia-de-agente-e-tools.md)
+- Modelagem de dados: [`../04-dados/01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md)
+- Infraestrutura: [`../03-operacao/01-infraestrutura-e-deploy.md`](../03-operacao/01-infraestrutura-e-deploy.md)
+- Autenticação: [`../03-operacao/03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md)
+- Custos LLM: [`../03-operacao/04-governanca-de-custos-llm.md`](../03-operacao/04-governanca-de-custos-llm.md)
+- ADRs: [`../06-decisoes/adr/`](../06-decisoes/adr/)
+- Runtime: [`../02-arquitetura/03-cenarios-de-runtime.md`](../02-arquitetura/03-cenarios-de-runtime.md)
+- Contratos: [`../02-arquitetura/04-contratos-das-tools.md`](../02-arquitetura/04-contratos-das-tools.md)
+- Testes: [`../05-engenharia/01-estrategia-de-testes.md`](../05-engenharia/01-estrategia-de-testes.md)
+- Rastreabilidade: [`../05-engenharia/02-matriz-de-rastreabilidade.md`](../05-engenharia/02-matriz-de-rastreabilidade.md)

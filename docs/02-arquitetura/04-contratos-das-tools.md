@@ -1,6 +1,6 @@
 # Contratos das Tools do Agente
 
-**Este documento define os contratos funcionais das tools expostas ao agente SDR.**
+**Objetivo:** definir os contratos funcionais das tools expostas ao agente SDR, incluindo responsabilidades, entradas, saídas, efeitos colaterais e erros tratáveis.
 
 ---
 

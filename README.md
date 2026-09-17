@@ -87,25 +87,35 @@ Ambos usam a mesma camada de domínio:
 
 ## Estrutura documental
 
-### Documento principal
-- [`PLANO_DE_IMPLEMENTACAO.md`](./PLANO_DE_IMPLEMENTACAO.md)
+- [`docs/00-indice.md`](./docs/00-indice.md)
 
-### Sub-planos funcionais
-- [`SUB_PLANO_AGENTE.md`](./SUB_PLANO_AGENTE.md)
-- [`SUB_PLANO_INFRA.md`](./SUB_PLANO_INFRA.md)
-- [`SUB_PLANO_AUTENTICACAO.md`](./SUB_PLANO_AUTENTICACAO.md)
-- [`SUB_PLANO_CUSTOS_LLM.md`](./SUB_PLANO_CUSTOS_LLM.md)
-- [`SUB_PLANO_BENCHMARKS.md`](./SUB_PLANO_BENCHMARKS.md)
+### Visão geral e planejamento
+- [`docs/01-visao-geral/01-plano-de-implementacao.md`](./docs/01-visao-geral/01-plano-de-implementacao.md)
+- [`docs/01-visao-geral/02-qualidade-e-criterios.md`](./docs/01-visao-geral/02-qualidade-e-criterios.md)
 
-### Documentação complementar de engenharia
-- [`SDD_QUALIDADE_E_CRITERIOS.md`](./SDD_QUALIDADE_E_CRITERIOS.md)
-- [`docs/database_logical_model.md`](./docs/database_logical_model.md)
-- [`docs/channel_identity_and_conversation_decision.md`](./docs/channel_identity_and_conversation_decision.md)
-- [`docs/runtime_scenarios.md`](./docs/runtime_scenarios.md)
-- [`docs/tool_contracts.md`](./docs/tool_contracts.md)
-- [`docs/test_strategy.md`](./docs/test_strategy.md)
-- [`docs/traceability_matrix.md`](./docs/traceability_matrix.md)
-- [`docs/adr/`](./docs/adr/)
+### Arquitetura
+- [`docs/02-arquitetura/01-visao-geral-da-solucao.md`](./docs/02-arquitetura/01-visao-geral-da-solucao.md)
+- [`docs/02-arquitetura/02-estrategia-de-agente-e-tools.md`](./docs/02-arquitetura/02-estrategia-de-agente-e-tools.md)
+- [`docs/02-arquitetura/03-cenarios-de-runtime.md`](./docs/02-arquitetura/03-cenarios-de-runtime.md)
+- [`docs/02-arquitetura/04-contratos-das-tools.md`](./docs/02-arquitetura/04-contratos-das-tools.md)
+
+### Operação e plataforma
+- [`docs/03-operacao/01-infraestrutura-e-deploy.md`](./docs/03-operacao/01-infraestrutura-e-deploy.md)
+- [`docs/03-operacao/02-configuracao-e-execucao-local.md`](./docs/03-operacao/02-configuracao-e-execucao-local.md)
+- [`docs/03-operacao/03-autenticacao-da-ui.md`](./docs/03-operacao/03-autenticacao-da-ui.md)
+- [`docs/03-operacao/04-governanca-de-custos-llm.md`](./docs/03-operacao/04-governanca-de-custos-llm.md)
+
+### Dados
+- [`docs/04-dados/01-modelagem-logica-do-banco.md`](./docs/04-dados/01-modelagem-logica-do-banco.md)
+- [`docs/04-dados/02-identidade-de-canal-e-conversa.md`](./docs/04-dados/02-identidade-de-canal-e-conversa.md)
+
+### Engenharia
+- [`docs/05-engenharia/01-estrategia-de-testes.md`](./docs/05-engenharia/01-estrategia-de-testes.md)
+- [`docs/05-engenharia/02-matriz-de-rastreabilidade.md`](./docs/05-engenharia/02-matriz-de-rastreabilidade.md)
+- [`docs/06-decisoes/adr/`](./docs/06-decisoes/adr/)
+
+### Referências
+- [`docs/07-referencias/01-benchmarks-de-mercado.md`](./docs/07-referencias/01-benchmarks-de-mercado.md)
 
 ---
 
@@ -121,14 +131,15 @@ agente_imobiliario/
 ├── .env.example
 ├── README.md
 ├── requirements.txt
-├── PLANO_DE_IMPLEMENTACAO.md
-├── SDD_QUALIDADE_E_CRITERIOS.md
 ├── docs/
-│   ├── adr/
-│   ├── runtime_scenarios.md
-│   ├── tool_contracts.md
-│   ├── test_strategy.md
-│   └── traceability_matrix.md
+│   ├── 01-visao-geral/
+│   ├── 02-arquitetura/
+│   ├── 03-operacao/
+│   ├── 04-dados/
+│   ├── 05-engenharia/
+│   ├── 06-decisoes/
+│   │   └── adr/
+│   └── 07-referencias/
 ├── src/
 │   ├── agent/
 │   ├── channels/
@@ -159,11 +170,11 @@ Lead interrompe a conversa antes do agendamento, e o sistema retoma o contato co
 ## Qualidade e critérios técnicos
 
 Os requisitos não funcionais e critérios de aceite estão em:
-- [`SDD_QUALIDADE_E_CRITERIOS.md`](./SDD_QUALIDADE_E_CRITERIOS.md)
+- [`docs/01-visao-geral/02-qualidade-e-criterios.md`](./docs/01-visao-geral/02-qualidade-e-criterios.md)
 
 A modelagem lógica detalhada de persistência e as decisões de identidade/canal estão em:
-- [`docs/database_logical_model.md`](./docs/database_logical_model.md)
-- [`docs/channel_identity_and_conversation_decision.md`](./docs/channel_identity_and_conversation_decision.md)
+- [`docs/04-dados/01-modelagem-logica-do-banco.md`](./docs/04-dados/01-modelagem-logica-do-banco.md)
+- [`docs/04-dados/02-identidade-de-canal-e-conversa.md`](./docs/04-dados/02-identidade-de-canal-e-conversa.md)
 
 Lá estão definidos, entre outros:
 - metas de performance da POC;
@@ -176,7 +187,7 @@ Lá estão definidos, entre outros:
 
 ## Decisões arquiteturais registradas
 
-As principais decisões do projeto foram registradas como ADRs em [`docs/adr/`](./docs/adr/), incluindo:
+As principais decisões do projeto foram registradas como ADRs em [`docs/06-decisoes/adr/`](./docs/06-decisoes/adr/), incluindo:
 
 - uso de PydanticAI;
 - PostgreSQL + FTS no MVP;
@@ -190,7 +201,7 @@ As principais decisões do projeto foram registradas como ADRs em [`docs/adr/`](
 ## Estratégia de testes
 
 A estratégia de testes está documentada em:
-- [`docs/test_strategy.md`](./docs/test_strategy.md)
+- [`docs/05-engenharia/01-estrategia-de-testes.md`](./docs/05-engenharia/01-estrategia-de-testes.md)
 
 Ela cobre:
 - testes unitários;
@@ -210,7 +221,8 @@ Ela cobre:
 
 ### Variáveis de ambiente esperadas
 Consulte:
-- [`SUB_PLANO_INFRA.md`](./SUB_PLANO_INFRA.md)
+- [`docs/03-operacao/01-infraestrutura-e-deploy.md`](./docs/03-operacao/01-infraestrutura-e-deploy.md)
+- [`docs/03-operacao/02-configuracao-e-execucao-local.md`](./docs/03-operacao/02-configuracao-e-execucao-local.md)
 - `.env.example` (quando criado no projeto)
 
 Variáveis principais esperadas:
@@ -254,7 +266,7 @@ python run_all.py
 7. Observabilidade, testes e refino
 8. Documentação e entrega
 
-Detalhamento completo em [`PLANO_DE_IMPLEMENTACAO.md`](./PLANO_DE_IMPLEMENTACAO.md).
+Detalhamento completo em [`docs/01-visao-geral/01-plano-de-implementacao.md`](./docs/01-visao-geral/01-plano-de-implementacao.md).
 
 ---
 

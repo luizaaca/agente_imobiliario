@@ -1,6 +1,6 @@
-# Sub-plano: Autenticação do Painel Streamlit
+# Autenticação da UI
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
+**Objetivo:** definir a estratégia de autenticação da interface Streamlit, protegendo dashboard, chat simulador e demais elementos visuais da POC.
 
 ---
 

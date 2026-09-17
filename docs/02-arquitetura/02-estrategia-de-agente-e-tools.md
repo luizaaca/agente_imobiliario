@@ -1,6 +1,6 @@
-# Sub-plano: Estratégia de Agente, Tool Calling e Busca
+# Estratégia de Agente, Tools e Busca
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
+**Objetivo:** detalhar o papel do agente SDR, a estratégia conversacional, o uso de tools e a abordagem de busca de imóveis adotada na POC.
 
 ---
 

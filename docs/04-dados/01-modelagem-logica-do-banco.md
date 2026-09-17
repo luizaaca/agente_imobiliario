@@ -1,4 +1,4 @@
-# Modelagem de Dados e Modelagem Lógica do Banco
+# Modelagem Lógica do Banco
 
 **Objetivo:** consolidar em um único documento a visão conceitual das entidades da POC e a modelagem lógica de persistência, incluindo tipos SQL, nulabilidade, constraints, índices, identidade de canal, histórico de mensagens, tentativas de follow-up, score e status.
 

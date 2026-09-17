@@ -17,17 +17,17 @@ No contexto comercial e imobiliário, o SDR é o profissional ou agente respons�
 
 ---
 
-## 2. Visão Geral do Projeto
+## 2. Visão Geral da Solução
 
-O objetivo deste projeto é construir uma **Prova de Conceito (POC)** funcional e escalável de um **Agente SDR Imobiliário** impulsionado por Inteligência Artificial Generativa.
+O objetivo deste projeto é construir uma **prova de conceito** funcional e escalável de uma **solução de SDR imobiliário com IA**.
 
-O agente automatiza o primeiro atendimento de leads imobiliários, qualificando interesses, oferecendo recomendações com base em catálogo amplo de imóveis (dataset importado), realizando follow-ups inteligentes para leads inativos, agendando reuniões com corretores e gerando relatórios executivos em um dashboard.
+A solução automatiza o primeiro atendimento de leads imobiliários, qualificando interesses, oferecendo recomendações com base em catálogo amplo de imóveis, realizando follow-ups inteligentes para leads inativos, apoiando agendamentos com corretores e gerando relatórios executivos em um dashboard.
 
 O foco da solução não é substituir o corretor, mas **aumentar a velocidade e a qualidade da pré-venda**, garantindo que o corretor receba leads mais bem qualificados, com contexto consolidado e próximos passos sugeridos.
 
 ---
 
-## 3. Objetivos da POC
+## 3. Objetivos da Prova de Conceito
 
 ### Objetivo principal
 Construir um agente conversacional capaz de atuar como SDR imobiliário digital, cobrindo o ciclo inicial de atendimento, qualificação, recomendação, reengajamento e handover para o corretor.
@@ -41,7 +41,7 @@ Construir um agente conversacional capaz de atuar como SDR imobiliário digital,
 - Gerar resumo executivo para o corretor com preferências, objeções e próximos passos.
 - Permitir visualização operacional via dashboard em Streamlit.
 
-### Critérios de sucesso da POC
+### Critérios de sucesso
 - Demonstrar os 3 cenários obrigatórios do desafio.
 - Persistir dados de leads, mensagens e agendamentos.
 - Exibir recomendações coerentes com o perfil informado.
@@ -82,12 +82,12 @@ Construir um agente conversacional capaz de atuar como SDR imobiliário digital,
 
 ## 6. Stack Tecnológica Recomendada
 
-Para evitar reinventar a roda e acelerar a implementação da POC, a solução adotará uma stack moderna, enxuta e orientada a produtividade.
+Para evitar reinventar a roda e acelerar a implementação da prova de conceito, a solução adotará uma stack moderna, enxuta e orientada a produtividade.
 
 ### Aplicação e interface
 - **Python 3.11+**
 - **Streamlit** para chat simulador e dashboard do corretor na mesma aplicação
-- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md))
+- **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [`03-autenticacao-da-ui.md`](docs/03-operacao/03-autenticacao-da-ui.md))
 
 ### Canal de mensageria real
 - **Telegram Bot API** via `python-telegram-bot` (v21+, asyncio nativo)
@@ -98,7 +98,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 - **PydanticAI** como framework principal do agente
 - **Pydantic v2** para validação, schemas e saídas estruturadas
 - **Provider OpenAI-compatible configurável por `.env`** para permitir troca de modelo/provedor sem reescrever a aplicação
-- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md))
+- **Controle de custos** com limites por conversa e globais, tracking em tabela dedicada (ver [`04-governanca-de-custos-llm.md`](docs/03-operacao/04-governanca-de-custos-llm.md))
 
 ### Persistência e dados
 - **PostgreSQL 16** como banco de dados principal (dados e catálogo)
@@ -108,7 +108,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 
 ### Infraestrutura e deploy
 - **Docker Compose** para desenvolvimento local (postgres + app + telegram-bot)
-- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md))
+- Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [`01-infraestrutura-e-deploy.md`](docs/03-operacao/01-infraestrutura-e-deploy.md))
 
 ### Busca e recomendação
 - **Filtros estruturados por metadados** (SQL nativo) como estratégia inicial
@@ -126,7 +126,7 @@ Para evitar reinventar a roda e acelerar a implementação da POC, a solução a
 
 ### Justificativa da stack
 - **PydanticAI** reduz parsing manual, facilita tool calling tipado e garante saídas estruturadas.
-- **Streamlit** acelera a entrega visual da POC sem exigir frontend separado.
+- **Streamlit** acelera a entrega visual da prova de conceito sem exigir frontend separado.
 - **Telegram Bot** adiciona canal real de mensageria com zero custo e setup mínimo (~3h, ~130 LOC).
 - **PostgreSQL** unifica o armazenamento do catálogo e dados conversacionais, garantindo acesso concorrente nativo e recursos de FTS.
 - **Docker Compose** padroniza o ambiente e simplifica o onboarding.
@@ -215,31 +215,29 @@ flowchart LR
 
 ---
 
-## 8. Estratégia de Agente e Tool Calling
+## 8. Estratégia do Agente e Tool Calling
 
-O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via conversa natural, mantém um `perfil_narrativo` incremental (artefato principal do SDR), busca imóveis quando há contexto suficiente e propõe agendamento no momento adequado. Expõe 6 tools tipadas ao modelo (buscar, qualificar, atualizar perfil, agendar, gerar resumo, gerar follow-up).
+O agente SDR opera como pré-vendedor consultivo: qualifica progressivamente via conversa natural, mantém um `perfil_narrativo` incremental, busca imóveis quando há contexto suficiente e propõe agendamento no momento adequado.
 
-> Detalhamento completo e estratégia de busca em camadas: [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md)
+> Detalhamento completo e estratégia de busca em camadas: [`02-estrategia-de-agente-e-tools.md`](docs/02-arquitetura/02-estrategia-de-agente-e-tools.md)
 
 ---
 
-## 9. Modelagem de Dados da POC
+## 9. Modelagem de dados
 
 Entidades principais: **Lead** (qualificação + `perfil_narrativo` evolutivo), **Mensagem** (histórico), **Agendamento** (visitas/reuniões), **Imóvel** (catálogo) e **LLMUsage** (tracking de consumo). O `perfil_narrativo` é um campo TEXT mantido pela LLM que acumula contexto rico do lead — o produto principal do SDR.
 
-> Detalhamento completo da modelagem conceitual e lógica, incluindo schemas, enums, exemplo de `perfil_narrativo`, tipos SQL, constraints, índices, identidade de canal, mensagens, follow-up, score e status: [docs/database_logical_model.md](docs/database_logical_model.md)
+> Modelagem conceitual e lógica, incluindo schemas, enums, exemplo de `perfil_narrativo`, tipos SQL, constraints, índices, identidade de canal, mensagens, follow-up, score e status: [`01-modelagem-logica-do-banco.md`](docs/04-dados/01-modelagem-logica-do-banco.md)
 
-> Modelagem lógica detalhada de persistência, incluindo tipos SQL, constraints, índices, identidade de canal, histórico de mensagens, tentativas de follow-up, score e status: [docs/database_logical_model.md](docs/database_logical_model.md)
-
-> Decisão de negócio/modelagem para identidade de canal e ausência deliberada de entidade explícita de `conversation` / `session` na POC: [docs/channel_identity_and_conversation_decision.md](docs/channel_identity_and_conversation_decision.md)
+> Decisão de modelagem para identidade de canal e ausência deliberada de entidade explícita de `conversation` / `session`: [`02-identidade-de-canal-e-conversa.md`](docs/04-dados/02-identidade-de-canal-e-conversa.md)
 
 ---
 
 ## 10. Estrutura de Diretórios e Dependências
 
-A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compose.yml` e todas as variáveis de ambiente necessárias estão documentadas no sub-plano de infraestrutura.
+A estrutura de pastas completa, `requirements.txt`, `Dockerfile`, `docker-compose.yml` e as variáveis de ambiente necessárias estão documentadas no documento de infraestrutura.
 
-> Detalhamento: [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md)
+> Detalhamento: [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)
 
 ### Documentação complementar de engenharia
 
@@ -247,24 +245,24 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 | Documento | Finalidade |
 |---|---|
-| [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) | Requisitos não funcionais, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
-| [docs/runtime_scenarios.md](docs/runtime_scenarios.md) | Cenários de runtime arquiteturalmente relevantes |
-| [docs/tool_contracts.md](docs/tool_contracts.md) | Contratos funcionais das tools do agente |
-| [docs/test_strategy.md](docs/test_strategy.md) | Estratégia de testes por camadas e regressão dos cenários obrigatórios |
-| [docs/traceability_matrix.md](docs/traceability_matrix.md) | Rastreabilidade entre requisitos, componentes, testes e evidências |
-| [docs/adr/](docs/adr/) | Registro das principais decisões arquiteturais (ADRs) |
+| [02-qualidade-e-criterios.md](./02-qualidade-e-criterios.md) | Requisitos não funcionais, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
+| [03-cenarios-de-runtime.md](../02-arquitetura/03-cenarios-de-runtime.md) | Cenários de runtime arquiteturalmente relevantes |
+| [04-contratos-das-tools.md](../02-arquitetura/04-contratos-das-tools.md) | Contratos funcionais das tools do agente |
+| [01-estrategia-de-testes.md](../05-engenharia/01-estrategia-de-testes.md) | Estratégia de testes por camadas e regressão dos cenários obrigatórios |
+| [02-matriz-de-rastreabilidade.md](../05-engenharia/02-matriz-de-rastreabilidade.md) | Rastreabilidade entre requisitos, componentes, testes e evidências |
+| [adr/](../06-decisoes/adr/) | Registro das principais decisões arquiteturais (ADRs) |
 
 ---
 
 ## 11. Fases de Execução
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
-- [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md)).
+- [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)).
 - [ ] Importar dataset Kaggle de imóveis para tabela no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
 - [ ] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
 - [ ] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
-- [ ] Configurar autenticação do Streamlit (ver [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md)).
-- [ ] Implementar controle de custos LLM (ver [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md)).
+- [ ] Configurar autenticação do Streamlit (ver [03-autenticacao-da-ui.md](../03-operacao/03-autenticacao-da-ui.md)).
+- [ ] Implementar controle de custos LLM (ver [04-governanca-de-custos-llm.md](../03-operacao/04-governanca-de-custos-llm.md)).
 - [ ] Criar seed inicial e funções de leitura/escrita.
 - [ ] Implementar serviço de catálogo com filtros estruturados e ranking textual.
 
@@ -348,7 +346,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [ ] Validar os 3 cenários obrigatórios ponta a ponta.
 - [ ] Testar fluxo completo: Telegram → agente → banco → dashboard (sincronização entre processos).
 
-> Critérios de qualidade, cenários mensuráveis e estratégia de testes: [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) e [docs/test_strategy.md](docs/test_strategy.md)
+> Critérios de qualidade, cenários mensuráveis e estratégia de testes: [02-qualidade-e-criterios.md](./02-qualidade-e-criterios.md) e [01-estrategia-de-testes.md](../05-engenharia/01-estrategia-de-testes.md)
 
 ### Fase 8: Documentação e Entrega
 - [ ] Elaborar `README.md` com visão do problema, arquitetura, stack e instruções de execução.
@@ -396,42 +394,42 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 O design do projeto foi informado pela análise de 3 ferramentas comerciais de SDR imobiliário com IA (Lais.ai, Maya/Plaza, Squad/Inner AI). Os padrões convergentes incorporados: qualificação progressiva, perfil narrativo rico, rejeições como dado, dossier como produto, follow-up contextual e scoring transparente.
 
-> Detalhamento dos benchmarks: [SUB_PLANO_BENCHMARKS.md](SUB_PLANO_BENCHMARKS.md)
+> Detalhamento dos benchmarks: [01-benchmarks-de-mercado.md](../07-referencias/01-benchmarks-de-mercado.md)
 
 ---
 
-## 15. Documentos Complementares (Sub-planos)
+## 15. Documentos Complementares
 
-Os detalhamentos técnicos foram extraídos para manter este plano principal como um roteiro conciso. Eles estão divididos entre **sub-planos funcionais** e **documentos complementares de engenharia**.
+Os detalhamentos técnicos foram extraídos para manter este plano principal como um roteiro conciso. Eles estão divididos entre **documentos funcionais e arquiteturais** e **documentos complementares de engenharia**.
 
-### 15.1 Sub-planos funcionais
+### 15.1 Documentos funcionais e arquiteturais
 
 | Documento | Conteúdo |
 |---|---|
-| [SUB_PLANO_AGENTE.md](SUB_PLANO_AGENTE.md) | Estratégia de agente, tools, perfil narrativo e busca em camadas |
-| [SUB_PLANO_INFRA.md](SUB_PLANO_INFRA.md) | Docker Compose, Dockerfile, PostgreSQL, deps e deploy |
-| [SUB_PLANO_AUTENTICACAO.md](SUB_PLANO_AUTENTICACAO.md) | `streamlit-authenticator`, credenciais bcrypt e proteção total |
-| [SUB_PLANO_CUSTOS_LLM.md](SUB_PLANO_CUSTOS_LLM.md) | Tabela `llm_usage`, limites por conversa/globais e tracking |
-| [SUB_PLANO_BENCHMARKS.md](SUB_PLANO_BENCHMARKS.md) | Análise de mercado (Lais.ai, Maya, Squad) e padrões adotados |
+| [02-estrategia-de-agente-e-tools.md](../02-arquitetura/02-estrategia-de-agente-e-tools.md) | Estratégia de agente, tools, perfil narrativo e busca em camadas |
+| [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md) | Docker Compose, Dockerfile, PostgreSQL, dependências e deploy |
+| [03-autenticacao-da-ui.md](../03-operacao/03-autenticacao-da-ui.md) | `streamlit-authenticator`, credenciais bcrypt e proteção total |
+| [04-governanca-de-custos-llm.md](../03-operacao/04-governanca-de-custos-llm.md) | Tabela `llm_usage`, limites por conversa/globais e tracking |
+| [01-benchmarks-de-mercado.md](../07-referencias/01-benchmarks-de-mercado.md) | Análise de mercado e padrões adotados |
 
 ### 15.2 Documentos complementares de engenharia
 
 | Documento | Conteúdo |
 |---|---|
-| [SDD_QUALIDADE_E_CRITERIOS.md](SDD_QUALIDADE_E_CRITERIOS.md) | Requisitos de qualidade, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
-| [docs/database_logical_model.md](docs/database_logical_model.md) | Modelagem lógica do banco com tipos, constraints, índices, identidade de canal, mensagens, follow-up, score e status |
-| [docs/channel_identity_and_conversation_decision.md](docs/channel_identity_and_conversation_decision.md) | Decisão de modelagem para identidade de canal e estratégia de conversa/sessão na POC |
-| [docs/runtime_scenarios.md](docs/runtime_scenarios.md) | Fluxos de runtime críticos para implementação, testes e demo |
-| [docs/tool_contracts.md](docs/tool_contracts.md) | Contratos das tools do agente com inputs, outputs, regras e erros tratáveis |
-| [docs/test_strategy.md](docs/test_strategy.md) | Estratégia de testes unitários, integração, contratos e E2E |
-| [docs/traceability_matrix.md](docs/traceability_matrix.md) | Matriz de rastreabilidade entre requisitos, cenários, componentes e evidências |
-| [docs/adr/](docs/adr/) | ADRs com decisões arquiteturais e trade-offs principais |
+| [02-qualidade-e-criterios.md](./02-qualidade-e-criterios.md) | Requisitos de qualidade, critérios de aceite, segurança mínima, observabilidade e definição de pronto |
+| [01-modelagem-logica-do-banco.md](../04-dados/01-modelagem-logica-do-banco.md) | Modelagem lógica do banco com tipos, constraints, índices, identidade de canal, mensagens, follow-up, score e status |
+| [02-identidade-de-canal-e-conversa.md](../04-dados/02-identidade-de-canal-e-conversa.md) | Decisão de modelagem para identidade de canal e estratégia de conversa/sessão na prova de conceito |
+| [03-cenarios-de-runtime.md](../02-arquitetura/03-cenarios-de-runtime.md) | Fluxos de runtime críticos para implementação, testes e demo |
+| [04-contratos-das-tools.md](../02-arquitetura/04-contratos-das-tools.md) | Contratos das tools do agente com entradas, saídas, regras e erros tratáveis |
+| [01-estrategia-de-testes.md](../05-engenharia/01-estrategia-de-testes.md) | Estratégia de testes unitários, integração, contratos e E2E |
+| [02-matriz-de-rastreabilidade.md](../05-engenharia/02-matriz-de-rastreabilidade.md) | Matriz de rastreabilidade entre requisitos, cenários, componentes e evidências |
+| [adr/](../06-decisoes/adr/) | ADRs com decisões arquiteturais e trade-offs principais |
 
 ---
 
 ## 16. Conclusão
 
-Esta POC propõe um **Agente SDR Imobiliário com IA** focado em resolver um problema real de negócio: a perda de leads por demora, falta de qualificação e ausência de follow-up consistente.
+Esta prova de conceito propõe uma **solução de SDR imobiliário com IA** focada em resolver um problema real de negócio: a perda de leads por demora, falta de qualificação e ausência de follow-up consistente.
 
 A solução foi planejada para ser:
 - **simples o suficiente para hackathon**;
@@ -440,4 +438,4 @@ A solução foi planejada para ser:
 - **alinhada com o estado da arte do mercado** (perfil narrativo evolutivo);
 - **pronta para produção**, com PostgreSQL, Docker, autenticação e controle de custos desde o início.
 
-Ao adotar **PydanticAI + Streamlit + PostgreSQL + Docker + Telegram**, o projeto entrega uma POC funcional que pode ser publicada na internet para avaliação real. O `perfil_narrativo` — um texto rico e incremental mantido pela LLM — é o diferencial central: transforma o agente de um simples chatbot de triagem no verdadeiro **produto de pré-venda** que entrega contexto completo e acionável ao corretor humano.
+Ao adotar **PydanticAI + Streamlit + PostgreSQL + Docker + Telegram**, o projeto entrega uma prova de conceito funcional que pode ser publicada na internet para avaliação real. O `perfil_narrativo` — um texto rico e incremental mantido pela LLM — é o diferencial central: transforma o agente de um simples chatbot de triagem em um verdadeiro **produto de pré-venda** que entrega contexto completo e acionável ao corretor humano.

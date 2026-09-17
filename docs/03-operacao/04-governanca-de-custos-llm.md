@@ -1,6 +1,6 @@
-# Sub-plano: Controle de Consumo e Custos de LLM
+# Governança de Custos de LLM
 
-**Referenciado pelo [PLANO_DE_IMPLEMENTACAO.md](./PLANO_DE_IMPLEMENTACAO.md)**
+**Objetivo:** definir limites, rastreamento e mecanismos de controle para manter o consumo de LLM previsível e auditável durante a POC.
 
 ---
 
