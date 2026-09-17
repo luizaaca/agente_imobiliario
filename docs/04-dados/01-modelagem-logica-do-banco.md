@@ -192,10 +192,10 @@ Marido trabalha remoto, ela presencial na Faria Lima.
 
 ## 4. Tabela `leads`
 
-### 2.1 Finalidade
+### 4.1 Finalidade
 Representa o lead e seu estado consolidado de qualificação.
 
-### 2.2 Colunas propostas
+### 4.2 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -222,7 +222,7 @@ Representa o lead e seu estado consolidado de qualificação.
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `updated_at` | `TIMESTAMPTZ` | Não | `now()` | Última atualização |
 
-### 2.3 Constraints recomendadas
+### 4.3 Constraints recomendadas
 
 ```sql
 CHECK (orcamento_min IS NULL OR orcamento_min >= 0)
@@ -235,7 +235,7 @@ CHECK (intencao IS NULL OR intencao IN ('compra', 'aluguel', 'investimento'))
 CHECK (urgencia IS NULL OR urgencia IN ('baixa', 'media', 'alta'))
 ```
 
-### 2.4 Índices recomendados
+### 4.4 Índices recomendados
 
 ```sql
 CREATE INDEX idx_leads_status ON leads(status);
@@ -246,18 +246,18 @@ CREATE INDEX idx_leads_status_score ON leads(status, score DESC);
 CREATE INDEX idx_leads_bairro_interesse ON leads(bairro_interesse);
 ```
 
-### 2.5 Observações
+### 4.5 Observações
 - `telefone` não deve ser `UNIQUE` nesta etapa, pois o identificador de canal ainda será tratado em lacuna específica.
 - `updated_at` deverá ser atualizado pela camada de aplicação ou por mecanismo automático futuro.
 
 ---
 
-## 3. Tabela `mensagens`
+## 5. Tabela `mensagens`
 
-### 3.1 Finalidade
+### 5.1 Finalidade
 Persistir o histórico de mensagens associado a um lead, com rastreabilidade mínima de canal e estado operacional.
 
-### 3.2 Decisão desta etapa
+### 5.2 Decisão desta etapa
 Nesta etapa, a tabela `mensagens` deixa de ser apenas um histórico textual mínimo e passa a incorporar metadados suficientes para:
 
 - distinguir origem/canal da mensagem;
@@ -265,7 +265,7 @@ Nesta etapa, a tabela `mensagens` deixa de ser apenas um histórico textual mín
 - suportar Telegram, Streamlit e follow-up automático;
 - manter a modelagem simples, sem exigir ainda uma entidade explícita de `conversation` / `session`.
 
-### 3.3 Colunas propostas
+### 5.3 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -283,7 +283,7 @@ Nesta etapa, a tabela `mensagens` deixa de ser apenas um histórico textual mín
 | `timestamp` | `TIMESTAMPTZ` | Não | `now()` | Momento principal do registro |
 | `sent_at` | `TIMESTAMPTZ` | Sim |  | Momento efetivo de envio, quando aplicável |
 
-### 3.4 Constraints recomendadas
+### 5.4 Constraints recomendadas
 
 ```sql
 CHECK (role IN ('user', 'assistant', 'system', 'tool'))
@@ -292,7 +292,7 @@ CHECK (status IN ('created', 'received', 'generated', 'sent', 'failed'))
 CHECK (length(trim(content)) > 0)
 ```
 
-### 3.5 Chaves estrangeiras
+### 5.5 Chaves estrangeiras
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
@@ -301,7 +301,7 @@ FOREIGN KEY (in_reply_to_message_id) REFERENCES mensagens(id)
 
 > `channel_identity_id` será formalizado quando a lacuna de identidade de canal for fechada.
 
-### 3.6 Índices recomendados
+### 5.6 Índices recomendados
 
 ```sql
 CREATE INDEX idx_mensagens_lead_id ON mensagens(lead_id);
@@ -313,7 +313,7 @@ CREATE INDEX idx_mensagens_lead_timestamp ON mensagens(lead_id, timestamp);
 CREATE INDEX idx_mensagens_external_message_id ON mensagens(external_message_id);
 ```
 
-### 3.7 Justificativa dos novos campos
+### 5.7 Justificativa dos novos campos
 
 #### `channel`
 Permite distinguir a origem da mensagem sem depender apenas do `canal_origem` do lead.
@@ -338,19 +338,19 @@ Permite encadeamento simples entre mensagens sem exigir ainda uma entidade `conv
 #### `metadata_json`
 Permite guardar metadados leves sem explodir o schema cedo demais.
 
-### 3.8 Observações
+### 5.8 Observações
 - Ainda não estamos introduzindo uma entidade explícita de `conversation` / `session`.
 - O histórico continua sendo persistido por `lead_id`, com rastreabilidade de canal.
 - A política de `ON DELETE` continua adiada para a etapa de retenção e identidade de canal.
 
 ---
 
-## 4. Tabela `agendamentos`
+## 6. Tabela `agendamentos`
 
-### 4.1 Finalidade
+### 6.1 Finalidade
 Persistir visitas e reuniões associadas a um lead.
 
-### 4.2 Colunas propostas
+### 6.2 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -362,20 +362,20 @@ Persistir visitas e reuniões associadas a um lead.
 | `status` | `VARCHAR(20)` | Não |  | `pendente`, `confirmado`, `cancelado`, `realizado` |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 
-### 4.3 Constraints recomendadas
+### 6.3 Constraints recomendadas
 
 ```sql
 CHECK (tipo IN ('visita', 'reuniao'))
 CHECK (status IN ('pendente', 'confirmado', 'cancelado', 'realizado'))
 ```
 
-### 4.4 Chave estrangeira
+### 6.4 Chave estrangeira
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 4.5 Índices recomendados
+### 6.5 Índices recomendados
 
 ```sql
 CREATE INDEX idx_agendamentos_lead_id ON agendamentos(lead_id);
@@ -385,12 +385,12 @@ CREATE INDEX idx_agendamentos_status_data_hora ON agendamentos(status, data_hora
 
 ---
 
-## 5. Tabela `llm_usage`
+## 7. Tabela `llm_usage`
 
-### 5.1 Finalidade
+### 7.1 Finalidade
 Registrar consumo de LLM para auditoria, controle de custo e métricas operacionais.
 
-### 5.2 Colunas propostas
+### 7.2 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -405,7 +405,7 @@ Registrar consumo de LLM para auditoria, controle de custo e métricas operacion
 | `operation` | `VARCHAR(30)` | Não |  | Ex.: `chat`, `followup`, `resumo`, `perfil`, `busca` |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 
-### 5.3 Constraints recomendadas
+### 7.3 Constraints recomendadas
 
 ```sql
 CHECK (tokens_input >= 0)
@@ -415,13 +415,13 @@ CHECK (estimated_cost_usd IS NULL OR estimated_cost_usd >= 0)
 CHECK (conversation_turn IS NULL OR conversation_turn >= 0)
 ```
 
-### 5.4 Chave estrangeira
+### 7.4 Chave estrangeira
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 5.5 Índices recomendados
+### 7.5 Índices recomendados
 
 ```sql
 CREATE INDEX idx_llm_usage_lead_id ON llm_usage(lead_id);
@@ -432,12 +432,12 @@ CREATE INDEX idx_llm_usage_lead_operation_created_at ON llm_usage(lead_id, opera
 
 ---
 
-## 6. Tabela `imoveis`
+## 8. Tabela `imoveis`
 
-### 6.1 Finalidade
+### 8.1 Finalidade
 Catálogo de imóveis disponíveis para busca, recomendação e referência pelo agente SDR.
 
-### 6.2 Fonte de dados (Dataset Kaggle)
+### 8.2 Fonte de dados (Dataset Kaggle)
 
 O catálogo será populado a partir de um dataset público do Kaggle. O dataset recomendado é o **"São Paulo Real Estate Sales and Rentals (2020–2026)"** (~85.000 anúncios), que oferece boa cobertura de campos e volume adequado para demonstração com FTS.
 
@@ -471,7 +471,7 @@ O catálogo será populado a partir de um dataset público do Kaggle. O dataset 
 | `perfil_indicado` | Inferir: quartos ≥ 3 → `residencial_familia`; studio → `investidor`; área > 150m² → `alto_padrao` |
 | `imagem_url` | Usar imagens placeholder por tipo (ex.: `https://placehold.co/600x400?text=Apartamento+3q`) |
 
-### 6.3 Colunas propostas
+### 8.3 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -500,7 +500,7 @@ O catálogo será populado a partir de um dataset público do Kaggle. O dataset 
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `updated_at` | `TIMESTAMPTZ` | Não | `now()` | Última atualização |
 
-### 6.4 Constraints recomendadas
+### 8.4 Constraints recomendadas
 
 ```sql
 CHECK (tipo IN ('apartamento', 'casa', 'studio', 'cobertura'))
@@ -515,7 +515,7 @@ CHECK (condominio IS NULL OR condominio >= 0)
 CHECK (iptu_anual IS NULL OR iptu_anual >= 0)
 ```
 
-### 6.5 Índices recomendados
+### 8.5 Índices recomendados
 
 ```sql
 CREATE INDEX idx_imoveis_bairro ON imoveis(bairro);
@@ -528,7 +528,7 @@ CREATE INDEX idx_imoveis_perfil_indicado ON imoveis(perfil_indicado);
 CREATE INDEX idx_imoveis_search ON imoveis USING GIN (search_vector);
 ```
 
-### 6.6 Full-Text Search (FTS)
+### 8.6 Full-Text Search (FTS)
 
 O FTS é o mecanismo central de ranking textual para a tool `buscar_imoveis`.
 
@@ -582,7 +582,7 @@ ORDER BY ts_rank(search_vector, plainto_tsquery('portuguese', $6)) DESC
 LIMIT $7;
 ```
 
-### 6.7 Observações sobre o script de seed
+### 8.7 Observações sobre o script de seed
 
 O script `scripts/seed_imoveis.py` deve:
 
@@ -596,7 +596,7 @@ O script `scripts/seed_imoveis.py` deve:
 
 > Descrições ricas são essenciais para a qualidade do FTS. Se o dataset original tiver descrições pobres, o script de seed deve enriquecê-las com templates ou geração via LLM.
 
-### 6.8 Volume esperado
+### 8.8 Volume esperado
 
 | Cenário | Volume |
 |---|---|
@@ -608,9 +608,9 @@ O script `scripts/seed_imoveis.py` deve:
 
 ---
 
-## 7. Convenções transversais
+## 9. Convenções transversais
 
-### 7.1 Nomes de tabelas
+### 9.1 Nomes de tabelas
 Usar nomes no plural e em minúsculas:
 - `leads`
 - `mensagens`
@@ -618,17 +618,17 @@ Usar nomes no plural e em minúsculas:
 - `imoveis`
 - `llm_usage`
 
-### 7.2 Chaves estrangeiras
+### 9.2 Chaves estrangeiras
 Usar padrão `<entidade>_id`.
 
-### 7.3 Auditoria mínima
+### 9.3 Auditoria mínima
 Nesta etapa, toda tabela operacional principal deve ter ao menos:
 - PK estável
 - timestamp de criação
 
 `leads` deve ter também `updated_at`.
 
-### 7.4 Observabilidade e rastreabilidade
+### 9.4 Observabilidade e rastreabilidade
 A modelagem deve permitir correlação mínima por:
 - `lead_id`
 - tempo (`timestamp` / `created_at`)
@@ -636,9 +636,9 @@ A modelagem deve permitir correlação mínima por:
 
 ---
 
-## 8. Tabela `lead_channel_identities`
+## 10. Tabela `lead_channel_identities`
 
-### 7.1 Finalidade
+### 10.1 Finalidade
 Representar identidades externas de canal vinculadas a um lead.
 
 Na POC, esta tabela resolve principalmente o vínculo entre:
@@ -647,7 +647,7 @@ Na POC, esta tabela resolve principalmente o vínculo entre:
 
 sem transformar o identificador do canal na identidade definitiva da pessoa.
 
-### 7.2 Colunas propostas
+### 10.2 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -660,20 +660,20 @@ sem transformar o identificador do canal na identidade definitiva da pessoa.
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `last_seen_at` | `TIMESTAMPTZ` | Sim |  | Última atividade observada |
 
-### 7.3 Constraints recomendadas
+### 10.3 Constraints recomendadas
 
 ```sql
 CHECK (channel IN ('telegram', 'streamlit'))
 CHECK (external_user_id IS NOT NULL OR external_chat_id IS NOT NULL)
 ```
 
-### 7.4 Chave estrangeira
+### 10.4 Chave estrangeira
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 7.5 Índices recomendados
+### 10.5 Índices recomendados
 
 ```sql
 CREATE INDEX idx_lead_channel_identities_lead_id ON lead_channel_identities(lead_id);
@@ -683,7 +683,7 @@ CREATE INDEX idx_lead_channel_identities_external_chat_id ON lead_channel_identi
 CREATE INDEX idx_lead_channel_identities_last_seen_at ON lead_channel_identities(last_seen_at);
 ```
 
-### 7.6 Unicidade recomendada
+### 10.6 Unicidade recomendada
 
 Para a POC, recomenda-se garantir unicidade por canal + identificador externo quando o valor existir.
 
@@ -696,7 +696,7 @@ UNIQUE (channel, external_user_id)
 
 > Em PostgreSQL real, isso pode exigir índice único parcial para lidar corretamente com `NULL`.
 
-### 7.7 Relação com `mensagens`
+### 10.7 Relação com `mensagens`
 
 A coluna `mensagens.channel_identity_id` passa a referenciar esta tabela.
 
@@ -706,14 +706,14 @@ Chave estrangeira futura:
 FOREIGN KEY (channel_identity_id) REFERENCES lead_channel_identities(id)
 ```
 
-### 7.8 Regras de negócio da POC refletidas na modelagem
+### 10.8 Regras de negócio da POC refletidas na modelagem
 
 - um lead pode ter mais de uma identidade de canal;
 - uma identidade de canal pertence a um único lead por vez;
 - `telegram_chat_id` é tratado como identidade de canal, não como identidade definitiva da pessoa;
 - duplicidade de leads ainda pode existir, mas a modelagem permite reconciliação futura.
 
-### 7.9 Observações
+### 10.9 Observações
 
 - `streamlit` pode usar esta tabela futuramente se houver autenticação/identidade persistente por usuário.
 - nesta fase, a tabela é especialmente importante para Telegram.
@@ -721,12 +721,12 @@ FOREIGN KEY (channel_identity_id) REFERENCES lead_channel_identities(id)
 
 ---
 
-## 9. Decisão sobre `conversation` / `session`
+## 11. Decisão sobre `conversation` / `session`
 
-### 8.1 Decisão adotada para a POC
+### 11.1 Decisão adotada para a POC
 **Não criar, nesta fase, uma tabela obrigatória de `conversations` ou `sessions`.**
 
-### 8.2 Justificativa
+### 11.2 Justificativa
 Para a POC, a combinação abaixo é suficiente:
 
 - `Lead` como entidade principal de negócio;
@@ -735,7 +735,7 @@ Para a POC, a combinação abaixo é suficiente:
 
 Essa combinação atende os objetivos atuais sem introduzir complexidade prematura.
 
-### 8.3 O que substitui uma entidade de conversa nesta fase
+### 11.3 O que substitui uma entidade de conversa nesta fase
 Na ausência de uma tabela explícita de `conversation` / `session`, a POC usará:
 
 - `lead_id` como eixo principal do histórico;
@@ -743,19 +743,19 @@ Na ausência de uma tabela explícita de `conversation` / `session`, a POC usar�
 - `timestamp` para ordenação temporal;
 - `in_reply_to_message_id` para encadeamento simples quando necessário.
 
-### 8.4 Benefícios desta decisão
+### 11.4 Benefícios desta decisão
 - reduz complexidade de schema e implementação;
 - evita modelagem excessiva para o escopo do hackathon;
 - mantém o histórico suficientemente rastreável;
 - preserva espaço para evolução futura sem bloquear a POC.
 
-### 8.5 Limitações aceitas
+### 11.5 Limitações aceitas
 - não haverá agrupamento formal de múltiplas threads por lead;
 - retomadas independentes de contexto não terão entidade própria;
 - auditoria por “sessão” ficará implícita, não explícita;
 - métricas por conversa dependerão de convenções de aplicação, não de uma tabela dedicada.
 
-### 8.6 Quando reavaliar esta decisão
+### 11.6 Quando reavaliar esta decisão
 Uma entidade `conversation` / `session` deve ser reconsiderada se a solução evoluir para qualquer um dos cenários abaixo:
 
 1. múltiplos canais simultâneos por lead;
@@ -765,14 +765,14 @@ Uma entidade `conversation` / `session` deve ser reconsiderada se a solução ev
 5. analytics específicos por conversa;
 6. necessidade de associar artefatos, eventos ou custos a uma thread específica.
 
-### 8.7 Impacto em `llm_usage`
+### 11.7 Impacto em `llm_usage`
 O campo `conversation_turn` em `llm_usage` permanece válido na POC como contador lógico de turnos por lead, mesmo sem uma tabela explícita de `conversation`.
 
 ---
 
-## 10. Tabela `followup_attempts`
+## 12. Tabela `followup_attempts`
 
-### 9.1 Finalidade
+### 12.1 Finalidade
 Registrar cada tentativa operacional de follow-up executada pelo `FollowUpService`.
 
 Esta tabela existe para separar claramente:
@@ -780,7 +780,7 @@ Esta tabela existe para separar claramente:
 - a **mensagem** gerada/enviada, que pertence ao histórico em `mensagens`;
 - a **tentativa operacional**, que pertence ao controle da régua de follow-up.
 
-### 9.2 Colunas propostas
+### 12.2 Colunas propostas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -795,7 +795,7 @@ Esta tabela existe para separar claramente:
 | `executed_at` | `TIMESTAMPTZ` | Não | `now()` | Momento da execução |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação do registro |
 
-### 9.3 Constraints recomendadas
+### 12.3 Constraints recomendadas
 
 ```sql
 CHECK (attempt_number >= 1)
@@ -808,14 +808,14 @@ CHECK (regua IN (
 ))
 ```
 
-### 9.4 Chaves estrangeiras
+### 12.4 Chaves estrangeiras
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 FOREIGN KEY (message_id) REFERENCES mensagens(id)
 ```
 
-### 9.5 Índices recomendados
+### 12.5 Índices recomendados
 
 ```sql
 CREATE INDEX idx_followup_attempts_lead_id ON followup_attempts(lead_id);
@@ -825,7 +825,7 @@ CREATE INDEX idx_followup_attempts_executed_at ON followup_attempts(executed_at)
 CREATE INDEX idx_followup_attempts_lead_regua_executed_at ON followup_attempts(lead_id, regua, executed_at);
 ```
 
-### 9.6 Unicidade e prevenção de duplicidade
+### 12.6 Unicidade e prevenção de duplicidade
 
 Para a POC, a prevenção de duplicidade será feita principalmente na camada de aplicação (`FollowUpService`), mas a modelagem deve facilitar essa verificação.
 
@@ -834,34 +834,34 @@ Recomendação conceitual:
 - consultar tentativas recentes por `lead_id + regua` antes de disparar nova tentativa;
 - usar `attempt_number` como contador lógico por régua.
 
-### 9.7 Relação com `mensagens`
+### 12.7 Relação com `mensagens`
 
 - se a mensagem for gerada e persistida com sucesso, `message_id` referencia a linha correspondente em `mensagens`;
 - se a tentativa falhar antes da persistência da mensagem, `message_id` pode permanecer `NULL`;
 - isso permite distinguir falha de geração, falha de envio e tentativa pulada.
 
-### 9.8 Regras de negócio refletidas na modelagem
+### 12.8 Regras de negócio refletidas na modelagem
 
 - o controle da régua pertence ao `FollowUpService`;
 - a LLM apenas compõe a mensagem;
 - a tentativa operacional precisa existir mesmo quando a mensagem não chega a ser enviada;
 - o histórico do lead continua em `mensagens`, mas o controle operacional fica em `followup_attempts`.
 
-### 9.9 Observações
+### 12.9 Observações
 
 - `failure_reason` deve ser curto e operacional; detalhes extensos podem ir para logs.
 - `status='skipped'` cobre casos em que a tentativa foi avaliada, mas não executada por regra de negócio.
 
 ---
 
-## 11. Definição de `score` e `status`
+## 13. Definição de `score` e `status`
 
-### 10.1 Objetivo
+### 13.1 Objetivo
 Definir como o lead será classificado operacionalmente na POC, tanto para priorização comercial quanto para automações de follow-up e visualização no dashboard.
 
 ---
 
-### 10.2 Campo `score`
+### 13.2 Campo `score`
 
 #### Tipo persistido
 O campo `leads.score` permanece como:
@@ -887,7 +887,7 @@ $$
 
 > Para o dashboard da POC, a regra já documentada de “lead quente = score ≥ 7” permanece válida.
 
-### 10.3 Critérios de composição do score
+### 13.3 Critérios de composição do score
 
 O score da POC deve ser calculado a partir de cinco dimensões já previstas no plano:
 
@@ -908,7 +908,7 @@ O score da POC deve ser calculado a partir de cinco dimensões já previstas no 
 | Intenção de agendamento | `1.5` |
 | **Total** | **10.0** |
 
-### 10.4 Regras sugeridas por dimensão
+### 13.4 Regras sugeridas por dimensão
 
 #### A. Completude dos dados (`0.0` a `3.0`)
 Pontuar conforme presença de informações-chave:
@@ -952,17 +952,17 @@ Exemplo conceitual:
 - interesse claro em avançar → `1.0`
 - pedido explícito de visita/reunião → `1.5`
 
-### 10.5 Persistência do score
+### 13.5 Persistência do score
 - o score será **persistido** em `leads.score`;
 - ele representa um **snapshot operacional atual** do lead;
 - pode ser recalculado ao longo da conversa e atualizado conforme novas informações surgirem.
 
-### 10.6 Explicabilidade
+### 13.6 Explicabilidade
 O resumo do corretor deve explicar o score em linguagem simples, mencionando os principais fatores que o elevaram ou reduziram.
 
 ---
 
-### 10.7 Campo `status`
+### 13.7 Campo `status`
 
 #### Tipo persistido
 O campo `leads.status` permanece como:
@@ -981,7 +981,7 @@ VARCHAR(30)
 'inativo'
 ```
 
-### 10.8 Significado operacional dos status
+### 13.8 Significado operacional dos status
 
 | Status | Significado |
 |---|---|
@@ -991,7 +991,7 @@ VARCHAR(30)
 | `agendado` | Lead com visita ou reunião registrada |
 | `inativo` | Lead sem resposta recente ou fora de tração no momento |
 
-### 10.9 Regras sugeridas de transição
+### 13.9 Regras sugeridas de transição
 
 #### `novo` → `em_qualificacao`
 Quando houver interação inicial válida e início de coleta de contexto.
@@ -1012,12 +1012,12 @@ Quando o lead ficar sem resposta além da janela operacional definida para a ré
 #### `inativo` → `em_qualificacao`
 Quando o lead voltar a interagir e a conversa for retomada.
 
-### 10.10 Regras importantes
+### 13.10 Regras importantes
 - `agendado` tem precedência operacional sobre `qualificado`;
 - `inativo` não significa perda definitiva, apenas ausência de tração recente;
 - o status deve refletir o estágio atual do funil, não um histórico completo de estados.
 
-### 10.11 Histórico de mudanças
+### 13.11 Histórico de mudanças
 Na POC, **não será criada ainda uma tabela específica de histórico de status/score**.
 
 As mudanças serão refletidas no estado atual do lead e inferidas, quando necessário, por:
@@ -1028,14 +1028,14 @@ As mudanças serão refletidas no estado atual do lead e inferidas, quando neces
 
 Se a solução evoluir, uma tabela de histórico de status/score poderá ser introduzida depois.
 
-### 10.12 Impacto no dashboard
+### 13.12 Impacto no dashboard
 
 O dashboard deve usar:
 - `score` para ordenação e priorização;
 - `status` para filtros operacionais;
 - `score >= 7` para KPI de leads quentes.
 
-### 10.13 Impacto no follow-up
+### 13.13 Impacto no follow-up
 
 O `FollowUpService` deve considerar o `status` como um dos sinais principais para escolher a régua aplicável.
 
@@ -1047,7 +1047,7 @@ Exemplos:
 
 ---
 
-## 12. Decisões explicitamente adiadas
+## 14. Decisões explicitamente adiadas
 
 As decisões abaixo serão tratadas nas próximas lacunas:
 
@@ -1055,7 +1055,7 @@ As decisões abaixo serão tratadas nas próximas lacunas:
 
 ---
 
-## 13. Resultado desta etapa
+## 15. Resultado desta etapa
 
 Com este documento, a POC passa a ter uma **modelagem lógica mínima definida** para as tabelas principais, suficiente para orientar:
 - schemas Pydantic;
