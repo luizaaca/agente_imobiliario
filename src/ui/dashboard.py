@@ -8,6 +8,7 @@ from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 from src.ui.navegacao import abrir_conversa_no_simulador
+from src.ui.texto import markdown_seguro
 
 # Guarda o id do lead cujo botao de excluir foi clicado, para que o segundo
 # clique — o que apaga de verdade — seja deliberado.
@@ -110,7 +111,7 @@ def _mostrar_conversa(lead: Lead, db) -> None:
             rotulo = ROTULO_DO_TIPO.get(msg.message_type)
             if rotulo:
                 st.caption(rotulo)
-            st.markdown(msg.content)
+            st.markdown(markdown_seguro(msg.content))
 
 
 def _mostrar_agendamentos(lead: Lead, db) -> None:
@@ -193,10 +194,10 @@ def render_dashboard():
 
                     if lead.perfil_narrativo:
                         st.write("**Perfil Narrativo**")
-                        st.markdown(lead.perfil_narrativo)
+                        st.markdown(markdown_seguro(lead.perfil_narrativo))
                     if lead.resumo:
                         st.write("**Resumo Executivo**")
-                        st.markdown(lead.resumo)
+                        st.markdown(markdown_seguro(lead.resumo))
 
                     _mostrar_agendamentos(lead, db)
 

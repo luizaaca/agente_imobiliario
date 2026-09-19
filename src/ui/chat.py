@@ -11,6 +11,7 @@ from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 from src.ui.navegacao import conversa_pedida
+from src.ui.texto import markdown_seguro
 
 CANAL = "streamlit"
 # Quantas mensagens a tela mostra ao retomar uma conversa. E so exibicao: o que
@@ -176,12 +177,12 @@ def render_chat():
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(markdown_seguro(msg["content"]))
 
     if prompt := st.chat_input("Digite sua mensagem..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(markdown_seguro(prompt))
 
         with st.chat_message("assistant"):
             with st.spinner("Pensando..."):
@@ -202,7 +203,7 @@ def render_chat():
                         deps=deps,
                     )
                 )
-                st.markdown(response)
+                st.markdown(markdown_seguro(response))
 
         st.session_state.messages.append({"role": "assistant", "content": response})
         # Rerun para o painel refletir o lead recem-criado e a contagem de
