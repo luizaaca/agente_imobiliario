@@ -126,14 +126,18 @@ def _barra_lateral() -> None:
     ids = [lead_id for lead_id, _ in conversas]
     rotulos = dict(conversas)
 
-    # Sem `key`: o valor exibido vem sempre do `index`, que reflete o lead de
-    # fato aberto. Com chave, o widget guardaria uma escolha velha quando o
-    # dashboard trocasse a conversa por baixo.
+    # A chave carrega o lead aberto de proposito. Um selectbox mantem o valor
+    # escolhido enquanto a chave nao muda — inclusive sem `key` explicita, que
+    # o Streamlit gera internamente —, e esse valor vence o `index`. Com uma
+    # chave fixa, abrir uma conversa pelo painel virava um widget "desatual" que
+    # devolvia o lead anterior e desfazia a troca no rerun seguinte. Trocando a
+    # chave junto com o lead, o widget e outro e nasce com o `index` correto.
     escolhido = st.selectbox(
         "Trocar de conversa",
         ids,
         index=ids.index(atual) if atual in ids else 0,
         format_func=lambda i: rotulos[i],
+        key=f"seletor_conversa_{atual}",
     )
     if escolhido != st.session_state.lead_id and escolhido is not None:
         abrir_conversa(escolhido)
