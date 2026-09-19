@@ -209,6 +209,20 @@ class LeadService:
         db.refresh(msg)
         return msg
 
+    def has_message_type(
+        self, lead_id: int, message_type: str, db: Session
+    ) -> bool:
+        """Indica se o lead já possui alguma mensagem do tipo informado."""
+        return (
+            db.query(Mensagem.id)
+            .filter(
+                Mensagem.lead_id == lead_id,
+                Mensagem.message_type == message_type,
+            )
+            .first()
+            is not None
+        )
+
     def get_history(
         self, lead_id: int, limit: int, db: Session
     ) -> List[Mensagem]:

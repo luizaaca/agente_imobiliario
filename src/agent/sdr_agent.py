@@ -7,13 +7,16 @@ from typing import Optional
 
 from pydantic_ai import Agent, RunContext
 
+from src.agent.history import HISTORY_LIMIT, build_message_history
 from src.agent.prompts import SYSTEM_PROMPT, HANDOVER_MESSAGE, UNAVAILABLE_MESSAGE
+from src.agent.provider import LLMConfigError, build_model
 from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.services.llm_usage_service import LLMUsageService
+from src.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +33,12 @@ class SDRDependencies:
 
 
 # Create the agent
-# O system prompt não é passado aqui: ele é montado a cada run pelo
-# @sdr_agent.system_prompt abaixo, que injeta o contexto do lead no template.
+# Nem o modelo nem o system prompt são fixados aqui:
+# - o modelo vem de build_model() no momento do run, para que importar este
+#   módulo não exija credenciais de LLM (o dashboard roda sem elas);
+# - o system prompt é montado a cada run pelo @sdr_agent.system_prompt abaixo,
+#   que injeta o contexto atual do lead no template.
 sdr_agent = Agent(
-    model=f"openai:{settings.LLM_MODEL}",
     deps_type=SDRDependencies,
     retries=2,
 )
@@ -234,6 +239,33 @@ async def dynamic_system_prompt(ctx: RunContext[SDRDependencies]) -> str:
     )
 
 
+def _registrar_handover(
+    lead_id: int,
+    channel: str,
+    deps: SDRDependencies,
+    db,
+) -> None:
+    """Gera e persiste o resumo executivo ao entregar o lead ao corretor.
+
+    Idempotente: se o handover já foi registrado, não repete nem o resumo nem
+    a mensagem (o limite continua estourado em todo turno seguinte).
+    """
+    if deps.lead_service.has_message_type(lead_id, "handover", db):
+        return
+
+    resumo = SummaryService().generate_resumo(lead_id, db)
+    deps.lead_service.update_qualification(lead_id, {"resumo": resumo}, db)
+    deps.lead_service.save_message(
+        lead_id=lead_id,
+        channel=channel,
+        role="assistant",
+        content=HANDOVER_MESSAGE,
+        message_type="handover",
+        db=db,
+    )
+    logger.info(f"Handover registrado para o lead {lead_id}; resumo persistido.")
+
+
 async def process_message(
     lead_id: int,
     user_text: str,
@@ -241,8 +273,13 @@ async def process_message(
     deps: SDRDependencies,
 ) -> str:
     """Processa uma mensagem do usuário através do agente SDR."""
-    # Save user message
     with get_db() as db:
+        # O histórico é lido ANTES de persistir a mensagem atual: ela já vai
+        # como user_prompt e apareceria duplicada no message_history.
+        history = build_message_history(
+            deps.lead_service.get_history(lead_id, HISTORY_LIMIT, db)
+        )
+
         deps.lead_service.save_message(
             lead_id=lead_id,
             channel=channel,
@@ -257,26 +294,62 @@ async def process_message(
             logger.warning("Budget diário de LLM atingido!")
             return UNAVAILABLE_MESSAGE
 
+        if deps.llm_usage_service.is_monthly_budget_exceeded(db):
+            logger.warning("Budget mensal de LLM atingido!")
+            return UNAVAILABLE_MESSAGE
+
         if deps.llm_usage_service.is_conversation_over_limit(lead_id, db):
             logger.info(f"Lead {lead_id} atingiu limite de conversa. Fazendo handover.")
+            _registrar_handover(lead_id, channel, deps, db)
             return HANDOVER_MESSAGE
 
     # Run agent
-    result = await sdr_agent.run(
-        user_prompt=user_text,
-        deps=deps,
-    )
+    # O tratamento de falha fica centralizado aqui para que os dois canais
+    # (Streamlit e Telegram) degradem da mesma forma, sem vazar erro técnico.
+    try:
+        result = await sdr_agent.run(
+            user_prompt=user_text,
+            deps=deps,
+            message_history=history,
+            model=build_model(),
+        )
+    except LLMConfigError as e:
+        logger.error(
+            "event=llm_config_error lead_id=%s channel=%s erro=%s",
+            lead_id, channel, e,
+        )
+        return UNAVAILABLE_MESSAGE
+    except Exception as e:
+        logger.exception(
+            "event=llm_call_failed lead_id=%s channel=%s tipo_erro=%s",
+            lead_id, channel, type(e).__name__,
+        )
+        return UNAVAILABLE_MESSAGE
 
     response_text = result.output
 
     # Record usage and save response
     with get_db() as db:
-        usage = result.usage()
+        # Em pydantic-ai >= 2, `usage` é property (era método nas 0.x).
+        usage = result.usage
+        tokens_in = usage.input_tokens or 0
+        tokens_out = usage.output_tokens or 0
+
+        # Nem todo endpoint OpenAI-compatible devolve o bloco `usage` (o
+        # Foundry Local, por exemplo, não devolve). Sem contagem de tokens os
+        # budgets diário/mensal nunca disparam, então isso precisa ser visível.
+        if not tokens_in and not tokens_out:
+            logger.warning(
+                "event=usage_ausente lead_id=%s model=%s "
+                "detalhe=provider_nao_retornou_tokens impacto=budget_por_token_inativo",
+                lead_id, settings.LLM_MODEL,
+            )
+
         deps.llm_usage_service.record(
             lead_id=lead_id,
             model=settings.LLM_MODEL,
-            tokens_in=usage.input_tokens or 0,
-            tokens_out=usage.output_tokens or 0,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             operation="chat",
             turn=deps.llm_usage_service.get_conversation_turns(lead_id, db) + 1,
             db=db,
