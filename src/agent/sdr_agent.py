@@ -3,8 +3,9 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
+from pydantic import Field
 from pydantic_ai import Agent, RunContext
 
 from src.agent.history import HISTORY_LIMIT, build_message_history
@@ -93,20 +94,34 @@ async def buscar_imoveis(
 @sdr_agent.tool
 async def registrar_qualificacao(
     ctx: RunContext[SDRDependencies],
-    intencao: Optional[str] = None,
-    perfil: Optional[str] = None,
+    intencao: Annotated[Optional[str], Field(
+        description="Exatamente um de: compra, aluguel, investimento.")] = None,
+    perfil: Annotated[Optional[str], Field(max_length=30, description=(
+        "Categoria curta do lead, até 30 caracteres e sem frases. "
+        "Ex.: residencial, investidor, primeiro_imovel, corporativo."))] = None,
     orcamento_min: Optional[float] = None,
     orcamento_max: Optional[float] = None,
-    bairro_interesse: Optional[str] = None,
-    regiao_interesse: Optional[str] = None,
+    bairro_interesse: Annotated[Optional[str], Field(max_length=80, description=(
+        "Somente o nome do bairro. Ex.: Bela Vista."))] = None,
+    regiao_interesse: Annotated[Optional[str], Field(max_length=80, description=(
+        "Região ou zona da cidade. Ex.: zona leste."))] = None,
     quartos: Optional[int] = None,
-    urgencia: Optional[str] = None,
-    motivo_busca: Optional[str] = None,
-    forma_pagamento: Optional[str] = None,
-    amenidades_desejadas: Optional[str] = None,
-    tipologia_interesse: Optional[str] = None,
+    urgencia: Annotated[Optional[str], Field(
+        description="Exatamente um de: baixa, media, alta.")] = None,
+    motivo_busca: Annotated[Optional[str], Field(max_length=120, description=(
+        "Motivo da busca em poucas palavras. Ex.: mudança de trabalho."))] = None,
+    forma_pagamento: Annotated[Optional[str], Field(max_length=30, description=(
+        "Termo curto. Ex.: a_vista, financiamento, fgts."))] = None,
+    amenidades_desejadas: Annotated[Optional[str], Field(description=(
+        "Lista curta separada por vírgula. Ex.: piscina, academia."))] = None,
+    tipologia_interesse: Annotated[Optional[str], Field(max_length=30, description=(
+        "Tipo de imóvel em uma palavra. Ex.: apartamento, casa, studio."))] = None,
 ) -> str:
-    """Registrar ou atualizar dados de qualificação estruturados do lead."""
+    """Registrar ou atualizar dados de qualificação estruturados do lead.
+
+    Use campos curtos e padronizados. Texto livre e narrativa do lead vão em
+    `atualizar_perfil_lead`, não aqui.
+    """
     logger.info(f"Tool registrar_qualificacao chamada para lead {ctx.deps.lead_id}")
     data = {k: v for k, v in locals().items() if k != 'ctx' and v is not None}
     with get_db() as db:

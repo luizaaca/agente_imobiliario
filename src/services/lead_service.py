@@ -14,8 +14,63 @@ from src.schemas.lead import LeadStatus
 logger = logging.getLogger(__name__)
 
 
+# Limites de tamanho lidos do próprio modelo, para não duplicar o schema aqui.
+LIMITES_DE_TEXTO = {
+    coluna.name: coluna.type.length
+    for coluna in Lead.__table__.columns
+    if getattr(coluna.type, "length", None)
+}
+
+# Campos com vocabulário fechado no banco (CHECK constraints). Um valor fora
+# da lista derrubaria o INSERT, então é descartado antes de chegar lá.
+VALORES_PERMITIDOS = {
+    "intencao": {"compra", "aluguel", "investimento"},
+    "urgencia": {"baixa", "media", "alta"},
+}
+
+
 class LeadService:
     """Serviço de domínio para gestão de leads."""
+
+    def sanitizar_qualificacao(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ajusta os dados vindos da LLM aos limites do banco.
+
+        As tools recebem texto livre de um modelo de linguagem; sem esta
+        barreira, um valor fora do vocabulário ou maior que a coluna derruba o
+        turno inteiro com DataError/IntegrityError.
+        """
+        limpo: Dict[str, Any] = {}
+
+        for campo, valor in data.items():
+            if not isinstance(valor, str):
+                limpo[campo] = valor
+                continue
+
+            valor = valor.strip()
+
+            permitidos = VALORES_PERMITIDOS.get(campo)
+            if permitidos:
+                normalizado = valor.lower()
+                if normalizado not in permitidos:
+                    logger.warning(
+                        "event=valor_fora_do_vocabulario campo=%s valor=%r "
+                        "permitidos=%s acao=descartado",
+                        campo, valor[:60], sorted(permitidos),
+                    )
+                    continue
+                valor = normalizado
+
+            limite = LIMITES_DE_TEXTO.get(campo)
+            if limite and len(valor) > limite:
+                logger.warning(
+                    "event=valor_truncado campo=%s tamanho=%s limite=%s valor=%r",
+                    campo, len(valor), limite, valor[:60],
+                )
+                valor = valor[:limite]
+
+            limpo[campo] = valor
+
+        return limpo
 
     def get_or_create_lead(
         self,
@@ -70,7 +125,7 @@ class LeadService:
         if not lead:
             return None
 
-        for key, value in data.items():
+        for key, value in self.sanitizar_qualificacao(data).items():
             if hasattr(lead, key) and value is not None:
                 setattr(lead, key, value)
 
@@ -248,6 +303,28 @@ class LeadService:
             msg.status = "sent"
             msg.sent_at = datetime.now(timezone.utc)
             db.commit()
+
+    def get_latest_identity_by_prefix(
+        self, channel: str, prefix: str, db: Session
+    ) -> Optional[LeadChannelIdentity]:
+        """Identidade mais recente de um canal cujo external_id casa o prefixo.
+
+        Usada pela UI para retomar a última conversa do usuário após um
+        refresh da página, em vez de abrir um lead novo a cada carregamento.
+        """
+        return (
+            db.query(LeadChannelIdentity)
+            .filter(
+                LeadChannelIdentity.channel == channel,
+                # autoescape: o prefixo contém '_', que em LIKE é curinga de
+                # um caractere e casaria identidades de outros usuários.
+                LeadChannelIdentity.external_chat_id.startswith(
+                    prefix, autoescape=True
+                ),
+            )
+            .order_by(LeadChannelIdentity.id.desc())
+            .first()
+        )
 
     def get_primary_identity(
         self, lead_id: int, db: Session

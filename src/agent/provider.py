@@ -9,8 +9,10 @@ conversa) para que importar o pacote não exija credenciais — o dashboard, por
 exemplo, precisa rodar sem chave de LLM configurada.
 """
 
+import asyncio
 import logging
-from functools import lru_cache
+from typing import Optional
+from weakref import WeakKeyDictionary
 
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -52,13 +54,42 @@ def _resolve_base_url(provider: str) -> str | None:
     return base_url
 
 
-@lru_cache(maxsize=1)
+# O cliente HTTP do modelo fica preso ao event loop que o criou. O Streamlit
+# abre um loop novo a cada mensagem (asyncio.run), então um cache global único
+# quebraria da segunda mensagem em diante com "Event loop is closed". Cachear
+# por loop preserva o pooling onde o loop é longevo (bot do Telegram) e entrega
+# um cliente válido a cada loop efêmero; a entrada morre junto com o loop.
+_modelos_por_loop: WeakKeyDictionary = WeakKeyDictionary()
+_modelo_sem_loop: Optional[OpenAIChatModel] = None
+
+
 def build_model() -> OpenAIChatModel:
-    """Constrói o modelo configurado, validando a configuração.
+    """Devolve o modelo configurado, válido para o event loop corrente.
 
     Raises:
         LLMConfigError: provider desconhecido ou configuração incompleta.
     """
+    global _modelo_sem_loop
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None:
+        if _modelo_sem_loop is None:
+            _modelo_sem_loop = _construir_modelo()
+        return _modelo_sem_loop
+
+    modelo = _modelos_por_loop.get(loop)
+    if modelo is None:
+        modelo = _construir_modelo()
+        _modelos_por_loop[loop] = modelo
+    return modelo
+
+
+def _construir_modelo() -> OpenAIChatModel:
+    """Constrói o modelo configurado, validando a configuração."""
     provider = (settings.LLM_PROVIDER or "openai").strip().lower()
 
     if provider not in DEFAULT_BASE_URLS:
