@@ -1,11 +1,20 @@
 """Modelos ORM SQLAlchemy do banco de dados."""
 
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Any, Optional
 
 from sqlalchemy import (
-    BigInteger, String, Text, Numeric, SmallInteger, Boolean,
-    CheckConstraint, func, ForeignKey, JSON, UniqueConstraint
+    JSON,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Numeric,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
@@ -41,11 +50,11 @@ class Lead(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    mensagens: Mapped[List["Mensagem"]] = relationship(back_populates="lead")
-    agendamentos: Mapped[List["Agendamento"]] = relationship(back_populates="lead")
-    llm_usages: Mapped[List["LLMUsage"]] = relationship(back_populates="lead")
-    channel_identities: Mapped[List["LeadChannelIdentity"]] = relationship(back_populates="lead")
-    followup_attempts: Mapped[List["FollowUpAttempt"]] = relationship(back_populates="lead")
+    mensagens: Mapped[list["Mensagem"]] = relationship(back_populates="lead")
+    agendamentos: Mapped[list["Agendamento"]] = relationship(back_populates="lead")
+    llm_usages: Mapped[list["LLMUsage"]] = relationship(back_populates="lead")
+    channel_identities: Mapped[list["LeadChannelIdentity"]] = relationship(back_populates="lead")
+    followup_attempts: Mapped[list["FollowUpAttempt"]] = relationship(back_populates="lead")
 
     __table_args__ = (
         CheckConstraint("status IN ('novo','em_qualificacao','qualificado','agendado','inativo')", name="check_status"),
@@ -79,7 +88,7 @@ class Mensagem(Base):
     sent_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     lead: Mapped["Lead"] = relationship(back_populates="mensagens")
-    replies: Mapped[List["Mensagem"]] = relationship("Mensagem", remote_side=[id])
+    replies: Mapped[list["Mensagem"]] = relationship("Mensagem", remote_side=[id])
 
     __table_args__ = (
         CheckConstraint("role IN ('user','assistant','system','tool')", name="check_role"),

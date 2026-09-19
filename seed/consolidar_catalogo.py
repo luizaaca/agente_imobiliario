@@ -5,10 +5,10 @@ Consolida os arquivos seed/batches/batch_01.csv a batch_06.csv em seed/imoveis_c
 executando validações estritas de schema, tipos, constraints e regras de negócio.
 """
 
-from collections import Counter
 import csv
-from pathlib import Path
 import sys
+from collections import Counter
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 BATCHES_DIR = BASE_DIR / "batches"
@@ -83,7 +83,7 @@ def validate_and_consolidate():
 
     for batch_path in batch_files:
         print(f"Lendo {batch_path.name}...")
-        with open(batch_path, mode="r", encoding="utf-8") as f:
+        with open(batch_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             header = reader.fieldnames
             if not header or [c.strip() for c in header] != EXPECTED_COLUMNS:

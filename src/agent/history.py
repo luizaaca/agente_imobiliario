@@ -7,7 +7,7 @@ de estado em memória — o que é essencial porque Streamlit e Telegram rodam e
 processos diferentes.
 """
 
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -24,14 +24,14 @@ from src.db.models import Mensagem
 HISTORY_LIMIT = 20
 
 
-def build_message_history(mensagens: Iterable[Mensagem]) -> List[ModelMessage]:
+def build_message_history(mensagens: Iterable[Mensagem]) -> list[ModelMessage]:
     """Converte mensagens persistidas (em ordem cronológica) para o PydanticAI.
 
     Apenas `user` e `assistant` entram: o system prompt é remontado a cada run
     pelo prompt dinâmico, e mensagens de tool são reconstruídas pelo próprio
     agente quando necessário.
     """
-    history: List[ModelMessage] = []
+    history: list[ModelMessage] = []
 
     for msg in mensagens:
         conteudo = (msg.content or "").strip()

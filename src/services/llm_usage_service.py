@@ -1,7 +1,7 @@
 """Serviço de rastreamento e controle de custos de LLM."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import func
@@ -98,7 +98,7 @@ class LLMUsageService:
 
     def get_daily_tokens(self, db: Session) -> int:
         """Total de tokens consumidos hoje."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         return (
             db.query(func.sum(LLMUsage.tokens_total))
             .filter(func.date(LLMUsage.created_at) == today)
@@ -107,7 +107,7 @@ class LLMUsageService:
 
     def get_monthly_tokens(self, db: Session) -> int:
         """Total de tokens consumidos no mês atual."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (
             db.query(func.sum(LLMUsage.tokens_total))
             .filter(
@@ -138,7 +138,7 @@ class LLMUsageService:
 
     def get_daily_cost(self, db: Session) -> float:
         """Custo estimado total do dia em USD."""
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         return (
             db.query(func.sum(LLMUsage.estimated_cost_usd))
             .filter(func.date(LLMUsage.created_at) == today)
@@ -147,7 +147,7 @@ class LLMUsageService:
 
     def get_monthly_cost(self, db: Session) -> float:
         """Custo estimado total do mês em USD."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (
             db.query(func.sum(LLMUsage.estimated_cost_usd))
             .filter(

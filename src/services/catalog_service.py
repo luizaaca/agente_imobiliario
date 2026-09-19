@@ -1,9 +1,9 @@
 """Serviço para catálogo de imóveis."""
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
-from sqlalchemy import or_, text
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.db.models import Imovel
@@ -25,7 +25,7 @@ class CatalogService:
         quartos: Optional[int] = None,
         termos_livres: Optional[str] = None,
         limite: int = 5,
-    ) -> List[Imovel]:
+    ) -> list[Imovel]:
         """Busca imóveis com filtros estruturados e ranking textual.
 
         Camada 1: filtros SQL diretos (finalidade, preço, bairro, quartos).

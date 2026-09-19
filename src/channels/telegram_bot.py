@@ -1,6 +1,5 @@
 """Adaptador Telegram: handlers e despacho para o agente SDR."""
 
-import asyncio
 import logging
 
 from telegram import Update
@@ -8,18 +7,18 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters,
-    ContextTypes,
 )
 
-from src.agent.sdr_agent import process_message, SDRDependencies
+from src.agent.sdr_agent import SDRDependencies, process_message
 from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
-from src.services.scheduling_service import SchedulingService
 from src.services.llm_usage_service import LLMUsageService
+from src.services.scheduling_service import SchedulingService
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +29,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     with get_db() as db:
-        lead_service = LeadService()
-        lead = lead_service.get_or_create_lead(
+        LeadService().get_or_create_lead(
             channel="telegram",
             external_id=chat_id,
             db=db,

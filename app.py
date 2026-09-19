@@ -4,9 +4,9 @@
 Inclui autenticação, chat simulador e dashboard do corretor.
 """
 
-import yaml
 import streamlit as st
 import streamlit_authenticator as stauth
+import yaml
 
 from src.config import settings
 

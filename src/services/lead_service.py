@@ -1,12 +1,12 @@
 """Serviço para gestão de leads."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import Any, Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from src.db.models import Lead, LeadChannelIdentity, Mensagem
 from src.schemas.lead import LeadStatus
@@ -32,14 +32,14 @@ VALORES_PERMITIDOS = {
 class LeadService:
     """Serviço de domínio para gestão de leads."""
 
-    def sanitizar_qualificacao(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def sanitizar_qualificacao(self, data: dict[str, Any]) -> dict[str, Any]:
         """Ajusta os dados vindos da LLM aos limites do banco.
 
         As tools recebem texto livre de um modelo de linguagem; sem esta
         barreira, um valor fora do vocabulário ou maior que a coluna derruba o
         turno inteiro com DataError/IntegrityError.
         """
-        limpo: Dict[str, Any] = {}
+        limpo: dict[str, Any] = {}
 
         for campo, valor in data.items():
             if not isinstance(valor, str):
@@ -118,7 +118,7 @@ class LeadService:
         return db.query(Lead).filter(Lead.id == lead_id).first()
 
     def update_qualification(
-        self, lead_id: int, data: Dict[str, Any], db: Session
+        self, lead_id: int, data: dict[str, Any], db: Session
     ) -> Optional[Lead]:
         """Atualiza os dados de qualificação de um lead."""
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
@@ -301,7 +301,7 @@ class LeadService:
         msg = db.query(Mensagem).filter(Mensagem.id == message_id).first()
         if msg:
             msg.status = "sent"
-            msg.sent_at = datetime.now(timezone.utc)
+            msg.sent_at = datetime.now(UTC)
             db.commit()
 
     def get_latest_identity_by_prefix(
@@ -353,7 +353,7 @@ class LeadService:
 
     def get_history(
         self, lead_id: int, limit: int, db: Session
-    ) -> List[Mensagem]:
+    ) -> list[Mensagem]:
         """Recupera as últimas mensagens de um lead, ordenadas cronologicamente."""
         messages = (
             db.query(Mensagem)
@@ -365,8 +365,8 @@ class LeadService:
         return list(reversed(messages))
 
     def get_leads_for_dashboard(
-        self, filters: Dict[str, Any], db: Session
-    ) -> List[Lead]:
+        self, filters: dict[str, Any], db: Session
+    ) -> list[Lead]:
         """Busca leads para o painel do corretor com filtros."""
         query = db.query(Lead)
 

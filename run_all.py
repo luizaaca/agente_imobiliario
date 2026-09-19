@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Supervisor: inicia Streamlit e Telegram Bot em paralelo."""
 
+import os
+import signal
 import subprocess
 import sys
-import signal
-import os
 
 processes = []
 

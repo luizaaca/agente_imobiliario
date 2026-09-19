@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -52,7 +52,7 @@ class SchedulingService:
         self,
         lead_id: int,
         db: Session,
-    ) -> List[Agendamento]:
+    ) -> list[Agendamento]:
         """Lista agendamentos de um lead ordenados por data."""
         return (
             db.query(Agendamento)

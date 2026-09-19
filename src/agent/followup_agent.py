@@ -8,7 +8,7 @@ própria, e mantém o custo do job previsível.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic_ai import Agent
 
@@ -33,7 +33,7 @@ def _linha(rotulo: str, valor: Any) -> Optional[str]:
 
 
 def build_followup_prompt(
-    contexto: Dict[str, Any], regua: str, tentativa: int
+    contexto: dict[str, Any], regua: str, tentativa: int
 ) -> str:
     """Monta o prompt do follow-up a partir do contexto do lead.
 
@@ -76,7 +76,7 @@ def build_followup_prompt(
 
 
 async def gerar_mensagem_followup(
-    contexto: Dict[str, Any], regua: str, tentativa: int
+    contexto: dict[str, Any], regua: str, tentativa: int
 ) -> FollowUpGerado:
     """Gera o texto do follow-up para a régua informada."""
     prompt = build_followup_prompt(contexto, regua, tentativa)

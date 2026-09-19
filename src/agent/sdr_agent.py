@@ -9,14 +9,14 @@ from pydantic import Field
 from pydantic_ai import Agent, RunContext
 
 from src.agent.history import HISTORY_LIMIT, build_message_history
-from src.agent.prompts import SYSTEM_PROMPT, HANDOVER_MESSAGE, UNAVAILABLE_MESSAGE
+from src.agent.prompts import HANDOVER_MESSAGE, SYSTEM_PROMPT, UNAVAILABLE_MESSAGE
 from src.agent.provider import LLMConfigError, build_model
 from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
-from src.services.scheduling_service import SchedulingService
 from src.services.llm_usage_service import LLMUsageService
+from src.services.scheduling_service import SchedulingService
 from src.services.summary_service import SummaryService
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ async def agendar_reuniao(
             db=db,
         )
         return (
-            f"Agendamento criado com sucesso!\n"
+            f"Agendamento criado com sucesso! (ID: {agendamento.id})\n"
             f"Tipo: {tipo}\n"
             f"Data/Hora: {data_hora}\n"
             f"Status: pendente"

@@ -1,12 +1,20 @@
 """Repositório de acesso a dados com operações CRUD genéricas."""
 
-from typing import Any, Dict, List, Optional
-from sqlalchemy import select, update, func, or_
+from typing import Any, Optional
+
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from src.db.models import (
-    Lead, Mensagem, Agendamento, Imovel, LLMUsage, LeadChannelIdentity, FollowUpAttempt
+    Agendamento,
+    FollowUpAttempt,
+    Imovel,
+    Lead,
+    LeadChannelIdentity,
+    LLMUsage,
+    Mensagem,
 )
+
 
 class Repository:
     """Classe base do repositório para acesso aos dados."""
@@ -15,7 +23,7 @@ class Repository:
         self.db = db
 
     # --- Leads ---
-    def create_lead(self, lead_data: Dict[str, Any]) -> Lead:
+    def create_lead(self, lead_data: dict[str, Any]) -> Lead:
         lead = Lead(**lead_data)
         self.db.add(lead)
         self.db.commit()
@@ -25,7 +33,7 @@ class Repository:
     def get_lead_by_id(self, lead_id: int) -> Optional[Lead]:
         return self.db.query(Lead).filter(Lead.id == lead_id).first()
 
-    def update_lead(self, lead_id: int, updates: Dict[str, Any]) -> Optional[Lead]:
+    def update_lead(self, lead_id: int, updates: dict[str, Any]) -> Optional[Lead]:
         lead = self.get_lead_by_id(lead_id)
         if lead:
             for key, value in updates.items():
@@ -34,7 +42,7 @@ class Repository:
             self.db.refresh(lead)
         return lead
 
-    def list_leads(self, **filters) -> List[Lead]:
+    def list_leads(self, **filters) -> list[Lead]:
         query = self.db.query(Lead)
         for key, value in filters.items():
             query = query.filter(getattr(Lead, key) == value)
@@ -71,14 +79,14 @@ class Repository:
         return identity
 
     # --- Mensagens ---
-    def create_mensagem(self, msg_data: Dict[str, Any]) -> Mensagem:
+    def create_mensagem(self, msg_data: dict[str, Any]) -> Mensagem:
         msg = Mensagem(**msg_data)
         self.db.add(msg)
         self.db.commit()
         self.db.refresh(msg)
         return msg
 
-    def list_mensagens_by_lead(self, lead_id: int) -> List[Mensagem]:
+    def list_mensagens_by_lead(self, lead_id: int) -> list[Mensagem]:
         return (
             self.db.query(Mensagem)
             .filter(Mensagem.lead_id == lead_id)
@@ -87,9 +95,9 @@ class Repository:
         )
 
     # --- Imoveis ---
-    def search_imoveis(self, filters: Dict[str, Any], query_text: Optional[str] = None) -> List[Imovel]:
+    def search_imoveis(self, filters: dict[str, Any], query_text: Optional[str] = None) -> list[Imovel]:
         """Busca estruturada de imóveis. TODO: Melhorar a busca textual no futuro."""
-        query = self.db.query(Imovel).filter(Imovel.disponivel == True)
+        query = self.db.query(Imovel).filter(Imovel.disponivel.is_(True))
 
         for key, value in filters.items():
             if hasattr(Imovel, key) and value is not None:
@@ -110,14 +118,14 @@ class Repository:
         return query.limit(20).all()
 
     # --- Agendamentos ---
-    def create_agendamento(self, agendamento_data: Dict[str, Any]) -> Agendamento:
+    def create_agendamento(self, agendamento_data: dict[str, Any]) -> Agendamento:
         agendamento = Agendamento(**agendamento_data)
         self.db.add(agendamento)
         self.db.commit()
         self.db.refresh(agendamento)
         return agendamento
 
-    def list_agendamentos_by_lead(self, lead_id: int) -> List[Agendamento]:
+    def list_agendamentos_by_lead(self, lead_id: int) -> list[Agendamento]:
         return self.db.query(Agendamento).filter(Agendamento.lead_id == lead_id).all()
 
     def update_agendamento_status(self, agendamento_id: int, status: str) -> Optional[Agendamento]:
@@ -129,7 +137,7 @@ class Repository:
         return agendamento
 
     # --- LLMUsage ---
-    def record_llm_usage(self, usage_data: Dict[str, Any]) -> LLMUsage:
+    def record_llm_usage(self, usage_data: dict[str, Any]) -> LLMUsage:
         usage = LLMUsage(**usage_data)
         self.db.add(usage)
         self.db.commit()
@@ -137,7 +145,7 @@ class Repository:
         return usage
 
     # --- FollowUpAttempts ---
-    def record_followup_attempt(self, followup_data: Dict[str, Any]) -> FollowUpAttempt:
+    def record_followup_attempt(self, followup_data: dict[str, Any]) -> FollowUpAttempt:
         followup = FollowUpAttempt(**followup_data)
         self.db.add(followup)
         self.db.commit()

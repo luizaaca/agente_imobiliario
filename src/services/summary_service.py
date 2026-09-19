@@ -1,7 +1,6 @@
 """Serviço para geração de resumo executivo do corretor."""
 
 import logging
-from typing import Optional
 
 from sqlalchemy.orm import Session
 

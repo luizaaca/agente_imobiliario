@@ -1,8 +1,10 @@
 """Dashboard do corretor com KPIs, leads e agendamentos."""
 import streamlit as st
+from sqlalchemy import desc, func
+
+from src.db.models import Agendamento, Lead
 from src.db.session import get_db
-from src.db.models import Lead, Agendamento, Mensagem
-from sqlalchemy import func, desc
+
 
 def render_dashboard():
     st.header("📊 Dashboard do Corretor")

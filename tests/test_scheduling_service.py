@@ -1,6 +1,6 @@
 """Testes do SchedulingService: criação, validação e efeito no funil."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -22,7 +22,7 @@ def lead_id(db):
 
 @pytest.fixture
 def amanha():
-    return datetime.now(timezone.utc) + timedelta(days=1)
+    return datetime.now(UTC) + timedelta(days=1)
 
 
 def test_cria_agendamento_pendente(scheduling, lead_id, amanha, db):

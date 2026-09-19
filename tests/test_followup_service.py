@@ -1,6 +1,6 @@
 """Testes do FollowUpService: elegibilidade, réguas e idempotência."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -124,7 +124,7 @@ def test_visita_proxima_entra_na_regua_pos_agendamento(followup, lead_service, d
     lead_id = criar_lead(lead_service, db, "agendado")
     db.add(Agendamento(
         lead_id=lead_id, tipo="visita", status="confirmado",
-        data_hora=datetime.now(timezone.utc) + timedelta(hours=12),
+        data_hora=datetime.now(UTC) + timedelta(hours=12),
     ))
     db.commit()
 
@@ -136,7 +136,7 @@ def test_visita_distante_ainda_nao_gera_lembrete(followup, lead_service, db):
     lead_id = criar_lead(lead_service, db, "agendado")
     db.add(Agendamento(
         lead_id=lead_id, tipo="visita", status="confirmado",
-        data_hora=datetime.now(timezone.utc) + timedelta(days=5),
+        data_hora=datetime.now(UTC) + timedelta(days=5),
     ))
     db.commit()
     assert followup.get_eligible_leads(db) == []
@@ -146,7 +146,7 @@ def test_visita_no_passado_nao_gera_lembrete(followup, lead_service, db):
     lead_id = criar_lead(lead_service, db, "agendado")
     db.add(Agendamento(
         lead_id=lead_id, tipo="visita", status="confirmado",
-        data_hora=datetime.now(timezone.utc) - timedelta(hours=2),
+        data_hora=datetime.now(UTC) - timedelta(hours=2),
     ))
     db.commit()
     assert followup.get_eligible_leads(db) == []
@@ -156,7 +156,7 @@ def test_agendamento_cancelado_nao_gera_lembrete(followup, lead_service, db):
     lead_id = criar_lead(lead_service, db, "agendado")
     db.add(Agendamento(
         lead_id=lead_id, tipo="visita", status="cancelado",
-        data_hora=datetime.now(timezone.utc) + timedelta(hours=12),
+        data_hora=datetime.now(UTC) + timedelta(hours=12),
     ))
     db.commit()
     assert followup.get_eligible_leads(db) == []

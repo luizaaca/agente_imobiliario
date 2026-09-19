@@ -1,8 +1,8 @@
 """Serviço de follow-up automático de leads inativos."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -51,14 +51,14 @@ REGUAS_DE_INATIVIDADE = {
 class FollowUpService:
     """Serviço de domínio para controle da régua de follow-up."""
 
-    def get_eligible_leads(self, db: Session) -> List[Tuple[Lead, str]]:
+    def get_eligible_leads(self, db: Session) -> list[tuple[Lead, str]]:
         """Retorna leads elegíveis para follow-up com a régua aplicável.
 
         Returns:
             Lista de tuplas (lead, regua) para leads elegíveis.
         """
-        eligible: List[Tuple[Lead, str]] = []
-        now = datetime.now(timezone.utc)
+        eligible: list[tuple[Lead, str]] = []
+        now = datetime.now(UTC)
         ja_selecionados: set[int] = set()
 
         for regua_name, config in REGUAS.items():
@@ -82,7 +82,7 @@ class FollowUpService:
 
     def _leads_inativos(
         self, now: datetime, config: dict, db: Session
-    ) -> List[Lead]:
+    ) -> list[Lead]:
         """Leads no status alvo que estão calados há tempo suficiente."""
         inatividade_min = timedelta(hours=config["inatividade_minima_horas"])
         candidatos = []
@@ -111,7 +111,7 @@ class FollowUpService:
 
     def _leads_com_agendamento_proximo(
         self, now: datetime, config: dict, db: Session
-    ) -> List[Lead]:
+    ) -> list[Lead]:
         """Leads com visita/reunião dentro da janela de antecedência."""
         limite = now + timedelta(hours=config["antecedencia_horas"])
 

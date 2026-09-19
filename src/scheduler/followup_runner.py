@@ -15,7 +15,7 @@ Um ciclo, para cada lead elegível:
 """
 
 import logging
-from typing import Awaitable, Callable, Dict, Optional, Protocol
+from typing import Optional, Protocol
 
 from src.agent.followup_agent import gerar_mensagem_followup
 from src.agent.provider import LLMConfigError
@@ -40,14 +40,14 @@ class Sender(Protocol):
         ...
 
 
-def _montar_contexto(lead, regua: str, db) -> Dict[str, object]:
+def _montar_contexto(lead, regua: str, db) -> dict[str, object]:
     """Reúne, ainda dentro da sessão, tudo que a geração precisa."""
     lead_service = LeadService()
 
     historico = lead_service.get_history(lead.id, 4, db)
     ultima = historico[-1].content[:300] if historico else None
 
-    contexto: Dict[str, object] = {
+    contexto: dict[str, object] = {
         "nome": lead.nome,
         "intencao": lead.intencao,
         "orcamento_max": lead.orcamento_max,
@@ -75,7 +75,7 @@ def _montar_contexto(lead, regua: str, db) -> Dict[str, object]:
     return contexto
 
 
-async def run_followup_cycle(sender: Optional[Sender] = None) -> Dict[str, int]:
+async def run_followup_cycle(sender: Optional[Sender] = None) -> dict[str, int]:
     """Executa um ciclo completo de follow-up.
 
     Returns:
