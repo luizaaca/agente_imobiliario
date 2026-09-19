@@ -1,4 +1,9 @@
-"""Schemas Pydantic para Imóveis."""
+"""Schemas Pydantic para Imóveis.
+
+Os campos espelham `src.db.models.Imovel`. `tests/test_schemas.py` valida esse
+espelhamento contra o ORM a cada execução da suíte, para que uma migration
+futura não deixe este contrato para trás de novo.
+"""
 
 from datetime import datetime
 from decimal import Decimal
@@ -10,29 +15,26 @@ from pydantic import BaseModel, Field
 class ImovelBase(BaseModel):
     """Campos base do imóvel."""
     titulo: str = Field(..., max_length=200)
-    descricao: Optional[str] = None
-    tipo: Optional[str] = Field(None, max_length=50)
-    finalidade: Optional[str] = Field(None, max_length=50)
-    preco: Decimal = Field(..., ge=0)
-    condominio: Optional[Decimal] = Field(None, ge=0)
-    iptu: Optional[Decimal] = Field(None, ge=0)
-    area_util: Optional[Decimal] = Field(None, ge=0)
-    area_total: Optional[Decimal] = Field(None, ge=0)
-    quartos: Optional[int] = Field(None, ge=0)
+    tipo: str = Field(..., max_length=30)
+    finalidade: str = Field(..., max_length=20)
+    operacao: str = Field(..., max_length=20)
+    bairro: str = Field(..., max_length=100)
+    zona: Optional[str] = Field(None, max_length=50)
+    cidade: str = Field("São Paulo", max_length=100)
+    estado: str = Field("SP", max_length=2)
+    preco: Decimal = Field(..., gt=0)
+    quartos: int = Field(..., ge=0)
     suites: Optional[int] = Field(None, ge=0)
     banheiros: Optional[int] = Field(None, ge=0)
-    vagas: Optional[int] = Field(None, ge=0)
-    cep: Optional[str] = Field(None, max_length=20)
-    logradouro: Optional[str] = Field(None, max_length=150)
-    numero: Optional[str] = Field(None, max_length=20)
-    complemento: Optional[str] = Field(None, max_length=100)
-    bairro: Optional[str] = Field(None, max_length=80)
-    cidade: Optional[str] = Field(None, max_length=80)
-    estado: Optional[str] = Field(None, max_length=2)
-    regiao: Optional[str] = Field(None, max_length=80)
-    amenidades: Optional[str] = None
-    status: str = Field("ativo", max_length=30)
-    url_fotos: Optional[str] = None
+    vaga_garagem: Optional[int] = Field(None, ge=0)
+    area_m2: Decimal = Field(..., gt=0)
+    condominio: Optional[Decimal] = Field(None, ge=0)
+    iptu_anual: Optional[Decimal] = Field(None, ge=0)
+    descricao: Optional[str] = None
+    tags: Optional[str] = None
+    perfil_indicado: Optional[str] = Field(None, max_length=30)
+    disponivel: bool = True
+    imagem_url: Optional[str] = Field(None, max_length=500)
 
 
 class ImovelResponse(ImovelBase):
@@ -60,3 +62,5 @@ class ImovelBuscaResult(ImovelBase):
     """Resultado da busca de imóvel incluindo justificativa."""
     id: int
     justificativa_aderencia: Optional[str] = None
+
+    model_config = {"from_attributes": True}

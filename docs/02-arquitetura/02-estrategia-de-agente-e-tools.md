@@ -68,10 +68,11 @@ Filtros diretos via `WHERE` clause:
 - quantidade de quartos (`>=`)
 
 ### Camada 2 — Ranking textual (FTS)
-Ordenar os resultados restantes por aderência semântica e textual, utilizando o Full-Text Search do PostgreSQL (`to_tsvector` e `to_tsquery`):
-- descrição do imóvel
-- tags associadas
-- termos-chave extraídos do `perfil_narrativo` do lead
+Ordenar os resultados restantes por aderência textual usando o Full-Text Search do PostgreSQL.
+
+A coluna `imoveis.search_vector` é **gerada pelo banco** (`GENERATED ALWAYS AS ... STORED`) a partir de título, descrição, tags, bairro e tipo, com índice GIN. Não há trigger nem código de aplicação mantendo o vetor: ele nunca fica defasado.
+
+A consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata aspas e pontuação do texto cru sem risco de erro de sintaxe, e combina os termos com **OU**. Exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira"; quem separa relevância é o `ts_rank`, que ordena o resultado. Se sobrarem apenas stopwords, a camada textual é ignorada em vez de zerar a busca.
 
 ### Evolução opcional
 Adicionar colunas `pgvector` para armazenar embeddings da descrição do imóvel, permitindo busca semântica real (cosine similarity). Isso deve ser tratado como **incremento** para a POC.

@@ -8,7 +8,14 @@ from typing import Any, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.db.models import Lead, LeadChannelIdentity, Mensagem
+from src.db.models import (
+    Agendamento,
+    FollowUpAttempt,
+    Lead,
+    LeadChannelIdentity,
+    LLMUsage,
+    Mensagem,
+)
 from src.schemas.lead import LeadStatus
 
 logger = logging.getLogger(__name__)
@@ -363,6 +370,70 @@ class LeadService:
             .all()
         )
         return list(reversed(messages))
+
+    def delete_lead(self, lead_id: int, db: Session) -> bool:
+        """Remove um lead e tudo que depende dele.
+
+        O consumo de LLM nao e apagado junto: os tokens foram gastos de fato e
+        os budgets diario e mensal continuam tendo que enxerga-los. As linhas
+        so perdem o vinculo com o lead (`lead_id` fica nulo), senao apagar
+        leads viraria uma forma de zerar o controle de custo.
+
+        A ordem segue as chaves estrangeiras, de folha para raiz.
+        """
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return False
+
+        db.query(FollowUpAttempt).filter(
+            FollowUpAttempt.lead_id == lead_id
+        ).delete(synchronize_session=False)
+        db.query(Agendamento).filter(
+            Agendamento.lead_id == lead_id
+        ).delete(synchronize_session=False)
+        db.query(LeadChannelIdentity).filter(
+            LeadChannelIdentity.lead_id == lead_id
+        ).delete(synchronize_session=False)
+        db.query(LLMUsage).filter(LLMUsage.lead_id == lead_id).update(
+            {"lead_id": None}, synchronize_session=False
+        )
+        db.query(Mensagem).filter(
+            Mensagem.lead_id == lead_id
+        ).delete(synchronize_session=False)
+
+        db.delete(lead)
+        db.commit()
+        logger.info("event=lead_removido lead_id=%s", lead_id)
+        return True
+
+    def list_identities_by_prefix(
+        self, channel: str, prefix: str, db: Session
+    ) -> list[LeadChannelIdentity]:
+        """Todas as conversas de um canal que casam o prefixo, da mais recente.
+
+        Usada pelo seletor de conversas do simulador. O `autoescape` importa:
+        o prefixo carrega '_', curinga de LIKE, e sem ele um usuario veria as
+        conversas de outro.
+        """
+        return (
+            db.query(LeadChannelIdentity)
+            .filter(
+                LeadChannelIdentity.channel == channel,
+                LeadChannelIdentity.external_chat_id.startswith(
+                    prefix, autoescape=True
+                ),
+            )
+            .order_by(LeadChannelIdentity.id.desc())
+            .all()
+        )
+
+    def count_messages(self, lead_id: int, db: Session) -> int:
+        """Quantidade de mensagens registradas para o lead."""
+        return (
+            db.query(func.count(Mensagem.id))
+            .filter(Mensagem.lead_id == lead_id)
+            .scalar() or 0
+        )
 
     def get_leads_for_dashboard(
         self, filters: dict[str, Any], db: Session

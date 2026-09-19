@@ -3,12 +3,28 @@
 import logging
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from src.db.models import Imovel
 
 logger = logging.getLogger(__name__)
+
+# Mesma configuracao usada na coluna gerada `imoveis.search_vector`.
+FTS_CONFIG = "portuguese"
+
+
+def _tsquery(termos: str):
+    """Monta a tsquery de busca livre com semantica de OU.
+
+    `websearch_to_tsquery` e usada em vez de `to_tsquery` porque ela ja trata
+    aspas, acentos e pontuacao do texto cru, sem risco de erro de sintaxe com o
+    que a LLM mandar. O `or` entre os termos e deliberado: exigir todas as
+    palavras (o padrao) zeraria o resultado em buscas como
+    "varanda gourmet churrasqueira", e quem separa relevancia e o ranking.
+    """
+    palavras = [p for p in termos.split() if p]
+    return func.websearch_to_tsquery(FTS_CONFIG, " or ".join(palavras))
 
 
 class CatalogService:
@@ -63,18 +79,24 @@ class CatalogService:
             if quartos is not None:
                 query = query.filter(Imovel.quartos >= quartos)
 
-            # Camada 2: Ranking textual
-            if termos_livres:
-                # Fallback com ILIKE para compatibilidade sem FTS trigger
-                search_filter = or_(
-                    Imovel.titulo.ilike(f"%{termos_livres}%"),
-                    Imovel.descricao.ilike(f"%{termos_livres}%"),
-                    Imovel.tags.ilike(f"%{termos_livres}%"),
+            # Camada 2: ranking textual via Full-Text Search do PostgreSQL.
+            # `search_vector` e coluna gerada com indice GIN (ver models.py).
+            if termos_livres and termos_livres.strip():
+                consulta = _tsquery(termos_livres)
+                query = query.filter(
+                    or_(
+                        Imovel.search_vector.op("@@")(consulta),
+                        # Se sobrar so stopword ("para mim"), a tsquery fica
+                        # vazia e nao casaria nada: nesse caso a camada textual
+                        # e ignorada em vez de zerar a busca inteira.
+                        func.numnode(consulta) == 0,
+                    )
+                ).order_by(
+                    func.ts_rank(Imovel.search_vector, consulta).desc(),
+                    Imovel.preco.asc(),
                 )
-                query = query.filter(search_filter)
-
-            # Ordenar por preço como fallback
-            query = query.order_by(Imovel.preco.asc())
+            else:
+                query = query.order_by(Imovel.preco.asc())
 
             results = query.limit(limite).all()
 

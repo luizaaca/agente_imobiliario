@@ -345,3 +345,32 @@ def test_handover_nao_se_repete(llm_fake, lead_id, deps, db, monkeypatch):
         Mensagem.lead_id == lead_id, Mensagem.message_type == "handover"
     ).count()
     assert handovers == 1
+
+
+def test_agendar_reuniao_vincula_o_imovel(llm_fake, lead_id, deps, catalogo, db):
+    modelo = llm_fake(
+        ("agendar_reuniao", {
+            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 3,
+        }),
+        "Agendado!",
+    )
+    conversar("quero visitar a cobertura", lead_id, deps, modelo)
+
+    agendamento = db.query(Agendamento).filter(Agendamento.lead_id == lead_id).one()
+    assert agendamento.imovel_id == 3
+    assert agendamento.imovel.titulo == "Cobertura Moema Alto Padrao"
+
+
+def test_agendar_reuniao_rejeita_imovel_inventado(llm_fake, lead_id, deps, catalogo, db):
+    """Um ID que nao existe violaria a FK e derrubaria o turno inteiro."""
+    modelo = llm_fake(
+        ("agendar_reuniao", {
+            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 99999,
+        }),
+        "Qual imovel voce quer visitar?",
+    )
+    resposta = conversar("quero visitar", lead_id, deps, modelo)
+
+    assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 0
+    assert resposta == "Qual imovel voce quer visitar?"
+    assert LeadService().get_lead(lead_id, db).status != "agendado"

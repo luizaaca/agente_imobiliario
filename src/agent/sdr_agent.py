@@ -149,30 +149,51 @@ async def atualizar_perfil_lead(
 @sdr_agent.tool
 async def agendar_reuniao(
     ctx: RunContext[SDRDependencies],
-    tipo: str,
-    data_hora: str,
+    tipo: Annotated[str, Field(description="Exatamente um de: visita, reuniao.")],
+    data_hora: Annotated[str, Field(description="Data e hora no formato YYYY-MM-DD HH:MM.")],
     observacoes: Optional[str] = None,
-    imovel_id: Optional[int] = None,
+    imovel_id: Annotated[Optional[int], Field(description=(
+        "ID de um imóvel devolvido por `buscar_imoveis`, quando a visita for a "
+        "um imóvel específico. Não invente: use apenas IDs já apresentados."))] = None,
 ) -> str:
     """Registrar visita ou reunião para handover ao corretor."""
     logger.info(f"Tool agendar_reuniao chamada para lead {ctx.deps.lead_id}")
+    if tipo not in ("visita", "reuniao"):
+        return "Tipo inválido. Use 'visita' ou 'reuniao'."
     try:
         dt = datetime.strptime(data_hora, "%Y-%m-%d %H:%M")
     except ValueError:
         return "Formato de data inválido. Use YYYY-MM-DD HH:MM."
-    
+
     with get_db() as db:
+        imovel = None
+        if imovel_id is not None:
+            # Um ID inventado violaria a FK e derrubaria o turno inteiro. O
+            # erro volta como texto para o modelo poder se corrigir sozinho.
+            imovel = ctx.deps.catalog_service.get_by_id(imovel_id, db)
+            if imovel is None:
+                logger.warning(
+                    "event=imovel_inexistente_no_agendamento lead_id=%s imovel_id=%s",
+                    ctx.deps.lead_id, imovel_id,
+                )
+                return (
+                    f"Imóvel {imovel_id} não existe no catálogo. Use um ID "
+                    f"retornado por `buscar_imoveis` ou agende sem imóvel."
+                )
+
         agendamento = ctx.deps.scheduling_service.create(
             lead_id=ctx.deps.lead_id,
             tipo=tipo,
             data_hora=dt,
             observacoes=observacoes,
+            imovel_id=imovel_id,
             db=db,
         )
+        linha_imovel = f"\nImóvel: {imovel.titulo} (ID: {imovel.id})" if imovel else ""
         return (
             f"Agendamento criado com sucesso! (ID: {agendamento.id})\n"
             f"Tipo: {tipo}\n"
-            f"Data/Hora: {data_hora}\n"
+            f"Data/Hora: {data_hora}{linha_imovel}\n"
             f"Status: pendente"
         )
 

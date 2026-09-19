@@ -21,6 +21,7 @@ class SchedulingService:
         data_hora: datetime,
         observacoes: Optional[str] = None,
         db: Session = None,
+        imovel_id: Optional[int] = None,
     ) -> Agendamento:
         """Cria um novo agendamento e atualiza o status do lead."""
         if tipo not in ("visita", "reuniao"):
@@ -31,6 +32,7 @@ class SchedulingService:
             tipo=tipo,
             data_hora=data_hora,
             observacoes=observacoes,
+            imovel_id=imovel_id,
             status="pendente",
         )
         db.add(agendamento)
@@ -44,7 +46,7 @@ class SchedulingService:
         db.refresh(agendamento)
         logger.info(
             f"Agendamento criado: lead_id={lead_id}, tipo={tipo}, "
-            f"data_hora={data_hora}"
+            f"data_hora={data_hora}, imovel_id={imovel_id}"
         )
         return agendamento
 

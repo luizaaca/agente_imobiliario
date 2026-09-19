@@ -2,6 +2,7 @@
 
 import pytest
 
+from src.db.models import Imovel
 from src.services.catalog_service import CatalogService
 
 
@@ -105,3 +106,56 @@ def test_get_by_id(catalog, catalogo, db):
 
 def test_get_by_id_inexistente(catalog, catalogo, db):
     assert catalog.get_by_id(9999, db) is None
+
+
+# --- Busca textual (Full-Text Search) ----------------------------------------
+#
+# Ate a Fase 6 `search_vector` era uma coluna Text nunca preenchida e a busca
+# caia em ILIKE ordenado por preco. Agora e coluna gerada pelo PostgreSQL com
+# indice GIN, e a camada textual filtra por OU e ordena por ts_rank.
+
+
+def test_coluna_gerada_e_preenchida_pelo_banco(db):
+    """Nenhum codigo da aplicacao escreve em search_vector: quem preenche e o PG."""
+    imovel = Imovel(
+        titulo="Cobertura Duplex com Piscina",
+        tipo="cobertura", finalidade="residencial", operacao="venda",
+        bairro="Perdizes", cidade="Sao Paulo", estado="SP",
+        preco=2000000, quartos=4, area_m2=200, tags="piscina, churrasqueira",
+    )
+    db.add(imovel)
+    db.commit()
+    db.refresh(imovel)
+
+    assert imovel.search_vector is not None
+    assert "piscin" in imovel.search_vector
+
+
+def test_termos_sao_combinados_com_ou(catalog, catalogo, db):
+    """Com E entre as palavras (padrao do tsquery) isso devolveria zero."""
+    titulos = [i.titulo for i in catalog.search(db=db, termos_livres="piscina metro", limite=10)]
+
+    assert "Cobertura Moema Alto Padrao" in titulos      # so 'piscina'
+    assert "Apartamento Bela Vista Compacto" in titulos  # so 'metro'
+
+
+def test_mais_termos_casados_vem_primeiro(catalog, catalogo, db):
+    """O ranking e o que separa relevancia, ja que o filtro e por OU."""
+    titulos = [i.titulo for i in catalog.search(db=db, termos_livres="metro investidor", limite=10)]
+
+    # O Studio casa 'metro' e 'investidor'; os demais casam so 'metro'.
+    assert titulos[0] == "Studio Pinheiros Investidor"
+    assert len(titulos) > 1
+
+
+def test_so_stopwords_nao_zera_a_busca(catalog, catalogo, db):
+    """'de a e' vira uma tsquery vazia, que nao casaria nada."""
+    resultados = catalog.search(db=db, termos_livres="de a e", bairro_interesse="Moema", limite=10)
+
+    assert [i.titulo for i in resultados] == ["Cobertura Moema Alto Padrao"]
+
+
+def test_busca_textual_respeita_os_filtros_estruturados(catalog, catalogo, db):
+    resultados = catalog.search(db=db, termos_livres="metro", intencao="aluguel", limite=10)
+
+    assert [i.titulo for i in resultados] == ["Apartamento Tatuape Aluguel"]

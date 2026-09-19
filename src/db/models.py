@@ -8,7 +8,9 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     ForeignKey,
+    Index,
     Numeric,
     SmallInteger,
     String,
@@ -16,12 +18,26 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
 
 
 class Base(DeclarativeBase):
     pass
+
+
+# Expressao do indice de busca textual. Fica em uma constante porque a
+# migration precisa gerar exatamente o mesmo texto que o `create_all` usado
+# pelos testes; qualquer divergencia faria o autogenerate acusar drift.
+SEARCH_VECTOR_EXPR = (
+    "to_tsvector('portuguese'::regconfig, "
+    "coalesce(titulo, '') || ' ' || "
+    "coalesce(descricao, '') || ' ' || "
+    "coalesce(tags, '') || ' ' || "
+    "coalesce(bairro, '') || ' ' || "
+    "coalesce(tipo, ''))"
+)
 
 
 class Lead(Base):
@@ -105,6 +121,7 @@ class Agendamento(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), nullable=False)
+    imovel_id: Mapped[Optional[int]] = mapped_column(ForeignKey("imoveis.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(String(20), nullable=False)
     data_hora: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     observacoes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -112,6 +129,7 @@ class Agendamento(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     lead: Mapped["Lead"] = relationship(back_populates="agendamentos")
+    imovel: Mapped[Optional["Imovel"]] = relationship()
 
     __table_args__ = (
         CheckConstraint("tipo IN ('visita','reuniao')", name="check_tipo_agendamento"),
@@ -147,7 +165,14 @@ class Imovel(Base):
     perfil_indicado: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     disponivel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     imagem_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    search_vector: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Coluna gerada pelo proprio PostgreSQL: nao ha trigger nem codigo de
+    # aplicacao para manter sincronizado, e o valor nunca fica defasado.
+    # A expressao precisa ser IMMUTABLE, por isso o regconfig e fixo.
+    search_vector: Mapped[Optional[str]] = mapped_column(
+        TSVECTOR,
+        Computed(SEARCH_VECTOR_EXPR, persisted=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -165,6 +190,7 @@ class Imovel(Base):
         CheckConstraint("area_m2 > 0", name="check_area"),
         CheckConstraint("condominio >= 0", name="check_condominio"),
         CheckConstraint("iptu_anual >= 0", name="check_iptu"),
+        Index("ix_imoveis_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:

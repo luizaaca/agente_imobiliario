@@ -1,4 +1,7 @@
-"""Schemas Pydantic para Agendamento."""
+"""Schemas Pydantic para Agendamento.
+
+Os campos espelham `src.db.models.Agendamento` (ver `tests/test_schemas.py`).
+"""
 
 from datetime import datetime
 from enum import Enum
@@ -35,6 +38,5 @@ class AgendamentoResponse(AgendamentoCreate):
     id: int
     status: StatusAgendamento
     created_at: datetime
-    updated_at: datetime
 
     model_config = {"from_attributes": True}

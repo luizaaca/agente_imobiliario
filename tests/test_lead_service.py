@@ -1,11 +1,21 @@
 """Testes do LeadService: score, funil e saneamento dos dados da LLM."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
-from src.db.models import Lead
+from src.db.models import (
+    Agendamento,
+    FollowUpAttempt,
+    Lead,
+    LeadChannelIdentity,
+    LLMUsage,
+)
+from src.services.followup_service import FollowUpService
 from src.services.lead_service import LeadService
+from src.services.llm_usage_service import LLMUsageService
+from src.services.scheduling_service import SchedulingService
 
 QUALIFICACAO_COMPLETA = {
     "intencao": "compra",
@@ -240,3 +250,78 @@ def test_dashboard_ordena_por_score_desc(lead_service, db):
 
     scores = [float(item.score) for item in lead_service.get_leads_for_dashboard({}, db)]
     assert scores == sorted(scores, reverse=True)
+
+
+# --- Exclusao de lead --------------------------------------------------------
+
+
+@pytest.fixture
+def lead_com_historico(lead_service, lead_id, db):
+    """Lead com mensagem, identidade, agendamento, follow-up e consumo de LLM."""
+    lead_service.save_message(
+        lead_id=lead_id, channel="teste", role="user",
+        content="oi", message_type="chat", db=db,
+    )
+    SchedulingService().create(
+        lead_id=lead_id, tipo="visita",
+        data_hora=datetime.now(UTC) + timedelta(days=1), db=db,
+    )
+    FollowUpService().record_attempt(
+        lead_id=lead_id, regua="lead_novo_sem_resposta", status="sent", db=db,
+    )
+    LLMUsageService().record(
+        lead_id=lead_id, model="modelo-de-teste", tokens_in=100,
+        tokens_out=50, operation="chat", db=db,
+    )
+    return lead_id
+
+
+def test_excluir_lead_remove_o_lead_e_seus_vinculos(
+    lead_service, lead_com_historico, db
+):
+    assert lead_service.delete_lead(lead_com_historico, db) is True
+
+    db.expire_all()
+    assert lead_service.get_lead(lead_com_historico, db) is None
+    assert lead_service.count_messages(lead_com_historico, db) == 0
+    assert (
+        db.query(Agendamento).filter(Agendamento.lead_id == lead_com_historico).count()
+        == 0
+    )
+    assert (
+        db.query(FollowUpAttempt)
+        .filter(FollowUpAttempt.lead_id == lead_com_historico).count()
+        == 0
+    )
+    assert (
+        db.query(LeadChannelIdentity)
+        .filter(LeadChannelIdentity.lead_id == lead_com_historico).count()
+        == 0
+    )
+
+
+def test_excluir_lead_preserva_o_consumo_de_llm(lead_service, lead_com_historico, db):
+    """Os tokens foram gastos de verdade: apagar o lead nao pode zerar o budget."""
+    lead_service.delete_lead(lead_com_historico, db)
+
+    db.expire_all()
+    assert LLMUsageService().get_daily_tokens(db) == 150
+    assert db.query(LLMUsage).filter(LLMUsage.lead_id.is_(None)).count() == 1
+
+
+def test_excluir_lead_inexistente_devolve_falso(lead_service, db):
+    assert lead_service.delete_lead(999999, db) is False
+
+
+def test_conversas_do_usuario_nao_vazam_para_outro(lead_service, db):
+    """O '_' do prefixo e curinga em LIKE: sem autoescape um usuario veria o outro."""
+    lead_service.get_or_create_lead(
+        channel="streamlit", external_id="streamlit_ana_aaa111", db=db
+    )
+    lead_service.get_or_create_lead(
+        channel="streamlit", external_id="streamlit_bob_bbb222", db=db
+    )
+
+    da_ana = lead_service.list_identities_by_prefix("streamlit", "streamlit_ana_", db)
+
+    assert [i.external_chat_id for i in da_ana] == ["streamlit_ana_aaa111"]

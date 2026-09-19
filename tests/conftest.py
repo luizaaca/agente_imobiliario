@@ -42,16 +42,23 @@ os.environ["LLM_MODEL"] = "modelo-de-teste"
 
 import psycopg  # noqa: E402
 import pytest  # noqa: E402
+from alembic.config import Config  # noqa: E402
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart  # noqa: E402
 from pydantic_ai.models.function import FunctionModel  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
+from alembic import command  # noqa: E402
 from src.db.models import Base, Imovel  # noqa: E402
 from src.db.session import engine, get_db  # noqa: E402
 
 
-def _criar_banco_de_teste() -> None:
-    """Cria o banco de teste se ele ainda não existir."""
+def _recriar_banco_de_teste() -> None:
+    """Recria o banco de teste do zero.
+
+    Derrubar e criar de novo a cada sessão é o que permite aplicar as
+    migrations em um banco limpo; sem isso, `alembic upgrade head` esbarraria
+    nas tabelas da execução anterior.
+    """
     partes = urlparse(DATABASE_URL_TESTE)
     nome_teste = partes.path.lstrip("/")
     admin_url = urlunparse(
@@ -59,22 +66,32 @@ def _criar_banco_de_teste() -> None:
     )
 
     with psycopg.connect(admin_url, autocommit=True, connect_timeout=10) as conn:
-        existe = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (nome_teste,)
-        ).fetchone()
-        if not existe:
-            conn.execute(f'CREATE DATABASE "{nome_teste}"')
+        conn.execute(
+            f'DROP DATABASE IF EXISTS "{nome_teste}" WITH (FORCE)'
+        )
+        conn.execute(f'CREATE DATABASE "{nome_teste}"')
 
 
 @pytest.fixture(scope="session", autouse=True)
 def banco_de_teste():
-    """Prepara o schema do banco de teste uma vez por sessão."""
+    """Prepara o schema do banco de teste uma vez por sessão.
+
+    O schema vem das migrations, e não de `Base.metadata.create_all()`: é o
+    mesmo caminho que roda em produção, então um modelo que andou sem a
+    migration correspondente quebra a suíte em vez de passar despercebido.
+    """
     try:
-        _criar_banco_de_teste()
+        _recriar_banco_de_teste()
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL indisponível para os testes: {e}")
 
-    Base.metadata.create_all(bind=engine)
+    # Config sem arquivo: o alembic.ini só traz script_location e a seção de
+    # logging, e deixar essa seção de fora evita que o alembic reconfigure o
+    # logging do processo e engula a saída do pytest.
+    config = Config()
+    config.set_main_option("script_location", "alembic")
+    command.upgrade(config, "head")
+
     yield
     engine.dispose()
 

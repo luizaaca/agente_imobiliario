@@ -71,3 +71,27 @@ def test_conta_pendentes(scheduling, lead_id, amanha, db):
     assert scheduling.get_pending_count(db) == 0
     scheduling.create(lead_id=lead_id, tipo="visita", data_hora=amanha, db=db)
     assert scheduling.get_pending_count(db) == 1
+
+
+# --- Vinculo com o imovel ----------------------------------------------------
+#
+# Ate a Fase 6 a tool `agendar_reuniao` recebia `imovel_id` do modelo e o
+# descartava em silencio: a coluna nao existia.
+
+
+def test_agendamento_guarda_o_imovel(scheduling, lead_id, amanha, catalogo, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, imovel_id=3, db=db
+    )
+
+    assert agendamento.imovel_id == 3
+    assert agendamento.imovel.titulo == "Cobertura Moema Alto Padrao"
+
+
+def test_agendamento_sem_imovel_continua_valido(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="reuniao", data_hora=amanha, db=db
+    )
+
+    assert agendamento.imovel_id is None
+    assert agendamento.imovel is None

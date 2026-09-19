@@ -9,6 +9,9 @@ import streamlit_authenticator as stauth
 import yaml
 
 from src.config import settings
+from src.ui.chat import render_chat
+from src.ui.dashboard import render_dashboard
+from src.ui.navegacao import CHAVE_NAV, PAGINA_CHAT, PAGINA_DASHBOARD, PAGINAS
 
 st.set_page_config(
     page_title="Agente SDR Imobiliário",
@@ -55,15 +58,20 @@ with st.sidebar:
     st.write(f"👤 **{name}**")
     authenticator.logout("Sair", "sidebar")
     st.divider()
-    st.caption("Agente SDR Imobiliário v0.1")
 
-# Tabs
-tab_chat, tab_dashboard = st.tabs(["💬 Chat Simulador", "📊 Dashboard"])
+    # Radio em vez de st.tabs: o dashboard precisa conseguir mandar o usuario
+    # para o simulador ao abrir a conversa de um lead, e aba nao se seleciona
+    # por codigo. O `index` nao e passado de proposito: quem manda e a chave
+    # em session_state, escrita pelos callbacks de navegacao.
+    st.session_state.setdefault(CHAVE_NAV, PAGINA_CHAT)
+    pagina = st.radio("Navegação", PAGINAS, key=CHAVE_NAV)
+    st.divider()
 
-with tab_chat:
-    from src.ui.chat import render_chat
+if pagina == PAGINA_DASHBOARD:
+    render_dashboard()
+else:
     render_chat()
 
-with tab_dashboard:
-    from src.ui.dashboard import render_dashboard
-    render_dashboard()
+with st.sidebar:
+    st.divider()
+    st.caption("Agente SDR Imobiliário v0.1")
