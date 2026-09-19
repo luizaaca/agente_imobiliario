@@ -11,7 +11,7 @@ import yaml
 from src.config import settings
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
-from src.ui.navegacao import CHAVE_NAV, PAGINA_CHAT, PAGINA_DASHBOARD, PAGINAS
+from src.ui.navegacao import CHAVE_NAV, PAGINA_CHAT, PAGINAS
 
 st.set_page_config(
     page_title="Agente SDR Imobiliário",
@@ -59,18 +59,20 @@ with st.sidebar:
     authenticator.logout("Sair", "sidebar")
     st.divider()
 
-    # Radio em vez de st.tabs: o dashboard precisa conseguir mandar o usuario
-    # para o simulador ao abrir a conversa de um lead, e aba nao se seleciona
-    # por codigo. O `index` nao e passado de proposito: quem manda e a chave
-    # em session_state, escrita pelos callbacks de navegacao.
-    st.session_state.setdefault(CHAVE_NAV, PAGINA_CHAT)
-    pagina = st.radio("Navegação", PAGINAS, key=CHAVE_NAV)
-    st.divider()
+# Abas com `key` e `on_change="rerun"`: assim o Streamlit guarda a aba ativa em
+# session_state, o que permite ao dashboard abrir a conversa de um lead direto
+# no simulador, e expoe `.open` — usado abaixo para montar so a aba visivel,
+# em vez de rodar as duas consultas a cada interacao.
+st.session_state.setdefault(CHAVE_NAV, PAGINA_CHAT)
+tab_chat, tab_dashboard = st.tabs(PAGINAS, key=CHAVE_NAV, on_change="rerun")
 
-if pagina == PAGINA_DASHBOARD:
-    render_dashboard()
-else:
-    render_chat()
+with tab_chat:
+    if tab_chat.open:
+        render_chat()
+
+with tab_dashboard:
+    if tab_dashboard.open:
+        render_dashboard()
 
 with st.sidebar:
     st.divider()
