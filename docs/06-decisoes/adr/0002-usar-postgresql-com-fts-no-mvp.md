@@ -40,7 +40,7 @@ Adotar **PostgreSQL** como banco principal e usar **Full-Text Search (FTS)** com
 
 ### Negativas
 - FTS não entrega busca semântica profunda como embeddings;
-- qualidade depende da riqueza textual do dataset.
+- qualidade depende da riqueza textual do catálogo sintético carregado na base.
 
 ## Impacto arquitetural
 

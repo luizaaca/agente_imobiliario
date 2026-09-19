@@ -266,7 +266,7 @@ agente_imobiliario/
 │   └── 01-visao-geral/
 │       └── 01-plano-de-implementacao.md
 ├── data/
-│   └── imoveis_dataset.csv       # Dataset Kaggle brutou ou limpo
+│   └── imoveis_catalogo.csv      # Artefato interno com catálogo sintético pronto para carga
 ├── src/
 │   ├── config.py
 │   ├── schemas/
@@ -299,7 +299,7 @@ agente_imobiliario/
 │   └── credentials.yaml          # Credenciais bcrypt (autenticação Streamlit)
 ├── scripts/
 │   ├── generate_password_hash.py # Utilitário para gerar hashes de senha
-│   └── seed_imoveis.py           # Script para importar o CSV para o PostgreSQL
+│   └── seed_imoveis.py           # Script para ingerir o catálogo sintético no PostgreSQL
 ├── alembic/                      # Migrations de schema PostgreSQL
 │   └── versions/
 └── tests/

@@ -60,6 +60,7 @@
 - `titulo`
 - `tipo`
 - `finalidade`
+- `operacao`
 - `bairro`
 - `zona`
 - `preco`
@@ -437,39 +438,44 @@ CREATE INDEX idx_llm_usage_lead_operation_created_at ON llm_usage(lead_id, opera
 ### 8.1 Finalidade
 Catálogo de imóveis disponíveis para busca, recomendação e referência pelo agente SDR.
 
-### 8.2 Fonte de dados (Dataset Kaggle)
+### 8.2 Fonte de dados
 
-O catálogo será populado a partir de um dataset público do Kaggle. O dataset recomendado é o **"São Paulo Real Estate Sales and Rentals (2020–2026)"** (~85.000 anúncios), que oferece boa cobertura de campos e volume adequado para demonstração com FTS.
+O catálogo será populado **integralmente por geração sintética**, sem dependência de datasets externos. A POC passa a assumir que os imóveis de demonstração serão produzidos a partir de regras determinísticas e/ou geração assistida por LLM, com foco em:
 
-> **URL sugerida:** [kaggle.com/datasets/…/sao-paulo-real-estate](https://www.kaggle.com/datasets/) (buscar por "São Paulo real estate sales rentals 2020 2026")
->
-> **Alternativa menor:** "Discover São Paulo: Apartment Prices Insights" (~28.000 registros do Zap Imóveis), com menos campos mas suficiente para a POC.
+- cobertura equilibrada de bairros, tipologias e faixas de preço;
+- descrições textuais ricas para demonstrar FTS com boa qualidade;
+- consistência entre atributos estruturados e narrativa do imóvel;
+- controle total sobre volume, distribuição e qualidade dos registros.
 
-#### Mapeamento esperado: CSV → tabela `imoveis`
+Essa decisão elimina a necessidade de Kaggle, CSVs de terceiros e etapas de limpeza de dados externos para o MVP.
 
-| Coluna do CSV (típica) | Coluna na tabela | Observação |
-|---|---|---|
-| `price` / `preco` | `preco` | Converter para `NUMERIC(12,2)` em BRL |
-| `area` / `area_m2` | `area_m2` | |
-| `bedrooms` / `quartos` | `quartos` | |
-| `bathrooms` / `banheiros` | `banheiros` | |
-| `parking_spaces` / `vagas` | `vaga_garagem` | |
-| `neighborhood` / `bairro` | `bairro` | |
-| `district` / `zona` | `zona` | Se ausente, inferir da região/bairro |
-| `condominio` / `condo_fee` | `condominio` | Pode estar ausente em alguns datasets |
-| `iptu` | `iptu_anual` | Pode estar ausente |
-| `type` / `tipo` | `tipo` | Ex.: `apartamento`, `casa`, `studio`, `cobertura` |
-| `transaction_type` | `finalidade` | Ex.: `venda`, `aluguel` |
+#### Mapeamento esperado
 
-#### Campos que precisam de **geração sintética** pelo script de seed
+Todos os campos do catálogo devem ser produzidos pela etapa de geração sintética.
 
-| Campo | Estratégia de geração |
+| Coluna | Estratégia / observação |
 |---|---|
-| `titulo` | Compor a partir de `tipo`, `quartos`, `bairro` e `area_m2`. Ex.: "Apartamento 3 quartos em Pinheiros — 92m²" |
-| `descricao` | Gerar via template ou LLM com base nos metadados do imóvel. Essencial para FTS rico |
-| `tags` | Extrair de amenities ou gerar a partir de `tipo`, `finalidade`, features binárias do CSV |
-| `perfil_indicado` | Inferir: quartos ≥ 3 → `residencial_familia`; studio → `investidor`; área > 150m² → `alto_padrao` |
-| `imagem_url` | Usar imagens placeholder por tipo (ex.: `https://placehold.co/600x400?text=Apartamento+3q`) |
+| `preco` | Gerar faixa de preço em BRL e persistir em `NUMERIC(12,2)` |
+| `area_m2` | Gerar área com distribuição coerente com o tipo e padrão do imóvel |
+| `quartos` | Gerar quantidade compatível com área, tipologia e perfil do imóvel |
+| `suites` | Gerar opcionalmente, de forma coerente com padrão e quantidade de quartos |
+| `banheiros` | Gerar quantidade compatível com tipologia, área e padrão do imóvel |
+| `vaga_garagem` | Gerar opcionalmente conforme perfil, bairro e faixa de preço |
+| `bairro` | Sortear a partir de lista curada da POC |
+| `zona` | Derivar do bairro ou definir diretamente no gerador |
+| `cidade` | Usar valor padrão da POC: `São Paulo` |
+| `estado` | Usar valor padrão da POC: `SP` |
+| `condominio` | Gerar valor ou `NULL` quando a tipologia permitir |
+| `iptu_anual` | Gerar valor ou `NULL` quando fizer sentido |
+| `tipo` | Gerar entre valores residenciais (`apartamento`, `casa`, `studio`, `cobertura`, `casa_condominio`, `sobrado`, `flat`, `loft`) e comerciais (`sala_comercial`, `consultorio`, `escritorio`, `andar_corporativo`, `predio_comercial`, `loja`, `galpao`, `terreno_comercial`) |
+| `finalidade` | Gerar entre valores como `residencial`, `comercial` |
+| `operacao` | Gerar entre valores como `venda`, `aluguel` |
+| `titulo` | Compor a partir dos outros campos |
+| `descricao` | Gerar com base nos demais atributos sintéticos |
+| `tags` | Gerar a partir dos outros campos |
+| `perfil_indicado` | Inferir por regras de negócio a partir dos atributos sintéticos |
+| `disponivel` | Definir conforme cenário da POC; default recomendado `true` |
+| `imagem_url` | Usar placeholder por tipo ou perfil do imóvel |
 
 ### 8.3 Colunas propostas
 
@@ -477,23 +483,24 @@ O catálogo será populado a partir de um dataset público do Kaggle. O dataset 
 |---|---|---:|---|---|
 | `id` | `BIGSERIAL` | Não | auto | PK |
 | `titulo` | `VARCHAR(200)` | Não |  | Gerado sinteticamente a partir dos metadados |
-| `tipo` | `VARCHAR(30)` | Não |  | Ex.: `apartamento`, `casa`, `studio`, `cobertura` |
-| `finalidade` | `VARCHAR(20)` | Não |  | Ex.: `venda`, `aluguel` |
+| `tipo` | `VARCHAR(30)` | Não |  | Ex.: `apartamento`, `studio`, `cobertura`, `casa`, `casa_condominio`, `sobrado`, `flat`, `loft`, `sala_comercial`, `consultorio`, `escritorio`, `andar_corporativo`, `predio_comercial`, `loja`, `galpao`, `terreno_comercial` |
+| `finalidade` | `VARCHAR(20)` | Não |  | Ex.: `residencial`, `comercial` |
+| `operacao` | `VARCHAR(20)` | Não |  | Ex.: `venda`, `aluguel` |
 | `bairro` | `VARCHAR(100)` | Não |  | Bairro do imóvel |
-| `zona` | `VARCHAR(50)` | Sim |  | Ex.: `zona_sul`, `zona_oeste`, `centro` |
+| `zona` | `VARCHAR(50)` | Sim |  | Ex.: `zona_sul`, `zona_oeste`, `centro`, `zona_norte`, `zona_leste` |
 | `cidade` | `VARCHAR(100)` | Não | `'São Paulo'` | Cidade |
 | `estado` | `VARCHAR(2)` | Não | `'SP'` | UF |
 | `preco` | `NUMERIC(12,2)` | Não |  | Preço em BRL |
-| `quartos` | `SMALLINT` | Não |  | Quantidade de quartos |
-| `suites` | `SMALLINT` | Sim |  | Quantidade de suítes (se disponível) |
+| `quartos` | `SMALLINT` | Não |  | Quantidade de quartos / salas privativas (0 para comercial) |
+| `suites` | `SMALLINT` | Sim |  | Quantidade de suítes (se disponível; 0 para comercial) |
 | `banheiros` | `SMALLINT` | Sim |  | Quantidade de banheiros |
 | `vaga_garagem` | `SMALLINT` | Sim |  | Vagas de garagem |
 | `area_m2` | `NUMERIC(10,2)` | Não |  | Área em m² |
 | `condominio` | `NUMERIC(10,2)` | Sim |  | Valor do condomínio mensal |
 | `iptu_anual` | `NUMERIC(10,2)` | Sim |  | IPTU anual |
 | `descricao` | `TEXT` | Sim |  | Descrição textual rica (essencial para FTS) |
-| `tags` | `TEXT` | Sim |  | Tags ou amenidades em texto livre (separadas por vírgula ou espaço) |
-| `perfil_indicado` | `VARCHAR(30)` | Sim |  | Ex.: `residencial`, `investidor`, `alto_padrao` |
+| `tags` | `TEXT` | Sim |  | Tags ou amenidades em texto livre (separadas por vírgula) |
+| `perfil_indicado` | `VARCHAR(30)` | Sim |  | Ex.: `residencial_familia`, `alto_padrao`, `investidor`, `corporativo`, `pequena_empresa`, `saude_consultorio`, `varejo_comercio`, `logistica_industrial` |
 | `disponivel` | `BOOLEAN` | Não | `true` | Se o imóvel está disponível |
 | `imagem_url` | `VARCHAR(500)` | Sim |  | URL da imagem principal (placeholder na POC) |
 | `search_vector` | `TSVECTOR` | Sim |  | Vetor de busca FTS, gerado automaticamente |
@@ -503,8 +510,12 @@ O catálogo será populado a partir de um dataset público do Kaggle. O dataset 
 ### 8.4 Constraints recomendadas
 
 ```sql
-CHECK (tipo IN ('apartamento', 'casa', 'studio', 'cobertura'))
-CHECK (finalidade IN ('venda', 'aluguel'))
+CHECK (tipo IN (
+    'apartamento', 'studio', 'cobertura', 'casa', 'casa_condominio', 'sobrado', 'flat', 'loft',
+    'sala_comercial', 'consultorio', 'escritorio', 'andar_corporativo', 'predio_comercial', 'loja', 'galpao', 'terreno_comercial'
+))
+CHECK (finalidade IN ('residencial', 'comercial'))
+CHECK (operacao IN ('venda', 'aluguel'))
 CHECK (preco > 0)
 CHECK (area_m2 > 0)
 CHECK (quartos >= 0)
@@ -584,17 +595,18 @@ LIMIT $7;
 
 ### 8.7 Observações sobre o script de seed
 
-O script `scripts/seed_imoveis.py` deve:
+O script `scripts/seed_imoveis.py` deve atuar **somente como mecanismo de ingestão na base**. A geração dos registros acontece antes dele, em etapa separada de produção do catálogo sintético.
 
-1. Ler o CSV do dataset Kaggle (`data/imoveis_dataset.csv`).
-2. Filtrar registros com dados mínimos (preço, bairro, quartos, área).
-3. Normalizar campos (tipos, finalidade, bairro).
-4. Gerar sinteticamente: `titulo`, `descricao`, `tags`, `perfil_indicado`.
-5. Atribuir `imagem_url` placeholder por tipo de imóvel.
-6. Inserir no PostgreSQL via SQLAlchemy.
-7. Alvo: **≥ 200 imóveis** com descrições ricas o suficiente para demonstração do FTS.
+Responsabilidades do script de seed:
 
-> Descrições ricas são essenciais para a qualidade do FTS. Se o dataset original tiver descrições pobres, o script de seed deve enriquecê-las com templates ou geração via LLM.
+1. Ler o artefato já gerado do catálogo sintético (por exemplo, JSON ou CSV interno da aplicação).
+2. Validar campos obrigatórios e consistência mínima antes da carga.
+3. Normalizar formatos finais quando necessário (tipos, finalidade, bairro, casas decimais).
+4. Inserir no PostgreSQL via SQLAlchemy.
+5. Registrar métricas básicas da carga (quantidade inserida, rejeitada, atualizada, se aplicável).
+6. Alvo: **≥ 200 imóveis** com descrições ricas o suficiente para demonstração do FTS.
+
+> Como o catálogo será 100% sintético, a qualidade de **todos os campos** passa a ser responsabilidade direta da etapa de geração. O script de seed apenas valida e persiste os registros na base.
 
 ### 8.8 Volume esperado
 

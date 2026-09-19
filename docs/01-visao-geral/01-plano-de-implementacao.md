@@ -258,7 +258,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
 - [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)).
-- [ ] Importar dataset Kaggle de imóveis para tabela no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
+- [ ] Gerar catálogo sintético de imóveis e carregá-lo no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
 - [ ] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
 - [ ] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
 - [ ] Configurar autenticação do Streamlit (ver [03-autenticacao-da-ui.md](../03-operacao/03-autenticacao-da-ui.md)).
@@ -360,7 +360,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Riscos principais
 - Respostas inconsistentes do modelo em cenários ambíguos.
-- Dataset importado (Kaggle) possuir descrições textuais pobres, limitando a eficácia do matching textual do SDR.
+- Catálogo sintético ser gerado com descrições textuais pobres ou repetitivas, limitando a eficácia do matching textual do SDR.
 - Follow-up parecer genérico ou repetitivo.
 - Escopo crescer demais para o tempo do hackathon.
 
@@ -368,7 +368,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - Usar saída estruturada e tools tipadas.
 - Utilizar o PostgreSQL Full-Text Search (FTS) para ranking textual como alternativa viável e eficiente à busca em banco vetorial no MVP.
 - Limitar escopo a poucos fluxos muito bem executados.
-- Garantir que o script de seed (`seed_imoveis.py`) enriqueça ou filtre os dados importados, garantindo que contenham descrições ricas o suficiente para boa demonstração.
+- Garantir que a etapa de geração do catálogo produza descrições ricas e variadas, e que o script de seed (`seed_imoveis.py`) apenas valide e carregue esses registros na base.
 
 ### Limitações assumidas da POC
 - Sem integração real com CRM externo.

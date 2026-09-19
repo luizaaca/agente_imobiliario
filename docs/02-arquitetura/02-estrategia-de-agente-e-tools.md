@@ -58,7 +58,7 @@ O `perfil_narrativo` é tratado como um artefato vivo:
 
 ## 6. Estratégia de Busca de Imóveis
 
-Com a adoção do PostgreSQL e um volume maior de dados (dataset importado), a abordagem de busca acontecerá diretamente no banco de dados em camadas:
+Com a adoção do PostgreSQL e um volume maior de dados no catálogo sintético, a abordagem de busca acontecerá diretamente no banco de dados em camadas:
 
 ### Camada 1 — Filtros estruturados (SQL)
 Filtros diretos via `WHERE` clause:
