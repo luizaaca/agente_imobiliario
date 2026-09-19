@@ -63,13 +63,24 @@
 - `operacao`
 - `bairro`
 - `zona`
+- `cidade`
+- `estado`
 - `preco`
 - `quartos`
-- `area_m2`
+- `suites`
+- `banheiros`
 - `vaga_garagem`
+- `area_m2`
+- `condominio`
+- `iptu_anual`
 - `descricao`
 - `tags`
 - `perfil_indicado`
+- `disponivel`
+- `imagem_url`
+- `search_vector`
+- `created_at`
+- `updated_at`
 
 #### LLMUsage
 - `id`
@@ -440,14 +451,14 @@ Catálogo de imóveis disponíveis para busca, recomendação e referência pelo
 
 ### 8.2 Fonte de dados
 
-O catálogo será populado **integralmente por geração sintética**, sem dependência de datasets externos. A POC passa a assumir que os imóveis de demonstração serão produzidos a partir de regras determinísticas e/ou geração assistida por LLM, com foco em:
+O catálogo será populado **integralmente por geração sintética**, sem dependência de datasets externos. A POC assume que os imóveis de demonstração são produzidos a partir de regras determinísticas e geração assistida por LLM, com foco em:
 
 - cobertura equilibrada de bairros, tipologias e faixas de preço;
 - descrições textuais ricas para demonstrar FTS com boa qualidade;
 - consistência entre atributos estruturados e narrativa do imóvel;
 - controle total sobre volume, distribuição e qualidade dos registros.
 
-Essa decisão elimina a necessidade de Kaggle, CSVs de terceiros e etapas de limpeza de dados externos para o MVP.
+Essa abordagem garante massa de dados própria e perfeitamente aderente às necessidades de busca do MVP, sem depender de fontes externas.
 
 #### Mapeamento esperado
 
