@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,6 +16,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Job de inicializacao: aplica as migrations e carrega o catalogo.
+  # `app` e `telegram-bot` so sobem depois que este servico termina com sucesso.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "alembic upgrade head && python -m scripts.seed_imoveis"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build:
       context: .
@@ -27,10 +40,10 @@ services:
       - "8501:8501"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+      DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   telegram-bot:
     build:
@@ -39,10 +52,10 @@ services:
     command: python run_telegram.py
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+      DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

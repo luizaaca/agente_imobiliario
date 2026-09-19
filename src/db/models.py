@@ -143,7 +143,9 @@ class Imovel(Base):
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        CheckConstraint("tipo IN ('apartamento','casa','cobertura','terreno','comercial')", name="check_tipo_imovel"),
+        # O vocabulario de `tipo` e aberto por decisao de projeto: o catalogo
+        # sintetico usa tipos granulares (studio, sala_comercial, galpao, ...)
+        # e novos tipos podem surgir sem exigir migration.
         CheckConstraint("finalidade IN ('residencial','comercial')", name="check_finalidade"),
         CheckConstraint("operacao IN ('venda','aluguel')", name="check_operacao"),
         CheckConstraint("preco > 0", name="check_preco"),

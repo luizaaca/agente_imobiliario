@@ -1,107 +1,140 @@
 #!/usr/bin/env python3
-"""Script para ingerir o catálogo sintético de imóveis no PostgreSQL.
+"""Ingere o catálogo sintético de imóveis no PostgreSQL.
 
-Lê o arquivo data/imoveis_catalogo.csv e insere os registros na tabela imoveis.
-Responsabilidades:
-1. Ler o CSV
-2. Validar campos obrigatórios
-3. Normalizar formatos
-4. Inserir via SQLAlchemy
-5. Registrar métricas da carga
+Pré-requisito: o schema precisa existir. Rode `alembic upgrade head` antes.
+
+A carga é idempotente (imóveis com `id` já presente são ignorados) e tolerante
+a linha: um registro inválido é isolado em SAVEPOINT e não derruba a carga
+inteira.
+
+Uso:
+    python -m scripts.seed_imoveis
 """
 
 import csv
 import sys
 from pathlib import Path
 
-from src.db.session import engine, SessionLocal
-from src.db.models import Base, Imovel
+from sqlalchemy import inspect, select, text
 
-def main():
+from src.db.models import Imovel
+from src.db.session import SessionLocal, engine
+
+CSV_PATH = Path(__file__).resolve().parent.parent / "data" / "imoveis_catalogo.csv"
+
+
+def _to_float(value):
+    return float(value) if value not in (None, "") else None
+
+
+def _to_int(value):
+    return int(value) if value not in (None, "") else None
+
+
+def _to_bool(value):
+    return str(value or "").strip().lower() in ("true", "1", "t", "sim", "yes")
+
+
+def build_imovel(row: dict) -> Imovel:
+    """Converte uma linha do CSV no modelo ORM."""
+    return Imovel(
+        id=int(row["id"]),
+        titulo=row["titulo"],
+        tipo=row["tipo"],
+        finalidade=row["finalidade"],
+        operacao=row["operacao"],
+        bairro=row["bairro"],
+        zona=row.get("zona"),
+        cidade=row["cidade"],
+        estado=row["estado"],
+        preco=float(row["preco"]),
+        quartos=int(row["quartos"]),
+        suites=_to_int(row.get("suites")),
+        banheiros=_to_int(row.get("banheiros")),
+        vaga_garagem=_to_int(row.get("vaga_garagem")),
+        area_m2=float(row["area_m2"]),
+        condominio=_to_float(row.get("condominio")),
+        iptu_anual=_to_float(row.get("iptu_anual")),
+        descricao=row.get("descricao"),
+        tags=row.get("tags"),
+        perfil_indicado=row.get("perfil_indicado"),
+        disponivel=_to_bool(row.get("disponivel", "true")),
+        imagem_url=row.get("imagem_url"),
+    )
+
+
+def resync_sequence(db) -> None:
+    """Ressincroniza a sequence de `imoveis.id` após inserts com id explícito.
+
+    Sem isso, o próximo insert gerado pelo banco tentaria usar id=1 e colidiria.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    db.execute(
+        text(
+            "SELECT setval("
+            "  pg_get_serial_sequence('imoveis', 'id'),"
+            "  COALESCE((SELECT MAX(id) FROM imoveis), 1)"
+            ")"
+        )
+    )
+    db.commit()
+
+
+def main() -> None:
     print("Iniciando ingestão de imóveis...")
-    
-    # Criar tabelas se não existirem
-    Base.metadata.create_all(bind=engine)
-    
-    # Path relative to project root (assuming script runs from there)
-    # The parent agent instructed to write everything starting with C:\... 
-    # but the script will likely be run from the root.
-    base_dir = Path(__file__).resolve().parent.parent
-    csv_path = base_dir / "data" / "imoveis_catalogo.csv"
-    
-    if not csv_path.exists():
-        print(f"Erro: Arquivo {csv_path} não encontrado.")
+
+    if not CSV_PATH.exists():
+        print(f"Erro: arquivo {CSV_PATH} não encontrado.")
         sys.exit(1)
-        
-    inserted = 0
-    skipped = 0
-    errors = 0
-    
-    with open(csv_path, mode='r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        
-        with SessionLocal() as db:
-            for row in reader:
-                try:
-                    # Validar e processar linha
-                    imovel_id = int(row['id'])
-                    
-                    # Verificar se já existe
-                    exists = db.query(Imovel).filter(Imovel.id == imovel_id).first()
-                    if exists:
-                        skipped += 1
-                        continue
-                        
-                    # Tratar booleanos e nulos
-                    def parse_float(val):
-                        return float(val) if val else None
-                        
-                    def parse_int(val):
-                        return int(val) if val else None
-                        
-                    imovel = Imovel(
-                        id=imovel_id,
-                        titulo=row['titulo'],
-                        tipo=row['tipo'],
-                        finalidade=row['finalidade'],
-                        operacao=row['operacao'],
-                        bairro=row['bairro'],
-                        zona=row.get('zona'),
-                        cidade=row['cidade'],
-                        estado=row['estado'],
-                        preco=float(row['preco']),
-                        quartos=int(row['quartos']),
-                        suites=parse_int(row.get('suites')),
-                        banheiros=parse_int(row.get('banheiros')),
-                        vaga_garagem=parse_int(row.get('vaga_garagem')),
-                        area_m2=float(row['area_m2']),
-                        condominio=parse_float(row.get('condominio')),
-                        iptu_anual=parse_float(row.get('iptu_anual')),
-                        descricao=row.get('descricao'),
-                        tags=row.get('tags'),
-                        perfil_indicado=row.get('perfil_indicado'),
-                        disponivel=row.get('disponivel', 'true').lower() == 'true',
-                        imagem_url=row.get('imagem_url')
-                    )
-                    
-                    db.add(imovel)
-                    inserted += 1
-                    
-                except Exception as e:
-                    print(f"Erro na linha id={row.get('id')}: {e}")
-                    errors += 1
-                    
+
+    if not inspect(engine).has_table(Imovel.__tablename__):
+        print(
+            "Erro: a tabela 'imoveis' não existe. "
+            "Rode `alembic upgrade head` antes do seed."
+        )
+        sys.exit(1)
+
+    with CSV_PATH.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    inserted = skipped = errors = 0
+
+    with SessionLocal() as db:
+        existing_ids = set(db.scalars(select(Imovel.id)).all())
+
+        for row in rows:
+            row_id = row.get("id")
             try:
-                db.commit()
+                if int(row_id) in existing_ids:
+                    skipped += 1
+                    continue
+                # SAVEPOINT por linha: uma linha inválida não invalida as demais.
+                with db.begin_nested():
+                    db.add(build_imovel(row))
+                    db.flush()
+                inserted += 1
             except Exception as e:
-                db.rollback()
-                print(f"Erro ao salvar no banco de dados: {e}")
-                sys.exit(1)
-                
+                errors += 1
+                print(f"Erro na linha id={row_id}: {e}")
+
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Erro ao salvar no banco de dados: {e}")
+            sys.exit(1)
+
+        resync_sequence(db)
+
     print("\nResumo da Carga:")
     print(f"- Inseridos: {inserted}")
     print(f"- Ignorados (já existem): {skipped}")
     print(f"- Erros: {errors}")
+
+    if errors:
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

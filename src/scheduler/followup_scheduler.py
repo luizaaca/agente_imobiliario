@@ -16,15 +16,16 @@ def create_scheduler() -> AsyncIOScheduler:
         logger.info("Executando job de follow-up automático...")
         with get_db() as db:
             followup_service = FollowUpService()
+            # get_eligible_leads devolve pares (lead, regua) já resolvidos.
             eligible = followup_service.get_eligible_leads(db)
-            logger.info(f"Leads elegíveis para follow-up: {len(eligible)}")
-            for lead in eligible:
+            for lead, regua in eligible:
                 try:
-                    # Determine regua and generate follow-up
-                    regua = followup_service.determine_regua(lead, db)
-                    if regua:
-                        logger.info(f"Processando follow-up para lead {lead.id}, régua: {regua}")
-                        # Follow-up generation would happen here
+                    logger.info(
+                        f"Processando follow-up para lead {lead.id}, régua: {regua}"
+                    )
+                    # TODO (Fase 4): gerar a mensagem contextual via LLM,
+                    # persistir a Mensagem, registrar o FollowUpAttempt e
+                    # despachar pelo adaptador de canal.
                 except Exception as e:
                     logger.error(f"Erro no follow-up do lead {lead.id}: {e}")
     

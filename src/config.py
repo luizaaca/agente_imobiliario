@@ -42,10 +42,16 @@ class Settings:
 
     @property
     def database_url_safe(self) -> str:
-        """URL do banco com ajuste de compatibilidade."""
+        """URL do banco normalizada para o driver psycopg 3.
+
+        O projeto depende de `psycopg[binary]` (psycopg 3). Sem o prefixo
+        explícito, o SQLAlchemy assume `psycopg2`, que não é instalado.
+        """
         url = self.DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
 
 

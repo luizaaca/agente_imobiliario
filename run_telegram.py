@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Ponto de entrada do Bot Telegram + Scheduler de follow-up.
+"""Ponto de entrada do Bot Telegram.
 
-Processo 2: roda o bot com Long Polling e o scheduler APScheduler.
+Processo 2: roda o bot com Long Polling.
+
+O scheduler de follow-up (src/scheduler/followup_scheduler.py) ainda NÃO é
+iniciado aqui — ele precisa subir dentro do event loop do python-telegram-bot
+(via `post_init`), o que faz parte da Fase 4 (follow-up ponta a ponta).
 """
 
 import asyncio

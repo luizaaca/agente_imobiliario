@@ -30,9 +30,10 @@ class SDRDependencies:
 
 
 # Create the agent
+# O system prompt não é passado aqui: ele é montado a cada run pelo
+# @sdr_agent.system_prompt abaixo, que injeta o contexto do lead no template.
 sdr_agent = Agent(
     model=f"openai:{settings.LLM_MODEL}",
-    system_prompt=SYSTEM_PROMPT,  # Will be dynamically formatted
     deps_type=SDRDependencies,
     retries=2,
 )
@@ -72,13 +73,14 @@ async def buscar_imoveis(
         
         output_lines = [f"Encontrei {len(results)} imóvel(is):"]
         for r in results:
+            descricao = (r.descricao or "")[:200]
             output_lines.append(
                 f"\n- **{r.titulo}** (ID: {r.id})\n"
                 f"  Tipo: {r.tipo} | {r.operacao}\n"
                 f"  Bairro: {r.bairro} ({r.zona})\n"
                 f"  Preço: R$ {r.preco:,.2f}\n"
                 f"  Quartos: {r.quartos} | Suítes: {r.suites or 0} | Área: {r.area_m2}m²\n"
-                f"  {r.descricao[:200]}..."
+                f"  {descricao}..."
             )
         return "\n".join(output_lines)
 
@@ -265,7 +267,7 @@ async def process_message(
         deps=deps,
     )
 
-    response_text = result.data
+    response_text = result.output
 
     # Record usage and save response
     with get_db() as db:
@@ -273,8 +275,8 @@ async def process_message(
         deps.llm_usage_service.record(
             lead_id=lead_id,
             model=settings.LLM_MODEL,
-            tokens_in=usage.request_tokens or 0,
-            tokens_out=usage.response_tokens or 0,
+            tokens_in=usage.input_tokens or 0,
+            tokens_out=usage.output_tokens or 0,
             operation="chat",
             turn=deps.llm_usage_service.get_conversation_turns(lead_id, db) + 1,
             db=db,

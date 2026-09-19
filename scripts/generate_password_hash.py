@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Utilitário para gerar hashes bcrypt de senhas para o credentials.yaml."""
 
-import streamlit_authenticator as stauth
+import getpass
+
+from streamlit_authenticator.utilities.hasher import Hasher
 
 
 def main():
-    password = input("Digite a senha: ")
-    hashed = stauth.Hasher([password]).generate()[0]
-    print(f"Hash bcrypt: {hashed}")
+    password = getpass.getpass("Digite a senha: ")
+    if not password:
+        print("Senha vazia. Abortado.")
+        return
+    print(f"Hash bcrypt: {Hasher.hash(password)}")
     print("Cole este hash no campo 'password' do config/credentials.yaml")
 
 
