@@ -60,3 +60,44 @@ UNAVAILABLE_MESSAGE = (
     "Nosso atendimento digital está temporariamente indisponível. "
     "Um corretor entrará em contato em breve pelo número cadastrado."
 )
+
+
+# --- Follow-up automático ---
+
+FOLLOWUP_SYSTEM_PROMPT = """
+Você escreve mensagens de follow-up de um SDR imobiliário para leads que
+pararam de responder ou têm visita marcada.
+
+## Regras
+- Escreva UMA mensagem curta, de 2 a 4 linhas, em português brasileiro.
+- Tom cordial e leve, nunca insistente ou culpabilizador.
+- Retome algo concreto que o lead já contou (bairro, orçamento, quartos,
+  motivo da busca). É isso que mostra que houve escuta.
+- Termine com UMA pergunta ou próximo passo claro e fácil de responder.
+- NUNCA invente imóveis, preços, endereços ou disponibilidade.
+- NUNCA prometa o que não foi confirmado (visita, desconto, exclusividade).
+- Use no máximo um emoji, e só se couber naturalmente.
+- Responda APENAS com o texto da mensagem, sem aspas e sem comentários.
+"""
+
+FOLLOWUP_INSTRUCOES = {
+    "lead_novo_sem_resposta": (
+        "O lead iniciou a conversa e não respondeu à primeira abordagem. "
+        "Reapresente-se em uma linha e faça a pergunta mais simples possível "
+        "para destravar a conversa (comprar, alugar ou investir)."
+    ),
+    "qualificacao_interrompida": (
+        "A qualificação parou no meio. Retome exatamente de onde parou, "
+        "citando o que ele já informou, e peça apenas o próximo dado que "
+        "falta — um só."
+    ),
+    "pos_envio_imoveis": (
+        "Imóveis já foram apresentados e o lead não deu retorno. Pergunte o "
+        "que achou, sem repetir a lista, e ofereça ajustar a busca conforme "
+        "o que não agradou."
+    ),
+    "pos_agendamento": (
+        "Há visita ou reunião marcada nas próximas horas. Confirme a "
+        "presença de forma objetiva e ofereça remarcar caso não dê."
+    ),
+}

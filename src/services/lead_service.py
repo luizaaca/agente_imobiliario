@@ -1,6 +1,7 @@
 """Serviço para gestão de leads."""
 
 import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 
@@ -73,12 +74,41 @@ class LeadService:
             if hasattr(lead, key) and value is not None:
                 setattr(lead, key, value)
 
-        if lead.status == LeadStatus.NOVO.value:
-            lead.status = LeadStatus.EM_QUALIFICACAO.value
+        lead.status = self.avaliar_status(lead)
 
         db.commit()
         db.refresh(lead)
         return lead
+
+    # Dados mínimos que caracterizam um lead qualificado: sem eles o corretor
+    # não consegue trabalhar a oportunidade.
+    CAMPOS_DE_QUALIFICACAO = (
+        ("intencao",),
+        ("orcamento_min", "orcamento_max"),
+        ("bairro_interesse", "regiao_interesse"),
+        ("quartos",),
+    )
+
+    def esta_qualificado(self, lead: Lead) -> bool:
+        """Indica se o lead já tem os dados mínimos de qualificação."""
+        return all(
+            any(getattr(lead, campo, None) is not None for campo in grupo)
+            for grupo in self.CAMPOS_DE_QUALIFICACAO
+        )
+
+    def avaliar_status(self, lead: Lead) -> str:
+        """Calcula o status do lead no funil a partir dos dados coletados.
+
+        Só avança leads ainda em coleta: quem já agendou não regride, e quem
+        está inativo só volta ao funil quando responde (ver process_message).
+        """
+        if lead.status not in (LeadStatus.NOVO.value, LeadStatus.EM_QUALIFICACAO.value):
+            return lead.status
+
+        if self.esta_qualificado(lead):
+            return LeadStatus.QUALIFICADO.value
+
+        return LeadStatus.EM_QUALIFICACAO.value
 
     def update_perfil_narrativo(
         self, lead_id: int, novo_texto: str, db: Session
@@ -195,6 +225,7 @@ class LeadService:
         content: str,
         message_type: str,
         db: Session,
+        status: str = "created",
     ) -> Mensagem:
         """Salva uma mensagem no histórico."""
         msg = Mensagem(
@@ -203,11 +234,31 @@ class LeadService:
             role=role,
             content=content,
             message_type=message_type,
+            status=status,
         )
         db.add(msg)
         db.commit()
         db.refresh(msg)
         return msg
+
+    def mark_message_sent(self, message_id: int, db: Session) -> None:
+        """Marca uma mensagem como efetivamente enviada ao canal."""
+        msg = db.query(Mensagem).filter(Mensagem.id == message_id).first()
+        if msg:
+            msg.status = "sent"
+            msg.sent_at = datetime.now(timezone.utc)
+            db.commit()
+
+    def get_primary_identity(
+        self, lead_id: int, db: Session
+    ) -> Optional[LeadChannelIdentity]:
+        """Identidade de canal preferencial do lead, para envio ativo."""
+        return (
+            db.query(LeadChannelIdentity)
+            .filter(LeadChannelIdentity.lead_id == lead_id)
+            .order_by(LeadChannelIdentity.is_primary.desc(), LeadChannelIdentity.id)
+            .first()
+        )
 
     def has_message_type(
         self, lead_id: int, message_type: str, db: Session

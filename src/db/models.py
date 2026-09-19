@@ -5,7 +5,7 @@ from typing import Optional, List, Any
 
 from sqlalchemy import (
     BigInteger, String, Text, Numeric, SmallInteger, Boolean,
-    CheckConstraint, func, ForeignKey, JSON
+    CheckConstraint, func, ForeignKey, JSON, UniqueConstraint
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import TIMESTAMP
@@ -227,6 +227,10 @@ class FollowUpAttempt(Base):
         CheckConstraint("regua IN ('lead_novo_sem_resposta','qualificacao_interrompida','pos_envio_imoveis','pos_agendamento')", name="check_regua"),
         CheckConstraint("attempt_number >= 1", name="check_attempt_number"),
         CheckConstraint("status IN ('generated','sent','failed','skipped')", name="check_followup_status"),
+        # Garantia no banco de que a mesma regua nao dispara duas vezes para o
+        # mesmo lead: duas execucoes concorrentes calculam o mesmo
+        # attempt_number e a segunda falha com IntegrityError.
+        UniqueConstraint("lead_id", "regua", "attempt_number", name="uq_followup_lead_regua_attempt"),
     )
 
     def __repr__(self) -> str:

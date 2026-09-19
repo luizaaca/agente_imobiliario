@@ -365,9 +365,10 @@ async def process_message(
             db=db,
         )
 
-        # Update lead status if still novo
+        # O lead respondeu: entra (ou volta) para o funil ativo. Um lead
+        # marcado como inativo pelo follow-up é retomado aqui.
         lead = deps.lead_service.get_lead(lead_id, db)
-        if lead and lead.status == "novo":
+        if lead and lead.status in ("novo", "inativo"):
             deps.lead_service.update_status(lead_id, "em_qualificacao", db)
 
     return response_text

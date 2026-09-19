@@ -89,12 +89,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+def make_sender(app: Application):
+    """Cria o despachante de follow-up ligado a esta aplicação Telegram."""
+
+    async def send(channel: str, external_chat_id: str, texto: str) -> bool:
+        if channel != "telegram":
+            # Outros canais (Streamlit) não têm envio ativo: a mensagem fica
+            # persistida e aparece no painel.
+            return False
+        await app.bot.send_message(chat_id=external_chat_id, text=texto)
+        return True
+
+    return send
+
+
 def create_telegram_app() -> Application:
     """Cria e configura a aplicação Telegram."""
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
-    
+
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    
+
     logger.info("Bot Telegram configurado com sucesso.")
     return app

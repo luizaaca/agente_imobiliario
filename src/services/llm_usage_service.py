@@ -25,11 +25,22 @@ PRICING = {
 class LLMUsageService:
     """Serviço de governança de custos de LLM."""
 
+    # Preço genérico para modelos fora da tabela; o número é um palpite, então
+    # o uso é registrado em log para o custo não parecer mais preciso do que é.
+    FALLBACK_PRICING = {"input": 1.0, "output": 3.0}
+
     def estimate_cost(
         self, model: str, tokens_in: int, tokens_out: int
     ) -> float:
         """Calcula custo estimado em USD."""
-        prices = PRICING.get(model, {"input": 1.0, "output": 3.0})
+        prices = PRICING.get(model)
+        if prices is None:
+            prices = self.FALLBACK_PRICING
+            logger.warning(
+                "event=preco_desconhecido model=%s detalhe=usando_fallback "
+                "usd_por_1M_in=%s usd_por_1M_out=%s",
+                model, prices["input"], prices["output"],
+            )
         cost = (
             (tokens_in / 1_000_000) * prices["input"]
             + (tokens_out / 1_000_000) * prices["output"]
