@@ -48,23 +48,62 @@ sdr_agent = Agent(
 # Register tools using @sdr_agent.tool decorator
 # Each tool receives RunContext[SDRDependencies] as first arg
 
+# Vai no fim do retorno da busca, e nao so no system prompt, porque o resultado
+# da tool e o texto mais recente antes da geracao — e e justamente ali que o
+# modelo recaia em listar opcoes de proximo passo em vez de escolher uma.
+FECHAMENTO_DA_BUSCA = (
+    "\n---\n"
+    "Ao responder: no máximo três destes imóveis, uma linha de porquê para "
+    "cada, até seis linhas no total. Não ofereça um menu de próximos passos "
+    "('posso ampliar a busca, ou...') — a busca já foi refeita sozinha. "
+    "Escolha você o próximo passo e termine com UMA pergunta só."
+)
+
+
+def _formatar_imovel(imovel) -> str:
+    descricao = (imovel.descricao or "")[:200]
+    return (
+        f"\n- **{imovel.titulo}** (ID: {imovel.id})\n"
+        f"  Tipo: {imovel.tipo} | {imovel.finalidade} | {imovel.operacao}\n"
+        f"  Bairro: {imovel.bairro} ({imovel.zona})\n"
+        f"  Preço: R$ {imovel.preco:,.2f}\n"
+        f"  Quartos: {imovel.quartos} | Suítes: {imovel.suites or 0} "
+        f"| Área: {imovel.area_m2}m²\n"
+        f"  {descricao}..."
+    )
+
+
 @sdr_agent.tool
 async def buscar_imoveis(
     ctx: RunContext[SDRDependencies],
     intencao: Optional[str] = None,
+    finalidade: Annotated[Optional[str], Field(description=(
+        "Exatamente 'residencial' ou 'comercial'. Use sempre que a pessoa "
+        "procurar sala, escritório, loja, galpão ou consultório."))] = None,
     orcamento_min: Optional[float] = None,
     orcamento_max: Optional[float] = None,
     regiao_interesse: Optional[str] = None,
-    bairro_interesse: Optional[str] = None,
+    bairro_interesse: Annotated[Optional[str], Field(description=(
+        "Nome do bairro. 'Paulista', 'Faria Lima' e afins são referências, "
+        "não bairros: nesses casos use regiao_interesse."))] = None,
     quartos: Optional[int] = None,
-    termos_livres: Optional[str] = None,
+    termos_livres: Annotated[Optional[str], Field(description=(
+        "Só características desejáveis em texto livre (varanda, piscina, "
+        "reformado). Não coloque aqui tipo, bairro nem preço — eles têm "
+        "campos próprios."))] = None,
     limite_resultados: int = 5,
 ) -> str:
-    """Buscar imóveis no catálogo com filtros estruturados e ranking textual."""
+    """Buscar imóveis no catálogo.
+
+    Se nada casar com os filtros exatos, a busca é refeita automaticamente
+    afrouxando um critério por vez, e a resposta diz o que foi afrouxado.
+    """
     logger.info(f"Tool buscar_imoveis chamada para lead {ctx.deps.lead_id}")
     with get_db() as db:
-        results = ctx.deps.catalog_service.search(
+        resultado = ctx.deps.catalog_service.search_relaxando(
+            db,
             intencao=intencao,
+            finalidade=finalidade,
             orcamento_min=orcamento_min,
             orcamento_max=orcamento_max,
             regiao_interesse=regiao_interesse,
@@ -72,23 +111,39 @@ async def buscar_imoveis(
             quartos=quartos,
             termos_livres=termos_livres,
             limite=limite_resultados,
-            db=db,
         )
-        if not results:
-            return "Nenhum imóvel encontrado com os critérios informados."
-        
-        output_lines = [f"Encontrei {len(results)} imóvel(is):"]
-        for r in results:
-            descricao = (r.descricao or "")[:200]
-            output_lines.append(
-                f"\n- **{r.titulo}** (ID: {r.id})\n"
-                f"  Tipo: {r.tipo} | {r.operacao}\n"
-                f"  Bairro: {r.bairro} ({r.zona})\n"
-                f"  Preço: R$ {r.preco:,.2f}\n"
-                f"  Quartos: {r.quartos} | Suítes: {r.suites or 0} | Área: {r.area_m2}m²\n"
-                f"  {descricao}..."
+
+        # A formatação fica dentro da sessão: os objetos são do ORM e acessar
+        # um atributo depois do close levanta DetachedInstanceError.
+        if not resultado.imoveis:
+            if resultado.relaxamentos:
+                tentativas = "; ".join(resultado.relaxamentos)
+                return (
+                    "Nenhum imóvel encontrado, nem afrouxando os filtros. Já "
+                    f"tentei: {tentativas}. Diga isso com honestidade e "
+                    "ofereça avisar quando entrar algo no perfil dela."
+                )
+            return (
+                "Nenhum imóvel encontrado com os critérios informados. Tente "
+                "de novo com menos filtros antes de responder."
             )
-        return "\n".join(output_lines)
+
+        linhas = []
+        if resultado.relaxamentos:
+            # O agente precisa das palavras exatas do que mudou; sem isso ele
+            # inventa que ampliou a busca sem ter ampliado.
+            linhas.append(
+                "Com os filtros exatos não havia nada. Esta busca foi refeita "
+                + " e ".join(resultado.relaxamentos)
+                + f". Achei {len(resultado.imoveis)} assim — conte à pessoa, "
+                "em uma frase, o que precisou mudar:"
+            )
+        else:
+            linhas.append(f"Encontrei {len(resultado.imoveis)} imóvel(is):")
+
+        linhas.extend(_formatar_imovel(imovel) for imovel in resultado.imoveis)
+        linhas.append(FECHAMENTO_DA_BUSCA)
+        return "\n".join(linhas)
 
 
 @sdr_agent.tool
@@ -246,28 +301,100 @@ async def gerar_resumo_corretor(
         return resumo
 
 
+def _formatar_orcamento(lead) -> Optional[str]:
+    if lead.orcamento_min and lead.orcamento_max:
+        return f"Orçamento: de R$ {lead.orcamento_min:,.0f} a R$ {lead.orcamento_max:,.0f}"
+    if lead.orcamento_max:
+        return f"Orçamento: até R$ {lead.orcamento_max:,.0f}"
+    if lead.orcamento_min:
+        return f"Orçamento: a partir de R$ {lead.orcamento_min:,.0f}"
+    return None
+
+
+# O que conta como lacuna de qualificação, e o nome pelo qual falamos disso.
+LACUNAS = (
+    ("intencao", "se é compra, aluguel ou investimento"),
+    ("orcamento", "orçamento"),
+    ("localizacao", "região ou bairro"),
+    ("quartos", "quantos quartos"),
+    ("urgencia", "urgência"),
+)
+
+
+def montar_contexto_do_lead(lead) -> str:
+    """Resume o que já se sabe do lead para dentro do system prompt.
+
+    Lista só o que existe. A versão anterior despejava todos os campos com
+    "Não informado" ao lado, o que entregava ao modelo um formulário em branco
+    para preencher — e era exatamente assim que ele conduzia a conversa.
+    """
+    if lead is None:
+        return "Primeira mensagem desta pessoa. Você ainda não sabe nada sobre ela."
+
+    sabido = []
+    if lead.nome:
+        sabido.append(f"Nome: {lead.nome}")
+    if lead.intencao:
+        sabido.append(f"Quer: {lead.intencao}")
+    if lead.tipologia_interesse:
+        sabido.append(f"Tipo de imóvel: {lead.tipologia_interesse}")
+    if orcamento := _formatar_orcamento(lead):
+        sabido.append(orcamento)
+    if lead.bairro_interesse:
+        sabido.append(f"Bairro: {lead.bairro_interesse}")
+    if lead.regiao_interesse:
+        sabido.append(f"Região: {lead.regiao_interesse}")
+    if lead.quartos is not None:
+        sabido.append(f"Quartos: {lead.quartos}")
+    if lead.urgencia:
+        sabido.append(f"Urgência: {lead.urgencia}")
+    if lead.forma_pagamento:
+        sabido.append(f"Forma de pagamento: {lead.forma_pagamento}")
+    if lead.motivo_busca:
+        sabido.append(f"Motivo da busca: {lead.motivo_busca}")
+    if lead.amenidades_desejadas:
+        sabido.append(f"Quer que tenha: {lead.amenidades_desejadas}")
+
+    preenchidos = {
+        "intencao": lead.intencao is not None,
+        "orcamento": lead.orcamento_min is not None or lead.orcamento_max is not None,
+        "localizacao": lead.bairro_interesse is not None
+        or lead.regiao_interesse is not None,
+        "quartos": lead.quartos is not None,
+        "urgencia": lead.urgencia is not None,
+    }
+    em_aberto = [rotulo for chave, rotulo in LACUNAS if not preenchidos[chave]]
+
+    partes = []
+    if sabido:
+        partes.append("\n".join(f"- {item}" for item in sabido))
+    else:
+        partes.append("Você ainda não sabe nada sobre esta pessoa.")
+
+    if em_aberto:
+        partes.append(
+            "Ainda em aberto: "
+            + ", ".join(em_aberto)
+            + ". Isto é uma anotação sua, não um roteiro: não pergunte esses "
+            "itens em sequência. Deixe que apareçam pela conversa e pela "
+            "reação da pessoa aos imóveis que você mostrar."
+        )
+
+    partes.append(f"Estágio no funil: {lead.status}.")
+    return "\n\n".join(partes)
+
+
 # Dynamic system prompt
 @sdr_agent.system_prompt
 async def dynamic_system_prompt(ctx: RunContext[SDRDependencies]) -> str:
     """Gera o system prompt dinâmico com contexto do lead."""
     with get_db() as db:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
-        if lead:
-            lead_context = (
-                f"Nome: {lead.nome or 'Não informado'}\n"
-                f"Status: {lead.status}\n"
-                f"Intenção: {lead.intencao or 'Não informada'}\n"
-                f"Orçamento: R$ {lead.orcamento_min or '?'} a R$ {lead.orcamento_max or '?'}\n"
-                f"Região: {lead.regiao_interesse or 'Não informada'}\n"
-                f"Bairro: {lead.bairro_interesse or 'Não informado'}\n"
-                f"Quartos: {lead.quartos or 'Não informado'}\n"
-                f"Urgência: {lead.urgencia or 'Não informada'}\n"
-                f"Score: {lead.score or 'N/A'}"
-            )
-            perfil = lead.perfil_narrativo or "Nenhum perfil construído ainda."
-        else:
-            lead_context = "Lead novo, sem dados coletados."
-            perfil = "Nenhum perfil construído ainda."
+        lead_context = montar_contexto_do_lead(lead)
+        perfil = (lead.perfil_narrativo if lead else None) or (
+            "Ainda não há perfil escrito. Comece um assim que souber algo "
+            "que valha a pena o corretor saber."
+        )
 
     return SYSTEM_PROMPT.format(
         lead_context=lead_context,

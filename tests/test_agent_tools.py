@@ -136,23 +136,51 @@ def test_buscar_imoveis_devolve_itens_do_catalogo(llm_fake, catalogo, lead_id, d
     assert "Apartamento Bela Vista Compacto" in achados["retorno"]
 
 
-def test_buscar_imoveis_sem_resultado_avisa(llm_fake, catalogo, lead_id, deps):
-    retornos = {}
+def _retorno_da_busca(args, lead_id, deps, texto_final="ok") -> str:
+    """Roda um turno em que o modelo chama `buscar_imoveis` e devolve o que a tool respondeu."""
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    capturado = {}
 
     def capturar(messages, info):
-        from pydantic_ai.messages import ModelResponse, ToolCallPart
-        if not retornos:
-            retornos["chamou"] = True
-            return ModelResponse(parts=[ToolCallPart(
-                tool_name="buscar_imoveis", args={"bairro_interesse": "Inexistente"},
-            )])
-        retornos["retorno"] = str(messages[-1].parts[0].content)
-        return ModelResponse(parts=[TextPart(content="Nada encontrado")])
+        if not capturado:
+            capturado["chamou"] = True
+            return ModelResponse(parts=[ToolCallPart(tool_name="buscar_imoveis", args=args)])
+        capturado["retorno"] = str(messages[-1].parts[0].content)
+        return ModelResponse(parts=[TextPart(content=texto_final)])
 
-    from pydantic_ai.models.function import FunctionModel
-    conversar("tem algo no bairro Inexistente?", lead_id, deps, FunctionModel(capturar))
+    conversar("busque para mim", lead_id, deps, FunctionModel(capturar))
+    return capturado["retorno"]
 
-    assert "Nenhum imóvel encontrado" in retornos["retorno"]
+
+def test_busca_sem_resultado_exato_e_refeita_e_o_agente_sabe_o_que_mudou(
+    llm_fake, catalogo, lead_id, deps
+):
+    """O agente so pode dizer que ampliou a busca se a tool tiver ampliado de fato."""
+    retorno = _retorno_da_busca({"bairro_interesse": "Inexistente"}, lead_id, deps)
+
+    assert "Com os filtros exatos não havia nada" in retorno
+    assert "olhando a região toda, não só o bairro" in retorno
+    assert "Apartamento Bela Vista Compacto" in retorno
+
+
+def test_busca_sem_nada_em_lugar_nenhum_avisa_e_lista_o_que_tentou(
+    llm_fake, catalogo, lead_id, deps
+):
+    retorno = _retorno_da_busca(
+        {"bairro_interesse": "Inexistente", "orcamento_max": 1}, lead_id, deps
+    )
+
+    assert "Nenhum imóvel encontrado" in retorno
+    assert "Já tentei:" in retorno
+
+
+def test_finalidade_chega_ao_filtro_estruturado(llm_fake, catalogo, lead_id, deps):
+    retorno = _retorno_da_busca({"finalidade": "comercial"}, lead_id, deps)
+
+    assert "Sala Comercial Paulista" in retorno
+    assert "Cobertura Moema Alto Padrao" not in retorno
 
 
 def test_agendar_reuniao_cria_agendamento(llm_fake, lead_id, deps, db):

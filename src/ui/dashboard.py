@@ -126,14 +126,15 @@ def _mostrar_agendamentos(lead: Lead, db) -> None:
 
 
 def _acoes_do_lead(lead: Lead) -> None:
-    st.button(
+    # Fora de `on_click` de proposito: `abrir_conversa_no_simulador` termina em
+    # `st.switch_page`, que interrompe a execucao para trocar de pagina.
+    if st.button(
         "💬 Abrir no simulador",
         key=f"abrir_{lead.id}",
         width="stretch",
-        on_click=abrir_conversa_no_simulador,
-        args=(lead.id,),
         help="Carrega esta conversa no chat para você continuar de onde parou.",
-    )
+    ):
+        abrir_conversa_no_simulador(lead.id)
 
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         if st.button("🗑️ Excluir lead", key=f"excluir_{lead.id}", width="stretch"):

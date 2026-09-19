@@ -1,6 +1,7 @@
 """Serviço para gestão de leads."""
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -34,6 +35,27 @@ VALORES_PERMITIDOS = {
     "intencao": {"compra", "aluguel", "investimento"},
     "urgencia": {"baixa", "media", "alta"},
 }
+
+
+@dataclass(frozen=True)
+class ConversaResumo:
+    """Uma conversa como o seletor do simulador precisa ver."""
+    lead_id: int
+    nome: Optional[str]
+    status: str
+    canal: Optional[str]
+    total_mensagens: int
+    ultima_atividade: Optional[datetime]
+
+    def rotulo(self) -> str:
+        partes = [f"Lead #{self.lead_id}"]
+        if self.nome:
+            partes.append(self.nome)
+        partes.append(self.status)
+        if self.canal:
+            partes.append(self.canal)
+        partes.append(f"{self.total_mensagens} msgs")
+        return " · ".join(partes)
 
 
 class LeadService:
@@ -406,26 +428,38 @@ class LeadService:
         logger.info("event=lead_removido lead_id=%s", lead_id)
         return True
 
-    def list_identities_by_prefix(
-        self, channel: str, prefix: str, db: Session
-    ) -> list[LeadChannelIdentity]:
-        """Todas as conversas de um canal que casam o prefixo, da mais recente.
+    def list_conversations(
+        self, db: Session, limit: int = 50
+    ) -> list["ConversaResumo"]:
+        """Conversas com pelo menos uma mensagem, da mais recente para a mais antiga.
 
-        Usada pelo seletor de conversas do simulador. O `autoescape` importa:
-        o prefixo carrega '_', curinga de LIKE, e sem ele um usuario veria as
-        conversas de outro.
+        Nao filtra por canal nem por usuario: o seletor do simulador precisa
+        alcancar qualquer conversa, inclusive as que vieram do Telegram ou de
+        outro corretor. Filtrar pelo prefixo do usuario, como antes, deixava a
+        lista visivelmente incompleta.
         """
-        return (
-            db.query(LeadChannelIdentity)
-            .filter(
-                LeadChannelIdentity.channel == channel,
-                LeadChannelIdentity.external_chat_id.startswith(
-                    prefix, autoescape=True
-                ),
-            )
-            .order_by(LeadChannelIdentity.id.desc())
+        ultima = func.max(Mensagem.timestamp).label("ultima")
+        total = func.count(Mensagem.id).label("total")
+
+        linhas = (
+            db.query(Lead, total, ultima)
+            .join(Mensagem, Mensagem.lead_id == Lead.id)
+            .group_by(Lead.id)
+            .order_by(ultima.desc())
+            .limit(limit)
             .all()
         )
+        return [
+            ConversaResumo(
+                lead_id=lead.id,
+                nome=lead.nome,
+                status=lead.status,
+                canal=lead.canal_origem,
+                total_mensagens=total_msgs,
+                ultima_atividade=ultima_em,
+            )
+            for lead, total_msgs, ultima_em in linhas
+        ]
 
     def count_messages(self, lead_id: int, db: Session) -> int:
         """Quantidade de mensagens registradas para o lead."""

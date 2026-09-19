@@ -159,3 +159,82 @@ def test_busca_textual_respeita_os_filtros_estruturados(catalog, catalogo, db):
     resultados = catalog.search(db=db, termos_livres="metro", intencao="aluguel", limite=10)
 
     assert [i.titulo for i in resultados] == ["Apartamento Tatuape Aluguel"]
+
+
+# --- Busca que se afrouxa sozinha --------------------------------------------
+#
+# Sem isso o agente devolvia o problema para o lead ("me diga uma faixa de
+# orcamento") ou, pior, afirmava ter ampliado a busca sem ter ampliado.
+
+
+def test_busca_exata_nao_relaxa_nada(catalog, catalogo, db):
+    resultado = catalog.search_relaxando(db, bairro_interesse="Moema", limite=10)
+
+    assert resultado.exata
+    assert resultado.relaxamentos == []
+    assert [i.titulo for i in resultado.imoveis] == ["Cobertura Moema Alto Padrao"]
+
+
+def test_afrouxa_o_teto_de_preco_quando_nao_ha_nada(catalog, catalogo, db):
+    """A cobertura de Moema custa 1.8M; com teto de 1.5M a busca exata da zero."""
+    resultado = catalog.search_relaxando(
+        db, bairro_interesse="Moema", orcamento_max=1_500_000, limite=10
+    )
+
+    assert resultado.relaxamentos == ["com o teto de preço 30% maior"]
+    assert [i.titulo for i in resultado.imoveis] == ["Cobertura Moema Alto Padrao"]
+
+
+def test_abre_do_bairro_para_qualquer_regiao(catalog, catalogo, db):
+    resultado = catalog.search_relaxando(
+        db, bairro_interesse="Bairro Inexistente", limite=10
+    )
+
+    assert "olhando a região toda, não só o bairro" in resultado.relaxamentos
+    assert resultado.imoveis
+
+
+def test_nao_inventa_relaxamento_de_filtro_que_nao_foi_usado(catalog, catalogo, db):
+    """Sem quartos e sem termos na entrada, esses passos nao podem ser citados."""
+    resultado = catalog.search_relaxando(
+        db, bairro_interesse="Bairro Inexistente", limite=10
+    )
+
+    assert "sem fixar o número de quartos" not in resultado.relaxamentos
+    assert "sem exigir os termos da descrição" not in resultado.relaxamentos
+
+
+def test_sem_resultado_algum_devolve_o_que_foi_tentado(catalog, catalogo, db):
+    resultado = catalog.search_relaxando(
+        db, bairro_interesse="Nenhum", orcamento_max=1, limite=10
+    )
+
+    assert resultado.imoveis == []
+    assert resultado.relaxamentos  # precisa dizer o que tentou
+
+
+def test_finalidade_e_filtro_estruturado(catalog, catalogo, db):
+    resultados = catalog.search(db=db, finalidade="comercial", limite=10)
+
+    assert [i.titulo for i in resultados] == ["Sala Comercial Paulista"]
+
+
+def test_zona_escrita_com_espaco_casa_a_coluna_com_underscore(catalog, catalogo, db):
+    """A coluna guarda 'zona_oeste'; "zona oeste" e a forma natural de dizer."""
+    com_espaco = catalog.search(db=db, regiao_interesse="zona oeste", limite=10)
+    com_underscore = catalog.search(db=db, regiao_interesse="zona_oeste", limite=10)
+
+    assert [i.titulo for i in com_espaco] == ["Studio Pinheiros Investidor"]
+    assert [i.titulo for i in com_underscore] == [i.titulo for i in com_espaco]
+
+
+def test_zona_ignora_maiusculas_e_hifen(catalog, catalogo, db):
+    resultados = catalog.search(db=db, regiao_interesse="Zona-Sul", limite=10)
+
+    assert [i.titulo for i in resultados] == ["Cobertura Moema Alto Padrao"]
+
+
+def test_regiao_ainda_casa_nome_de_bairro(catalog, catalogo, db):
+    resultados = catalog.search(db=db, regiao_interesse="Moema", limite=10)
+
+    assert [i.titulo for i in resultados] == ["Cobertura Moema Alto Padrao"]

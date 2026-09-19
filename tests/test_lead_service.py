@@ -313,8 +313,8 @@ def test_excluir_lead_inexistente_devolve_falso(lead_service, db):
     assert lead_service.delete_lead(999999, db) is False
 
 
-def test_conversas_do_usuario_nao_vazam_para_outro(lead_service, db):
-    """O '_' do prefixo e curinga em LIKE: sem autoescape um usuario veria o outro."""
+def test_retomada_nao_pega_a_conversa_de_outro_usuario(lead_service, db):
+    """O '_' do prefixo e curinga em LIKE: sem autoescape a Ana retomaria a do Bob."""
     lead_service.get_or_create_lead(
         channel="streamlit", external_id="streamlit_ana_aaa111", db=db
     )
@@ -322,6 +322,61 @@ def test_conversas_do_usuario_nao_vazam_para_outro(lead_service, db):
         channel="streamlit", external_id="streamlit_bob_bbb222", db=db
     )
 
-    da_ana = lead_service.list_identities_by_prefix("streamlit", "streamlit_ana_", db)
+    da_ana = lead_service.get_latest_identity_by_prefix(
+        "streamlit", "streamlit_ana_", db
+    )
 
-    assert [i.external_chat_id for i in da_ana] == ["streamlit_ana_aaa111"]
+    assert da_ana.external_chat_id == "streamlit_ana_aaa111"
+
+
+# --- Listagem de conversas do simulador --------------------------------------
+
+
+def _conversa(lead_service, db, external_id, mensagens):
+    lead = lead_service.get_or_create_lead(
+        channel="streamlit", external_id=external_id, db=db
+    )
+    for texto in mensagens:
+        lead_service.save_message(
+            lead_id=lead.id, channel="streamlit", role="user",
+            content=texto, message_type="chat", db=db,
+        )
+    return lead.id
+
+
+def test_lista_conversas_de_todos_os_usuarios_e_canais(lead_service, db):
+    """Filtrar pelo prefixo do usuario deixava a lista visivelmente incompleta."""
+    da_ana = _conversa(lead_service, db, "streamlit_ana_aaa111", ["oi"])
+    do_bob = _conversa(lead_service, db, "streamlit_bob_bbb222", ["ola", "tudo bem?"])
+
+    ids = [c.lead_id for c in lead_service.list_conversations(db)]
+
+    assert set(ids) == {da_ana, do_bob}
+
+
+def test_conversas_vem_da_mais_recente_para_a_mais_antiga(lead_service, db):
+    primeira = _conversa(lead_service, db, "streamlit_ana_aaa111", ["oi"])
+    segunda = _conversa(lead_service, db, "streamlit_ana_bbb222", ["ola"])
+
+    ids = [c.lead_id for c in lead_service.list_conversations(db)]
+
+    assert ids == [segunda, primeira]
+
+
+def test_lead_sem_mensagem_fica_fora_da_lista(lead_service, db):
+    """Abrir o chat cria a tela, nao a conversa: lead vazio nao e conversa."""
+    lead_service.get_or_create_lead(
+        channel="streamlit", external_id="streamlit_ana_vazio", db=db
+    )
+
+    assert lead_service.list_conversations(db) == []
+
+
+def test_rotulo_da_conversa_traz_o_que_identifica(lead_service, db):
+    lead_id = _conversa(lead_service, db, "streamlit_ana_aaa111", ["oi", "ola"])
+
+    rotulo = lead_service.list_conversations(db)[0].rotulo()
+
+    assert f"Lead #{lead_id}" in rotulo
+    assert "2 msgs" in rotulo
+    assert "streamlit" in rotulo

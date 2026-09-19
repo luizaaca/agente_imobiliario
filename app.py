@@ -11,7 +11,7 @@ import yaml
 from src.config import settings
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
-from src.ui.navegacao import CHAVE_NAV, PAGINA_CHAT, PAGINAS
+from src.ui.navegacao import menu_do_usuario, registrar_paginas
 
 st.set_page_config(
     page_title="Agente SDR Imobiliário",
@@ -53,27 +53,18 @@ if authentication_status is None:
     st.warning("🔒 Por favor, faça login para acessar o sistema.")
     st.stop()
 
-# Sidebar
-with st.sidebar:
-    st.write(f"👤 **{name}**")
-    authenticator.logout("Sair", "sidebar")
-    st.divider()
+# Navegação como páginas de verdade: os links ficam na barra lateral recolhível
+# e cada página monta só o seu próprio conteúdo. `st.switch_page` é o que
+# permite ao dashboard abrir a conversa de um lead direto no simulador.
+pagina_chat = st.Page(
+    render_chat, title="Chat Simulador", icon="💬", url_path="chat", default=True
+)
+pagina_dashboard = st.Page(
+    render_dashboard, title="Dashboard", icon="📊", url_path="dashboard"
+)
+registrar_paginas(pagina_chat, pagina_dashboard)
 
-# Abas com `key` e `on_change="rerun"`: assim o Streamlit guarda a aba ativa em
-# session_state, o que permite ao dashboard abrir a conversa de um lead direto
-# no simulador, e expoe `.open` — usado abaixo para montar so a aba visivel,
-# em vez de rodar as duas consultas a cada interacao.
-st.session_state.setdefault(CHAVE_NAV, PAGINA_CHAT)
-tab_chat, tab_dashboard = st.tabs(PAGINAS, key=CHAVE_NAV, on_change="rerun")
+navegacao = st.navigation([pagina_chat, pagina_dashboard])
 
-with tab_chat:
-    if tab_chat.open:
-        render_chat()
-
-with tab_dashboard:
-    if tab_dashboard.open:
-        render_dashboard()
-
-with st.sidebar:
-    st.divider()
-    st.caption("Agente SDR Imobiliário v0.1")
+menu_do_usuario(name, authenticator)
+navegacao.run()

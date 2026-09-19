@@ -118,14 +118,16 @@ def db():
 
 # --- Catálogo de apoio -------------------------------------------------------
 
+# A zona segue o formato real da coluna no catalogo ('zona_oeste', com
+# underscore): e disso que depende o teste de quem escreve "zona oeste".
 IMOVEIS_DE_TESTE = [
     # titulo, tipo, operacao, bairro, zona, preco, quartos, area, tags
-    ("Apartamento Bela Vista Compacto", "apartamento", "venda", "Bela Vista", "Central", 510000, 2, 55, "metro, reformado"),
-    ("Apartamento Bela Vista Vista Livre", "apartamento", "venda", "Bela Vista", "Central", 610000, 2, 62, "varanda gourmet"),
-    ("Cobertura Moema Alto Padrao", "cobertura", "venda", "Moema", "Sul", 1800000, 3, 180, "piscina, varanda gourmet"),
-    ("Studio Pinheiros Investidor", "studio", "venda", "Pinheiros", "Oeste", 420000, 1, 28, "investidor, metro"),
-    ("Apartamento Tatuape Aluguel", "apartamento", "aluguel", "Tatuape", "Leste", 3200, 2, 60, "metro"),
-    ("Sala Comercial Paulista", "sala_comercial", "aluguel", "Bela Vista", "Central", 4500, 0, 40, "corporativo"),
+    ("Apartamento Bela Vista Compacto", "apartamento", "venda", "Bela Vista", "centro", 510000, 2, 55, "metro, reformado"),
+    ("Apartamento Bela Vista Vista Livre", "apartamento", "venda", "Bela Vista", "centro", 610000, 2, 62, "varanda gourmet"),
+    ("Cobertura Moema Alto Padrao", "cobertura", "venda", "Moema", "zona_sul", 1800000, 3, 180, "piscina, varanda gourmet"),
+    ("Studio Pinheiros Investidor", "studio", "venda", "Pinheiros", "zona_oeste", 420000, 1, 28, "investidor, metro"),
+    ("Apartamento Tatuape Aluguel", "apartamento", "aluguel", "Tatuape", "zona_leste", 3200, 2, 60, "metro"),
+    ("Sala Comercial Paulista", "sala_comercial", "aluguel", "Bela Vista", "centro", 4500, 0, 40, "corporativo"),
 ]
 
 

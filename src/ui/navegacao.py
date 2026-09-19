@@ -1,40 +1,50 @@
-"""Navegacao entre as abas da UI.
+"""Navegacao entre as paginas da UI.
 
-Existe como modulo proprio para o dashboard conseguir mandar o usuario para o
-simulador sem importar o chat (e vice-versa).
-
-As abas rodam com `key` e `on_change="rerun"`, entao o Streamlit guarda o
-rotulo da aba ativa em `st.session_state[CHAVE_NAV]` e aceita que a gente
-escreva nele — e assim "Abrir no simulador" consegue trocar de aba.
+As paginas sao criadas em `app.py` e registradas aqui. O registro existe para o
+dashboard conseguir mandar o usuario para o simulador sem importar o chat — e
+sem que os dois modulos se importem em circulo.
 """
+
+from typing import Any, Optional
 
 import streamlit as st
 
-PAGINA_CHAT = "💬 Chat Simulador"
-PAGINA_DASHBOARD = "📊 Dashboard"
-PAGINAS = [PAGINA_CHAT, PAGINA_DASHBOARD]
-
-CHAVE_NAV = "nav"
 # Lead que o dashboard pediu para abrir no simulador. O chat consome e limpa.
 CHAVE_CONVERSA_PEDIDA = "conversa_pedida"
 
+_paginas: dict[str, Any] = {}
 
-def ir_para(pagina: str) -> None:
-    """Troca de aba.
 
-    So pode ser chamada de um `on_click`/`on_change`: os callbacks rodam antes
-    do rerun, quando as abas ainda nao foram instanciadas. Fora deles, o
-    Streamlit recusa a escrita em uma chave de widget ja criada no ciclo.
-    """
-    st.session_state[CHAVE_NAV] = pagina
+def registrar_paginas(chat: Any, dashboard: Any) -> None:
+    """Guarda as `st.Page` criadas em app.py para uso em `st.switch_page`."""
+    _paginas["chat"] = chat
+    _paginas["dashboard"] = dashboard
 
 
 def abrir_conversa_no_simulador(lead_id: int) -> None:
-    """Callback do dashboard: leva o lead para a aba do chat."""
+    """Leva o lead para a pagina do chat.
+
+    Chamada no fluxo normal do script (nao em `on_click`), porque
+    `st.switch_page` interrompe a execucao para trocar de pagina.
+    """
     st.session_state[CHAVE_CONVERSA_PEDIDA] = lead_id
-    ir_para(PAGINA_CHAT)
+    st.switch_page(_paginas["chat"])
 
 
-def conversa_pedida() -> int | None:
+def conversa_pedida() -> Optional[int]:
     """Consome o pedido pendente de abertura de conversa, se houver."""
     return st.session_state.pop(CHAVE_CONVERSA_PEDIDA, None)
+
+
+def menu_do_usuario(nome: str, authenticator: Any) -> None:
+    """Identificacao do usuario no topo a direita, com menu flutuante.
+
+    Fica fora da barra lateral porque la o espaco e da navegacao; o popover
+    guarda o que e ocasional (nome completo, versao, sair).
+    """
+    _, coluna = st.columns([5, 1], vertical_alignment="center")
+    with coluna, st.popover(nome.split()[0], icon=":material/account_circle:", width="stretch"):
+        st.markdown(f"**{nome}**")
+        st.caption("Agente SDR Imobiliário v0.1")
+        st.divider()
+        authenticator.logout("Sair", "main", key="logout_menu")

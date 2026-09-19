@@ -49,7 +49,7 @@ def nova_conversa() -> None:
 
 
 def _retomar_ultima_conversa() -> None:
-    """Reabre a conversa mais recente do usuario (ex.: apos um refresh)."""
+    """Reabre a conversa mais recente deste usuario (ex.: apos um refresh)."""
     with get_db() as db:
         identidade = LeadService().get_latest_identity_by_prefix(
             CANAL, _prefixo_do_usuario(), db
@@ -78,77 +78,32 @@ def _garantir_lead() -> int:
     return st.session_state.lead_id
 
 
-def _rotulo_da_conversa(lead, total_mensagens: int) -> str:
-    return f"Lead #{lead.id} · {lead.status} · {total_mensagens} msgs"
+def _opcoes_de_conversa(lead_aberto: int | None) -> list[tuple[int | None, str]]:
+    """(lead_id, rotulo) de cada conversa, da mais recente para a mais antiga.
 
-
-def _conversas_disponiveis(lead_aberto: int | None) -> list[tuple[int | None, str]]:
-    """Opcoes do seletor: as conversas deste usuario, da mais recente.
-
-    O lead aberto entra na lista mesmo quando nao nasceu aqui — o corretor pode
-    ter chegado nele pelo botao "Abrir no simulador" do painel, e sem isso o
-    seletor sumiria justamente na conversa que esta na tela.
+    A lista vem de `list_conversations`, que nao filtra por canal nem por
+    usuario: antes o seletor so enxergava as conversas iniciadas por este
+    usuario no Streamlit e aparecia visivelmente incompleto.
     """
-    servico = LeadService()
-    conversas: list[tuple[int | None, str]] = []
-
     with get_db() as db:
-        vistos: set[int] = set()
-        for identidade in servico.list_identities_by_prefix(
-            CANAL, _prefixo_do_usuario(), db
-        ):
-            lead = servico.get_lead(identidade.lead_id, db)
-            if lead is None or lead.id in vistos:
-                continue  # lead excluido pelo dashboard, ou ja listado
-            vistos.add(lead.id)
-            conversas.append(
-                (lead.id, _rotulo_da_conversa(lead, servico.count_messages(lead.id, db)))
-            )
+        servico = LeadService()
+        conversas = servico.list_conversations(db)
+        opcoes: list[tuple[int | None, str]] = [
+            (c.lead_id, c.rotulo()) for c in conversas
+        ]
 
         if lead_aberto is None:
-            conversas.insert(0, (None, "Nova conversa (ainda sem lead)"))
-        elif lead_aberto not in vistos:
+            opcoes.insert(0, (None, "Nova conversa (ainda sem lead)"))
+        elif lead_aberto not in {c.lead_id for c in conversas}:
+            # Lead criado mas ainda sem mensagem nenhuma.
             lead = servico.get_lead(lead_aberto, db)
             if lead is not None:
-                total = servico.count_messages(lead.id, db)
-                conversas.insert(
-                    0, (lead.id, f"{_rotulo_da_conversa(lead, total)} · do painel")
-                )
+                opcoes.insert(0, (lead.id, f"Lead #{lead.id} · {lead.status}"))
 
-    return conversas
+    return opcoes
 
 
-def _barra_lateral() -> None:
-    st.subheader("Conversa")
-
-    atual = st.session_state.lead_id
-    conversas = _conversas_disponiveis(atual)
-    ids = [lead_id for lead_id, _ in conversas]
-    rotulos = dict(conversas)
-
-    # A chave carrega o lead aberto de proposito. Um selectbox mantem o valor
-    # escolhido enquanto a chave nao muda — inclusive sem `key` explicita, que
-    # o Streamlit gera internamente —, e esse valor vence o `index`. Com uma
-    # chave fixa, abrir uma conversa pelo painel virava um widget "desatual" que
-    # devolvia o lead anterior e desfazia a troca no rerun seguinte. Trocando a
-    # chave junto com o lead, o widget e outro e nasce com o `index` correto.
-    escolhido = st.selectbox(
-        "Trocar de conversa",
-        ids,
-        index=ids.index(atual) if atual in ids else 0,
-        format_func=lambda i: rotulos[i],
-        key=f"seletor_conversa_{atual}",
-    )
-    if escolhido != st.session_state.lead_id and escolhido is not None:
-        abrir_conversa(escolhido)
-        st.rerun()
-
-    if st.button("➕ Nova conversa", width="stretch"):
-        nova_conversa()
-        st.rerun()
-
-    st.divider()
-    st.subheader("Info do Lead")
+def _resumo_do_lead() -> None:
     if st.session_state.lead_id is None:
         st.caption("O lead é criado ao enviar a primeira mensagem.")
         return
@@ -158,9 +113,50 @@ def _barra_lateral() -> None:
         if lead is None:
             st.caption("Lead removido. Comece uma nova conversa.")
             return
-        st.write(f"ID: {lead.id}")
-        st.write(f"Status: {lead.status}")
-        st.write(f"Score: {lead.score or 'N/A'}")
+        score = lead.score if lead.score is not None else "N/A"
+        st.caption(f"**Lead #{lead.id}** · {lead.status} · score {score}")
+
+
+def _painel_da_conversa() -> None:
+    """Seletor de conversa, botao de nova e resumo do lead aberto.
+
+    Fica no corpo da pagina, e nao na barra lateral: pertence ao chat, e a
+    barra lateral e da navegacao entre paginas.
+    """
+    atual = st.session_state.lead_id
+    opcoes = _opcoes_de_conversa(atual)
+    ids = [lead_id for lead_id, _ in opcoes]
+    rotulos = dict(opcoes)
+
+    col_sel, col_nova, col_info = st.columns([5, 2, 4], vertical_alignment="bottom")
+
+    with col_sel:
+        # A chave carrega o lead aberto de proposito. Um selectbox mantem o
+        # valor escolhido enquanto a chave nao muda — inclusive sem `key`
+        # explicita, que o Streamlit gera internamente — e esse valor vence o
+        # `index`. Com chave fixa, abrir uma conversa pelo painel virava um
+        # widget desatualizado que devolvia o lead anterior no rerun seguinte.
+        escolhido = st.selectbox(
+            "Conversa",
+            ids,
+            index=ids.index(atual) if atual in ids else 0,
+            format_func=lambda i: rotulos[i],
+            key=f"seletor_conversa_{atual}",
+        )
+
+    with col_nova:
+        nova = st.button("➕ Nova conversa", width="stretch")
+
+    with col_info:
+        _resumo_do_lead()
+
+    if escolhido != st.session_state.lead_id and escolhido is not None:
+        abrir_conversa(escolhido)
+        st.rerun()
+
+    if nova:
+        nova_conversa()
+        st.rerun()
 
 
 def render_chat():
@@ -174,6 +170,9 @@ def render_chat():
     pedido = conversa_pedida()
     if pedido is not None and pedido != st.session_state.lead_id:
         abrir_conversa(pedido)
+
+    _painel_da_conversa()
+    st.divider()
 
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -206,9 +205,6 @@ def render_chat():
                 st.markdown(response)
 
         st.session_state.messages.append({"role": "assistant", "content": response})
-        # Rerun para a barra lateral refletir o lead recem-criado e a contagem
-        # de mensagens atualizada.
+        # Rerun para o painel refletir o lead recem-criado e a contagem de
+        # mensagens atualizada.
         st.rerun()
-
-    with st.sidebar:
-        _barra_lateral()
