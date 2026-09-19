@@ -1,0 +1,114 @@
+# =============================================
+# Python
+# =============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+pip-wheel-metadata/
+
+# =============================================
+# Virtual Environments
+# =============================================
+.venv/
+venv/
+ENV/
+env/
+
+# =============================================
+# Environment Variables (NUNCA versionar!)
+# =============================================
+.env
+.env.local
+.env.production
+.env.*.local
+
+# =============================================
+# IDE / Editors
+# =============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# =============================================
+# OS files
+# =============================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# =============================================
+# Docker
+# =============================================
+# Ignorar dados do volume local do PostgreSQL
+pgdata/
+
+# =============================================
+# PostgreSQL / Banco de dados
+# =============================================
+*.sql.bak
+*.dump
+
+# =============================================
+# Alembic
+# =============================================
+# Manter versions/ versionadas, mas ignorar arquivos temporários
+alembic/__pycache__/
+
+# =============================================
+# Streamlit
+# =============================================
+.streamlit/secrets.toml
+
+# =============================================
+# Logs e temporários
+# =============================================
+*.log
+logs/
+tmp/
+temp/
+
+# =============================================
+# Testes
+# =============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# =============================================
+# Ruff / Lint
+# =============================================
+.ruff_cache/
+
+# =============================================
+# Segurança - credenciais reais
+# =============================================
+# O credentials.yaml com hashes bcrypt é OK para versionar,
+# mas NUNCA versionar senhas em texto plano.
+# Se preferir não versionar o credentials.yaml, descomente:
+# config/credentials.yaml
+
+# =============================================
+# Misc
+# =============================================
+*.bak
+*.tmp
+*.orig
+
+# =============================================
+# Gemini / Antigravity
+# =============================================
+.gemini/

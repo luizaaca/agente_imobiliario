@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agente_sdr
+      POSTGRES_USER: sdr
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sdr_dev_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sdr -d agente_sdr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python run_telegram.py
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
