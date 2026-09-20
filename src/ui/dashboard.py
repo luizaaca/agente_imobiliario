@@ -135,7 +135,15 @@ def _kpis(db) -> None:
         border=True,
     )
     col3.metric("Agendamentos", agendamentos, icon=":material/event:", border=True)
-    col4.metric("Follow-ups enviados", followups, icon=":material/send:", border=True)
+    # Rotulo curto: "Follow-ups enviados" nao cabe em um quinto da largura e o
+    # Streamlit o corta no meio da palavra. O que ele conta fica no `help`.
+    col4.metric(
+        "Follow-ups",
+        followups,
+        icon=":material/send:",
+        border=True,
+        help="Tentativas efetivamente despachadas por um canal com envio ativo.",
+    )
     col5.metric("Inativos", leads_inativos, icon=":material/bedtime:", border=True)
 
 

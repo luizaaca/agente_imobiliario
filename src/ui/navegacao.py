@@ -10,6 +10,7 @@ from typing import Any
 import streamlit as st
 
 from src.config import settings
+from src.ui.papeis import papeis_da_sessao
 
 _paginas: dict[str, Any] = {}
 
@@ -68,13 +69,22 @@ def menu_do_usuario(nome: str, authenticator: Any) -> None:
     baixo. No pe da barra ele fica junto da navegacao, e com a barra recolhida
     sobra so o avatar, alinhado com os icones — o CSS do rail cuida disso.
 
-    O popover guarda o que e ocasional: nome completo, versao e sair.
+    O popover guarda o que e ocasional: nome completo, papel, versao e sair.
+
+    `type="tertiary"` deixa o gatilho sem borda nem preenchimento: no pe da
+    barra ele e um rodape discreto, e um botao desenhado ali competiria com os
+    links de navegacao logo acima, que sao o que a barra existe para oferecer.
     """
     nome = nome or "Usuário"
     with st.sidebar, st.popover(
-        nome.split()[0], icon=":material/account_circle:", width="stretch"
+        nome.split()[0],
+        icon=":material/account_circle:",
+        width="stretch",
+        type="tertiary",
     ):
         st.markdown(f"**{nome}**")
+        papeis = ", ".join(papeis_da_sessao()) or "sem papel definido"
+        st.caption(f"Papel: {papeis}")
         st.caption("Agente SDR Imobiliário v0.1")
         st.divider()
         authenticator.logout("Sair", "main", key="logout_menu")

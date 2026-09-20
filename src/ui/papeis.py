@@ -36,15 +36,23 @@ def papeis_da_sessao() -> list[str]:
 
 
 def menu_do_papel(
-    dashboard: Any, leads: Any, chat: Any, papeis: Optional[Sequence[str]]
+    dashboard: Any,
+    leads: Any,
+    chat: Any,
+    ajuda: Any,
+    papeis: Optional[Sequence[str]],
 ) -> list[Any]:
     """Paginas visiveis para estes papeis, na ordem do menu.
 
-    O simulador de chat so aparece para o admin: e ferramenta de teste, nao
-    de atendimento. A primeira da lista e a que responde por `default=True`,
-    entao todo papel tem o dashboard como pagina inicial.
+    O simulador de chat so aparece para o admin: e ferramenta de teste, nao de
+    atendimento. A ajuda fica por ultimo e aparece para todos — quem mais
+    precisa dela e justamente quem tem menos acesso.
+
+    A primeira da lista e a que responde por `default=True`, entao todo papel
+    tem o dashboard como pagina inicial.
     """
     paginas = [dashboard, leads]
     if e_admin(papeis):
         paginas.append(chat)
+    paginas.append(ajuda)
     return paginas

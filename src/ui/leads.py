@@ -31,6 +31,11 @@ CHAVE_AVISO_FOLLOWUP = "aviso_followup"
 
 FICHA_EM_BRANCO = 0
 
+# Altura da caixa da conversa, em pixels. Alta o bastante para caber uma troca
+# inteira sem rolar, e baixa o bastante para as acoes do lead continuarem na
+# tela junto com ela.
+ALTURA_DA_CONVERSA = 420
+
 STATUS = ["novo", "em_qualificacao", "qualificado", "agendado", "inativo"]
 INTENCOES = ["compra", "aluguel", "investimento"]
 URGENCIAS = ["baixa", "media", "alta"]
@@ -165,20 +170,20 @@ def _cartao_da_lista(lead: Lead) -> None:
 
 
 def _lista(db) -> None:
-    col_titulo, col_novo = st.columns([4, 1], vertical_alignment="bottom")
-    with col_titulo:
-        st.subheader("Carteira de leads")
+    leads = _filtros(db)
+
+    col_contagem, col_novo = st.columns([4, 1], vertical_alignment="center")
+    with col_contagem:
+        st.caption(f"{len(leads)} lead(s)")
     with col_novo:
         if st.button("Novo lead", icon=":material/person_add:", width="stretch"):
             abrir_ficha(FICHA_EM_BRANCO)
             st.rerun()
 
-    leads = _filtros(db)
     if not leads:
         st.info("Nenhum lead encontrado com os filtros selecionados.")
         return
 
-    st.caption(f"{len(leads)} lead(s)")
     for lead in leads:
         _cartao_da_lista(lead)
 
@@ -372,7 +377,12 @@ def _canal_do_lead(lead: Lead) -> None:
 
 
 def _conversa(lead: Lead) -> None:
-    """Histórico do lead, do jeito que aconteceu."""
+    """Histórico do lead, do jeito que aconteceu.
+
+    Dentro de uma caixa de altura fixa: solta na página, uma conversa de
+    algumas dezenas de turnos empurra as ações do lead para fora da tela e
+    obriga a rolar tudo de volta para chegar a elas.
+    """
     with get_db() as db:
         conversa = [
             (m.role, m.message_type, m.content)
@@ -384,12 +394,14 @@ def _conversa(lead: Lead) -> None:
         st.caption("Nenhuma mensagem registrada para este lead.")
         return
 
-    for role, tipo, conteudo in conversa:
-        with st.chat_message(role):
-            rotulo = ROTULO_DO_TIPO.get(tipo)
-            if rotulo:
-                st.caption(rotulo)
-            st.markdown(markdown_seguro(conteudo))
+    st.caption(f"{len(conversa)} mensagem(ns)")
+    with st.container(height=ALTURA_DA_CONVERSA):
+        for role, tipo, conteudo in conversa:
+            with st.chat_message(role):
+                rotulo = ROTULO_DO_TIPO.get(tipo)
+                if rotulo:
+                    st.caption(rotulo)
+                st.markdown(markdown_seguro(conteudo))
 
 
 def _agendamentos(lead: Lead) -> None:
@@ -514,6 +526,12 @@ def _ficha(lead_id: int) -> None:
         return
 
     _cabecalho_da_ficha(lead)
+
+    # As acoes vem antes das abas: elas sao do lead, nao da aba aberta. Embaixo
+    # ficavam fora da tela sempre que a aba tivesse conteudo alto — a conversa,
+    # por exemplo — e sumiam justamente quando se acabou de ler o motivo para
+    # disparar um follow-up.
+    _acoes(lead)
     st.divider()
 
     ficha, canal, conversa, agenda = st.tabs(
@@ -527,9 +545,6 @@ def _ficha(lead_id: int) -> None:
         _conversa(lead)
     with agenda:
         _agendamentos(lead)
-
-    st.divider()
-    _acoes(lead)
 
 
 def render_leads() -> None:

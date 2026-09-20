@@ -137,6 +137,7 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 | **Dashboard** — KPIs, distribuição da carteira | sim | sim |
 | **Leads** — ficha, canal, follow-up, conversa, exclusão | sim | sim |
 | **Chat Simulador** | sim | não |
+| **Ajuda** | sim | sim |
 | Painel **Consumo de LLM**, dentro do dashboard | sim | não |
 | Alerta de orçamento de LLM estourado | sim | sim |
 
@@ -148,6 +149,8 @@ Dois critérios definem essa divisão:
 A regra de visibilidade mora em `src/ui/papeis.py`, numa função pura (`menu_do_papel`) fora do Streamlit, para caber em teste — é a única regra de visibilidade da aplicação.
 
 Um usuário **sem `roles:`** cai no menu do corretor: ausência de papel não promove ninguém.
+
+O papel viaja no cookie de sessão. **Mudar o papel de alguém exige que a pessoa saia e entre de novo** — o cookie já emitido continua carregando o papel antigo.
 
 ### Isto não é controle de acesso
 
@@ -164,6 +167,7 @@ Serve para **organizar a tela**, e não para proteger dado de quem já entrou. U
 | **Toda a UI Streamlit** | `st.stop()` bloqueia renderização se `authentication_status != True` |
 | **Dashboard** | Renderizado apenas após autenticação bem-sucedida |
 | **Leads** | Renderizado apenas após autenticação bem-sucedida |
+| **Ajuda** | Renderizado apenas após autenticação bem-sucedida |
 | **Chat Simulador** | Após autenticação, e apenas para o papel `admin` |
 | **Bot Telegram** | Independente — identidade via `chat_id` |
 | **Banco de dados** | Acesso interno — não exposto via HTTP |

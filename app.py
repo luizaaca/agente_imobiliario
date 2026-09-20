@@ -10,6 +10,7 @@ import streamlit_authenticator as stauth
 import yaml
 
 from src.config import settings
+from src.ui.ajuda import render_ajuda
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
 from src.ui.estilo import aplicar_estilo
@@ -85,13 +86,25 @@ pagina_chat = st.Page(
     icon=":material/forum:",
     url_path="chat",
 )
+pagina_ajuda = st.Page(
+    render_ajuda,
+    title="Ajuda",
+    icon=":material/help:",
+    url_path="ajuda",
+)
 registrar_paginas(pagina_chat, pagina_dashboard, pagina_leads)
 
 # O menu depende do papel: o simulador e ferramenta de teste e so aparece
 # para o admin. Ver `src/ui/papeis.py` — isto e separacao de telas, nao
 # fronteira de seguranca.
 navegacao = st.navigation(
-    menu_do_papel(pagina_dashboard, pagina_leads, pagina_chat, papeis_da_sessao())
+    menu_do_papel(
+        pagina_dashboard,
+        pagina_leads,
+        pagina_chat,
+        pagina_ajuda,
+        papeis_da_sessao(),
+    )
 )
 
 aplicar_estilo()

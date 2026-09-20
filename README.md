@@ -25,6 +25,7 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Menu de leads: ficha editável, criação manual, vínculo de canal, conversa, exclusão | funcionando |
 | Disparo manual de follow-up pela tela | funcionando |
 | Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
+| Página de ajuda com estado da instalação e FAQ | funcionando |
 | Budgets de token (conversa, dia, mês) e custo estimado | funcionando |
 | Canal Telegram | implementado, não exercitado |
 
@@ -65,6 +66,8 @@ Toda a aplicação está atrás de login. O repositório já traz usuários pron
 |---|---|---|---|
 | `admin` | `admin123` | `admin` | sim |
 | `corretor1` | `corretor123` | `corretor` | não |
+
+Depois de entrar, o menu **Ajuda** explica de dentro da aplicação o que cada tela faz, como trabalhar um lead e por que a aplicação se comporta como se comporta — inclusive o estado desta instalação (chat configurado ou não, seu papel, se a sessão é estável).
 
 **Entre como `admin` para avaliar a POC inteira.** O simulador de chat é ferramenta de teste e o consumo de LLM é informação de quem opera, então nenhum dos dois aparece para o `corretor` — entre como `corretor1` se quiser ver a tela enxuta de quem só atende leads. Dashboard e menu de Leads são iguais para os dois.
 
@@ -346,7 +349,7 @@ agente_imobiliario/
 │   ├── scheduler/          # ciclo e agendamento do follow-up
 │   ├── schemas/            # contratos Pydantic (espelham o ORM)
 │   ├── services/           # regras de domínio
-│   └── ui/                 # páginas Streamlit (dashboard, leads, chat) e papéis
+│   └── ui/                 # páginas Streamlit (dashboard, leads, chat, ajuda) e papéis
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual

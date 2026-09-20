@@ -11,26 +11,26 @@ import yaml
 
 from src.ui.papeis import PAPEL_ADMIN, PAPEL_CORRETOR, e_admin, menu_do_papel
 
-DASHBOARD, LEADS, CHAT = "dashboard", "leads", "chat"
+DASHBOARD, LEADS, CHAT, AJUDA = "dashboard", "leads", "chat", "ajuda"
 
 
 def _menu(papeis):
-    return menu_do_papel(DASHBOARD, LEADS, CHAT, papeis)
+    return menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, papeis)
 
 
 def test_admin_ve_o_simulador():
-    assert _menu([PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT]
+    assert _menu([PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT, AJUDA]
 
 
 def test_corretor_nao_ve_o_simulador():
     """O simulador é ferramenta de teste, não de atendimento."""
-    assert _menu([PAPEL_CORRETOR]) == [DASHBOARD, LEADS]
+    assert _menu([PAPEL_CORRETOR]) == [DASHBOARD, LEADS, AJUDA]
 
 
 @pytest.mark.parametrize("papeis", [None, [], ["desconhecido"]])
 def test_sem_papel_reconhecido_cai_no_menu_menor(papeis):
     """Ausência de papel não promove ninguém."""
-    assert _menu(papeis) == [DASHBOARD, LEADS]
+    assert _menu(papeis) == [DASHBOARD, LEADS, AJUDA]
     assert not e_admin(papeis)
 
 
@@ -41,7 +41,13 @@ def test_dashboard_e_sempre_a_primeira_pagina():
 
 
 def test_papel_extra_junto_do_admin_continua_valendo():
-    assert _menu([PAPEL_CORRETOR, PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT]
+    assert _menu([PAPEL_CORRETOR, PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT, AJUDA]
+
+
+def test_ajuda_aparece_para_todo_papel():
+    """Quem mais precisa dela é justamente quem tem menos acesso."""
+    for papeis in ([PAPEL_ADMIN], [PAPEL_CORRETOR], None):
+        assert _menu(papeis)[-1] == AJUDA
 
 
 def test_credenciais_versionadas_declaram_os_papeis():

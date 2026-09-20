@@ -332,13 +332,14 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Fase 6: Interface Streamlit e Dashboard do Corretor
 
-A interface tem **três menus**, e o papel do usuário decide quais aparecem:
+A interface se divide por assunto, e o papel do usuário decide quais menus aparecem:
 
 | Menu | Para quê | Quem vê |
 |---|---|---|
 | **Dashboard** | leitura: KPIs, distribuição da carteira, custo de LLM | todos (o painel de custo, só o admin) |
 | **Leads** | operação: ficha, canal, follow-up, conversa, exclusão | todos |
 | **Chat Simulador** | testar o agente como se fosse um lead | só o admin |
+| **Ajuda** | o que a aplicação faz, como usar e por que ela se comporta assim | todos |
 
 A separação é de assunto, não de permissão: o dashboard responde "como está a
 carteira" e o menu de leads responde "o que eu faço com este lead". Misturar os
@@ -348,6 +349,8 @@ cada lead.
 - [ ] Desenvolver aba de chat simulador com histórico e streaming de resposta.
   > Histórico funciona. Não há streaming: a resposta aparece inteira de uma vez.
 - [x] Restringir o simulador ao papel `admin`: é ferramenta de teste, não de atendimento.
+- [x] **Página de ajuda** com o estado desta instalação (chat configurado, papel do usuário, estabilidade da sessão), o que cada menu faz e um FAQ. Responde de dentro da tela o que hoje só o README responde — e o que só aparece usando, como *por que sumiu um menu* ou *por que a sessão caiu*.
+- [x] **Conversa em caixa de altura fixa**, no simulador e na ficha: solta na página ela empurrava para fora da tela o seletor de conversa e as ações do lead.
 - [x] **Dashboard** centrado no **goal principal: agendar ligação do corretor com o cliente**.
   - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups enviados, Leads inativos.
   - [x] **Distribuição da carteira**: leads por status, na ordem do funil, e leads por intenção.

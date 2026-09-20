@@ -31,6 +31,13 @@ _RAIL_CSS = f"""
 }}
 [data-testid="stSidebarUserContent"] {{
   margin-top: auto !important;
+  /* O Streamlit reserva 96px abaixo do conteudo da barra. Num rodape isso
+     vira um vao morto que descola o avatar da base da tela. */
+  padding-top: 8px !important;
+  padding-bottom: 10px !important;
+  /* Risco tenue separando o rodape dos links de navegacao. `currentColor`
+     com alfa baixo funciona no tema claro e no escuro sem fixar cor. */
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
 }}
 
 section[data-testid="stSidebar"][aria-expanded="false"] {{
@@ -124,11 +131,16 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarU
   padding-left: 0 !important;
   padding-right: 0 !important;
 }}
+/* O gatilho do popover e `inline-flex`, e `margin: auto` nao centraliza caixa
+   em linha — so bloco. Quem centraliza e o container virar flex. */
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarUserContent"] [data-testid="stPopover"] {{
+  display: flex !important;
+  justify-content: center !important;
+}}
 section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverButton"] {{
   width: {_ALVO}px !important;
   min-width: {_ALVO}px !important;
   height: {_ALVO}px !important;
-  margin: 0 auto !important;
   padding: 0 !important;
   justify-content: center !important;
   border-radius: 10px !important;

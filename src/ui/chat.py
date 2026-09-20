@@ -18,6 +18,10 @@ CANAL = "streamlit"
 # vai para o modelo e limitado a parte por HISTORY_LIMIT.
 LIMITE_EXIBIDO = 100
 
+# Altura da janela de conversa, em pixels. A caixa rola por dentro e mantem o
+# painel de troca de lead e o campo de mensagem sempre visiveis.
+ALTURA_DA_CONVERSA = 460
+
 
 def _prefixo_do_usuario() -> str:
     return f"streamlit_{st.session_state.get('username', 'demo')}_"
@@ -198,11 +202,15 @@ def render_chat():
         _retomar_ultima_conversa()
 
     _painel_da_conversa()
-    st.divider()
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(markdown_seguro(msg["content"]))
+    # A conversa fica numa caixa de altura fixa, e não solta na página: solta,
+    # ela empurra o painel de conversa para fora da tela conforme cresce, e
+    # trocar de lead passa a exigir rolar tudo de volta para cima.
+    janela = st.container(height=ALTURA_DA_CONVERSA)
+    with janela:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(markdown_seguro(msg["content"]))
 
     # Desabilitado quando falta configuração: deixar o campo ativo só levaria
     # o usuário a mandar uma mensagem e receber "atendimento indisponível".
@@ -212,29 +220,30 @@ def render_chat():
     )
     if prompt := entrada:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(markdown_seguro(prompt))
+        with janela:
+            with st.chat_message("user"):
+                st.markdown(markdown_seguro(prompt))
 
-        with st.chat_message("assistant"):
-            with st.spinner("Pensando..."):
-                lead_id = _garantir_lead()
-                deps = SDRDependencies(
-                    lead_id=lead_id,
-                    channel=CANAL,
-                    lead_service=LeadService(),
-                    catalog_service=CatalogService(),
-                    scheduling_service=SchedulingService(),
-                    llm_usage_service=LLMUsageService(),
-                )
-                response = asyncio.run(
-                    process_message(
+            with st.chat_message("assistant"):
+                with st.spinner("Pensando..."):
+                    lead_id = _garantir_lead()
+                    deps = SDRDependencies(
                         lead_id=lead_id,
-                        user_text=prompt,
                         channel=CANAL,
-                        deps=deps,
+                        lead_service=LeadService(),
+                        catalog_service=CatalogService(),
+                        scheduling_service=SchedulingService(),
+                        llm_usage_service=LLMUsageService(),
                     )
-                )
-                st.markdown(markdown_seguro(response))
+                    response = asyncio.run(
+                        process_message(
+                            lead_id=lead_id,
+                            user_text=prompt,
+                            channel=CANAL,
+                            deps=deps,
+                        )
+                    )
+                    st.markdown(markdown_seguro(response))
 
         st.session_state.messages.append({"role": "assistant", "content": response})
         # Rerun para o painel refletir o lead recem-criado e a contagem de
