@@ -15,6 +15,7 @@ from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
 from src.ui.estilo import aplicar_estilo
 from src.ui.leads import render_ficha, render_leads
+from src.ui.login import tela_de_login
 from src.ui.navegacao import (
     aviso_de_chave_de_cookie_gerada,
     menu_do_usuario,
@@ -49,18 +50,10 @@ authenticator = stauth.Authenticate(
 
 # streamlit-authenticator >= 0.4: login() renderiza o formulário e grava o
 # resultado em st.session_state; não retorna tupla.
-authenticator.login()
+if tela_de_login(authenticator) is not True:
+    st.stop()
 
-authentication_status = st.session_state.get("authentication_status")
 name = st.session_state.get("name")
-
-if authentication_status is False:
-    st.error("Usuário ou senha incorretos.")
-    st.stop()
-
-if authentication_status is None:
-    st.warning("Por favor, faça login para acessar o sistema.")
-    st.stop()
 
 # Navegação como páginas de verdade: os links ficam na barra lateral recolhível
 # e cada página monta só o seu próprio conteúdo. `st.switch_page` é o que

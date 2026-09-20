@@ -124,6 +124,10 @@ navegacao.run()
 
 O nome do usuário e o botão de sair ficam num menu flutuante no pé da barra lateral (`src/ui/navegacao.py`).
 
+A tela de login (`src/ui/login.py`) é a única sem navegação: ela esconde a barra lateral, limita a caixa a 420px — em `layout="wide"` os dois campos atravessariam a tela — e traduz os rótulos do formulário, que vêm em inglês na biblioteca.
+
+A validação do cookie acontece com `login(location="unrendered")`, **antes** de desenhar qualquer coisa. Quem chega com sessão válida não passa pela tela de login; sem essa ordem, a marca e o CSS de login apareceriam por cima do dashboard no mesmo carregamento.
+
 ### Ponto-chave: `st.stop()`
 
 O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou não foi realizado. Isso **interrompe a execução do script** — nenhum widget, dado ou QR code é renderizado.
