@@ -18,17 +18,32 @@ STATUS_DISPONIVEIS = [
     "Todos", "novo", "em_qualificacao", "qualificado", "agendado", "inativo",
 ]
 ROTULO_DO_TIPO = {
-    "followup": "🔄 follow-up automático",
-    "handover": "🤝 handover ao corretor",
-    "system_notice": "⚙️ aviso do sistema",
+    "followup": ":material/autorenew: follow-up automático",
+    "handover": ":material/handshake: handover ao corretor",
+    "system_notice": ":material/settings: aviso do sistema",
 }
+
+# Cor do selo de cada status. Sem o selo colorido, o status e mais uma palavra
+# na linha; com ele, o corretor varre a lista pela cor.
+COR_DO_STATUS = {
+    "novo": "blue",
+    "em_qualificacao": "violet",
+    "qualificado": "green",
+    "agendado": "primary",
+    "inativo": "gray",
+}
+
+# Faixas de temperatura do lead, da mais quente para a mais fria. O numero do
+# score fica na metrica; o selo traduz esse numero em uma palavra, que se le de
+# relance e nao depende de o leitor saber que 5,5 e mediano.
+FAIXAS_DE_SCORE = ((7.0, "red", "quente"), (4.0, "orange", "morno"))
 
 
 def _painel_de_custo(db) -> None:
     """Consumo de LLM do dia e do mes, com o quanto falta para o teto."""
     resumo = LLMUsageService().get_dashboard_summary(db)
 
-    with st.expander("💰 Consumo de LLM", expanded=False):
+    with st.expander("Consumo de LLM", expanded=False, icon=":material/payments:"):
         col_dia, col_mes = st.columns(2)
         for coluna, periodo, rotulo in (
             (col_dia, "daily", "Hoje"),
@@ -64,17 +79,26 @@ def _kpis(db) -> None:
         db.query(func.count(Lead.id)).filter(Lead.status == "inativo").scalar() or 0
     )
 
+    # `border=True` fecha cada numero em um cartao: sem a borda os quatro
+    # viram texto solto no topo da pagina, sem separacao entre eles.
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total de Leads", total_leads)
-    col2.metric("🔥 Leads Quentes", leads_quentes)
-    col3.metric("📅 Agendamentos", agendamentos)
-    col4.metric("💤 Inativos", leads_inativos)
+    col1.metric("Total de leads", total_leads, icon=":material/group:", border=True)
+    col2.metric(
+        "Leads quentes",
+        leads_quentes,
+        icon=":material/local_fire_department:",
+        border=True,
+    )
+    col3.metric("Agendamentos", agendamentos, icon=":material/event:", border=True)
+    col4.metric("Inativos", leads_inativos, icon=":material/bedtime:", border=True)
 
 
 def _leads_filtrados(db) -> list[Lead]:
     col1, col2, col3 = st.columns(3)
     with col1:
-        busca = st.text_input("🔍 Buscar", placeholder="Nome, bairro, intenção...")
+        busca = st.text_input(
+            "Buscar", placeholder="Nome, bairro, intenção...", type="search"
+        )
     with col2:
         status_filtro = st.selectbox("Status", STATUS_DISPONIVEIS)
     with col3:
@@ -126,26 +150,50 @@ def _mostrar_agendamentos(lead: Lead, db) -> None:
         )
 
 
-def _acoes_do_lead(lead: Lead) -> None:
+def _botoes_do_lead(lead: Lead) -> None:
+    """As duas acoes do cartao, na coluna da direita."""
     # Fora de `on_click` de proposito: `abrir_conversa_no_simulador` termina em
     # `st.switch_page`, que interrompe a execucao para trocar de pagina.
     if st.button(
-        "💬 Abrir no simulador",
+        "Abrir no simulador",
+        icon=":material/forum:",
         key=f"abrir_{lead.id}",
         width="stretch",
         help="Carrega esta conversa no chat para você continuar de onde parou.",
     ):
         abrir_conversa_no_simulador(lead.id)
 
+    # Some enquanto a confirmacao esta aberta, para nao ficarem dois botoes de
+    # excluir no mesmo cartao.
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
-        if st.button("🗑️ Excluir lead", key=f"excluir_{lead.id}", width="stretch"):
+        if st.button(
+            "Excluir lead",
+            icon=":material/delete:",
+            key=f"excluir_{lead.id}",
+            width="stretch",
+        ):
             st.session_state[CHAVE_EXCLUSAO] = lead.id
             st.rerun()
+
+
+def _confirmacao_de_exclusao(lead: Lead) -> None:
+    """Segundo clique da exclusao, na largura toda do cartao.
+
+    Fora da coluna de acoes de proposito: espremido em um terco da largura, o
+    aviso quebrava em varias linhas e os botoes ficavam menores que o alvo
+    confortavel de clique.
+    """
+    if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return
 
-    st.warning(f"Excluir o lead {lead.id} e todas as suas mensagens?")
-    col_sim, col_nao = st.columns(2)
-    if col_sim.button("Confirmar", key=f"confirma_{lead.id}", type="primary"):
+    st.warning(
+        f"Excluir o lead {lead.id} e todas as suas mensagens?",
+        icon=":material/warning:",
+    )
+    col_sim, col_nao, _ = st.columns([2, 2, 6])
+    if col_sim.button(
+        "Confirmar", key=f"confirma_{lead.id}", type="primary", width="stretch"
+    ):
         with get_db() as db:
             LeadService().delete_lead(lead.id, db)
         st.session_state.pop(CHAVE_EXCLUSAO, None)
@@ -154,13 +202,116 @@ def _acoes_do_lead(lead: Lead) -> None:
             st.session_state.lead_id = None
             st.session_state.messages = []
         st.rerun()
-    if col_nao.button("Cancelar", key=f"cancela_{lead.id}"):
+    if col_nao.button("Cancelar", key=f"cancela_{lead.id}", width="stretch"):
         st.session_state.pop(CHAVE_EXCLUSAO, None)
         st.rerun()
 
 
+def _selos_do_lead(lead: Lead, score: float) -> str:
+    """Status, temperatura, intencao e regiao como selos coloridos."""
+    selos = [
+        f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge[{lead.status.replace('_', ' ')}]"
+    ]
+
+    cor, palavra = "gray", "frio"
+    for piso, cor_da_faixa, nome_da_faixa in FAIXAS_DE_SCORE:
+        if score >= piso:
+            cor, palavra = cor_da_faixa, nome_da_faixa
+            break
+    selos.append(f":{cor}-badge[{palavra}]")
+
+    if lead.intencao:
+        selos.append(f":gray-badge[{lead.intencao}]")
+    regiao = lead.regiao_interesse or lead.bairro_interesse
+    if regiao:
+        selos.append(f":gray-badge[:material/location_on: {regiao}]")
+    return " ".join(selos)
+
+
+def _dinheiro(valor) -> str:
+    return f"R$ {valor:,.0f}".replace(",", ".")
+
+
+def _faixa_de_orcamento(lead: Lead) -> str:
+    """Orcamento em texto, dizendo qual das duas pontas e conhecida."""
+    if lead.orcamento_min is None and lead.orcamento_max is None:
+        return "N/I"
+    if lead.orcamento_min is None:
+        return f"até {_dinheiro(lead.orcamento_max)}"
+    if lead.orcamento_max is None:
+        return f"a partir de {_dinheiro(lead.orcamento_min)}"
+    return f"{_dinheiro(lead.orcamento_min)} a {_dinheiro(lead.orcamento_max)}"
+
+
+def _detalhes_do_lead(lead: Lead, db) -> None:
+    st.write(f"**Intenção:** {lead.intencao or 'N/I'}")
+    regiao = lead.regiao_interesse or lead.bairro_interesse or "N/I"
+    st.write(f"**Região:** {regiao}")
+    # `markdown_seguro` porque dois `R$` na mesma linha viram uma formula LaTeX
+    # para o Streamlit: os cifroes somem e o texto entre eles sai embaralhado.
+    st.write(markdown_seguro(f"**Orçamento:** {_faixa_de_orcamento(lead)}"))
+    st.write(f"**Quartos:** {lead.quartos or 'N/I'}")
+    st.write(f"**Urgência:** {lead.urgencia or 'N/I'}")
+
+    if lead.perfil_narrativo:
+        st.write("**Perfil narrativo**")
+        st.markdown(markdown_seguro(lead.perfil_narrativo))
+    if lead.resumo:
+        st.write("**Resumo executivo**")
+        st.markdown(markdown_seguro(lead.resumo))
+
+    _mostrar_agendamentos(lead, db)
+
+
+def _cartao_do_lead(lead: Lead, db) -> None:
+    """Uma linha da lista de leads.
+
+    O nome, os selos e o score ficam abertos, e as acoes ao lado: a lista se
+    varre de relance procurando quem atender primeiro, e isso nao pode exigir
+    abrir cada item. O que e leitura demorada — ficha e conversa — fica atras
+    de um clique.
+    """
+    score = float(lead.score or 0)
+    nome = lead.nome or f"Lead {lead.id}"
+
+    with st.container(border=True):
+        col_lead, col_score, col_acoes = st.columns(
+            [6, 2, 3], vertical_alignment="center"
+        )
+
+        with col_lead:
+            st.markdown(f"#### {markdown_seguro(nome)}")
+            st.markdown(_selos_do_lead(lead, score))
+
+        with col_score:
+            st.metric(
+                "Score",
+                f"{score:.1f}" if lead.score is not None else "—",
+                label_visibility="visible",
+            )
+
+        with col_acoes:
+            _botoes_do_lead(lead)
+
+        _confirmacao_de_exclusao(lead)
+
+        col_ficha, col_conversa = st.columns([1, 3], vertical_alignment="center")
+        with col_ficha:
+            ver_ficha = st.toggle("Ficha do lead", key=f"ficha_{lead.id}")
+        with col_conversa:
+            # A conversa fica atras de um toggle: sem isso o Streamlit montaria
+            # o historico inteiro dos 50 leads a cada recarga.
+            ver_conversa = st.toggle("Ver conversa", key=f"conversa_{lead.id}")
+
+        # Fora das colunas: ficha e conversa ocupam a largura toda do cartao.
+        if ver_ficha:
+            _detalhes_do_lead(lead, db)
+        if ver_conversa:
+            _mostrar_conversa(lead, db)
+
+
 def render_dashboard():
-    st.header("📊 Dashboard do Corretor")
+    st.header("Dashboard do Corretor", divider="gray")
 
     with get_db() as db:
         _kpis(db)
@@ -174,37 +325,4 @@ def render_dashboard():
 
         st.subheader(f"Leads ({len(leads)})")
         for lead in leads:
-            score = float(lead.score or 0)
-            emoji = "🔴" if score >= 7 else "🟠" if score >= 4 else "⚪"
-            nome = lead.nome or f"Lead {lead.id}"
-            marcador = lead.score if lead.score is not None else "N/A"
-            with st.expander(f"{emoji} {nome} | {lead.status} | Score: {marcador}"):
-                col_info, col_acoes = st.columns([3, 1])
-
-                with col_info:
-                    st.write(f"**Intenção:** {lead.intencao or 'N/I'}")
-                    regiao = lead.regiao_interesse or lead.bairro_interesse or "N/I"
-                    st.write(f"**Região:** {regiao}")
-                    st.write(
-                        f"**Orçamento:** R$ {lead.orcamento_min or '?'} "
-                        f"a R$ {lead.orcamento_max or '?'}"
-                    )
-                    st.write(f"**Quartos:** {lead.quartos or 'N/I'}")
-                    st.write(f"**Urgência:** {lead.urgencia or 'N/I'}")
-
-                    if lead.perfil_narrativo:
-                        st.write("**Perfil Narrativo**")
-                        st.markdown(markdown_seguro(lead.perfil_narrativo))
-                    if lead.resumo:
-                        st.write("**Resumo Executivo**")
-                        st.markdown(markdown_seguro(lead.resumo))
-
-                    _mostrar_agendamentos(lead, db)
-
-                with col_acoes:
-                    _acoes_do_lead(lead)
-
-                # A conversa fica atras de um toggle: sem isso o Streamlit
-                # montaria o historico inteiro dos 50 leads a cada recarga.
-                if st.toggle("💬 Ver conversa", key=f"conversa_{lead.id}"):
-                    _mostrar_conversa(lead, db)
+            _cartao_do_lead(lead, db)

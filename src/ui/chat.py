@@ -147,7 +147,9 @@ def _painel_da_conversa() -> None:
         )
 
     with col_nova:
-        nova = st.button("➕ Nova conversa", width="stretch")
+        nova = st.button(
+            "Nova conversa", icon=":material/add:", width="stretch"
+        )
 
     with col_info:
         _resumo_do_lead()
@@ -183,13 +185,13 @@ def _aviso_de_configuracao() -> list[str]:
         f"**Configuração de LLM incompleta** — o chat está desativado.\n\n"
         f"{plural}: {variaveis}\n\n"
         f"Consulte a seção **Configuração** do README.",
-        icon="⚙️",
+        icon=":material/settings:",
     )
     return faltando
 
 
 def render_chat():
-    st.header("💬 Chat com o Agente SDR")
+    st.header("Chat com o Agente SDR", divider="gray")
     st.caption("Simule uma conversa como lead imobiliário")
     faltando = _aviso_de_configuracao()
 

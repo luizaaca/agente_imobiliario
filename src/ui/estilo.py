@@ -22,6 +22,17 @@ _ALVO = 44
 # original de sumir por inteiro — degrada, nao quebra.
 _RAIL_CSS = f"""
 <style>
+/* O que a aplicacao escreve na barra — o menu do usuario — desce para o pe.
+   Vale nos dois estados da barra, aberta e em rail. */
+[data-testid="stSidebarContent"] {{
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}}
+[data-testid="stSidebarUserContent"] {{
+  margin-top: auto !important;
+}}
+
 section[data-testid="stSidebar"][aria-expanded="false"] {{
   width: {_RAIL}px !important;
   min-width: {_RAIL}px !important;
@@ -105,6 +116,26 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarN
   color: #fff !important;
   border: 1px solid rgba(255, 255, 255, 0.16) !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}}
+
+/* No rail o botao do usuario perde o nome e a seta e vira so o avatar, no
+   mesmo alvo de 44px dos links — senao um botao de 300px sobraria da barra. */
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarUserContent"] {{
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}}
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverButton"] {{
+  width: {_ALVO}px !important;
+  min-width: {_ALVO}px !important;
+  height: {_ALVO}px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+}}
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverButton"] [data-testid="stMarkdownContainer"],
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverButton"] div[aria-hidden="true"] {{
+  display: none !important;
 }}
 </style>
 """

@@ -51,21 +51,28 @@ authentication_status = st.session_state.get("authentication_status")
 name = st.session_state.get("name")
 
 if authentication_status is False:
-    st.error("❌ Usuário ou senha incorretos.")
+    st.error("Usuário ou senha incorretos.")
     st.stop()
 
 if authentication_status is None:
-    st.warning("🔒 Por favor, faça login para acessar o sistema.")
+    st.warning("Por favor, faça login para acessar o sistema.")
     st.stop()
 
 # Navegação como páginas de verdade: os links ficam na barra lateral recolhível
 # e cada página monta só o seu próprio conteúdo. `st.switch_page` é o que
 # permite ao dashboard abrir a conversa de um lead direto no simulador.
 pagina_chat = st.Page(
-    render_chat, title="Chat Simulador", icon="💬", url_path="chat", default=True
+    render_chat,
+    title="Chat Simulador",
+    icon=":material/forum:",
+    url_path="chat",
+    default=True,
 )
 pagina_dashboard = st.Page(
-    render_dashboard, title="Dashboard", icon="📊", url_path="dashboard"
+    render_dashboard,
+    title="Dashboard",
+    icon=":material/space_dashboard:",
+    url_path="dashboard",
 )
 registrar_paginas(pagina_chat, pagina_dashboard)
 

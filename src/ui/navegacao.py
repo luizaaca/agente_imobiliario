@@ -68,14 +68,17 @@ def aviso_de_chave_de_cookie_gerada() -> None:
 
 
 def menu_do_usuario(nome: str, authenticator: Any) -> None:
-    """Identificacao do usuario no topo a direita, com menu flutuante.
+    """Identificacao do usuario no rodape da barra lateral, com menu flutuante.
 
-    Fica fora da barra lateral porque la o espaco e da navegacao; o popover
-    guarda o que e ocasional (nome completo, versao, sair).
+    Quem esta logado e chrome da aplicacao, nao conteudo da tela: no corpo da
+    pagina o avatar disputava espaco com o titulo e empurrava a pagina para
+    baixo. No pe da barra ele fica junto da navegacao, e com a barra recolhida
+    sobra so o avatar, alinhado com os icones — o CSS do rail cuida disso.
+
+    O popover guarda o que e ocasional: nome completo, versao e sair.
     """
     nome = nome or "Usuário"
-    _, coluna = st.columns([5, 1], vertical_alignment="center")
-    with coluna, st.popover(
+    with st.sidebar, st.popover(
         nome.split()[0], icon=":material/account_circle:", width="stretch"
     ):
         st.markdown(f"**{nome}**")
