@@ -11,6 +11,7 @@ import yaml
 from src.config import settings
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
+from src.ui.estilo import aplicar_estilo
 from src.ui.navegacao import (
     aviso_de_chave_de_cookie_gerada,
     menu_do_usuario,
@@ -68,8 +69,12 @@ pagina_dashboard = st.Page(
 )
 registrar_paginas(pagina_chat, pagina_dashboard)
 
-navegacao = st.navigation([pagina_chat, pagina_dashboard])
+# O dashboard vem primeiro na lista e o simulador por ultimo. A ordem da lista
+# e so a ordem dos links: `default=True` no chat continua mandando quem abre a
+# aplicacao direto para ele.
+navegacao = st.navigation([pagina_dashboard, pagina_chat])
 
+aplicar_estilo()
 menu_do_usuario(name, authenticator)
 aviso_de_chave_de_cookie_gerada()
 navegacao.run()
