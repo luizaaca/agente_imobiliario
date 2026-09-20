@@ -11,7 +11,11 @@ import yaml
 from src.config import settings
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
-from src.ui.navegacao import menu_do_usuario, registrar_paginas
+from src.ui.navegacao import (
+    aviso_de_chave_de_cookie_gerada,
+    menu_do_usuario,
+    registrar_paginas,
+)
 
 st.set_page_config(
     page_title="Agente SDR Imobiliário",
@@ -67,4 +71,5 @@ registrar_paginas(pagina_chat, pagina_dashboard)
 navegacao = st.navigation([pagina_chat, pagina_dashboard])
 
 menu_do_usuario(name, authenticator)
+aviso_de_chave_de_cookie_gerada()
 navegacao.run()

@@ -80,7 +80,10 @@ with open("config/credentials.yaml") as f:
     config = yaml.safe_load(f)
 
 # Substituir a chave do cookie pela variável de ambiente
-config["cookie"]["key"] = os.getenv("AUTH_COOKIE_KEY", "dev_fallback_key")
+config["cookie"]["key"] = settings.AUTH_COOKIE_KEY
+# Sem AUTH_COOKIE_KEY no ambiente, src/config.py sorteia uma chave por
+# processo e registra alerta. Um default fixo aqui seria publico, e com ele
+# qualquer um forjaria um cookie de admin sem passar pelo login.
 
 authenticator = stauth.Authenticate(
     credentials=config["credentials"],

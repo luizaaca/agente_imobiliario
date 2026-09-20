@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from src import config as config_mod
 from src.agent import provider as provider_mod
 from src.agent.provider import LLMConfigError, _construir_modelo, build_model
 
@@ -189,3 +190,38 @@ def test_chat_desabilita_quando_falta_configuracao(monkeypatch):
 
     monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-existe")
     assert chat_mod.configuracao_ausente() == []
+
+
+# --- Chave de assinatura do cookie -------------------------------------------
+
+
+def test_chave_do_cookie_vem_do_ambiente(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_KEY", "chave-definida-pelo-operador")
+    chave, gerada = config_mod._resolver_chave_do_cookie()
+
+    assert chave == "chave-definida-pelo-operador"
+    assert gerada is False
+
+
+def test_chave_do_cookie_e_sorteada_quando_ausente(monkeypatch):
+    """Um valor fixo no codigo seria publico: daria para forjar cookie de admin."""
+    monkeypatch.delenv("AUTH_COOKIE_KEY", raising=False)
+    chave, gerada = config_mod._resolver_chave_do_cookie()
+
+    assert gerada is True
+    assert len(chave) >= 40
+
+
+def test_chave_vazia_conta_como_ausente(monkeypatch):
+    monkeypatch.setenv("AUTH_COOKIE_KEY", "   ")
+    _, gerada = config_mod._resolver_chave_do_cookie()
+
+    assert gerada is True
+
+
+def test_chaves_sorteadas_nao_se_repetem(monkeypatch):
+    monkeypatch.delenv("AUTH_COOKIE_KEY", raising=False)
+    primeira, _ = config_mod._resolver_chave_do_cookie()
+    segunda, _ = config_mod._resolver_chave_do_cookie()
+
+    assert primeira != segunda

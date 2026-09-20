@@ -1,13 +1,45 @@
 """Configurações centralizadas da aplicação."""
 
+import logging
 import os
+import secrets
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 # Carregar .env do diretório raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+
+
+def _resolver_chave_do_cookie() -> tuple[str, bool]:
+    """Chave de assinatura do cookie de sessão, gerando uma se não houver.
+
+    Devolve `(chave, foi_gerada)`.
+
+    O cookie de sessão é assinado com esta chave: quem a conhece consegue
+    forjar um cookie e entrar como qualquer usuário sem passar pelo login. Um
+    valor fixo no código seria público, então na ausência da variável é melhor
+    sortear uma na inicialização.
+
+    O preço é que a chave muda a cada boot do processo, invalidando as sessões
+    abertas. Em produção, defina `AUTH_COOKIE_KEY` — sem ela, além do relogin a
+    cada restart, réplicas diferentes assinariam com chaves diferentes e o
+    usuário seria deslogado de forma aparentemente aleatória.
+    """
+    do_ambiente = (os.getenv("AUTH_COOKIE_KEY") or "").strip()
+    if do_ambiente:
+        return do_ambiente, False
+
+    logger.warning(
+        "event=auth_cookie_key_gerada "
+        "detalhe=AUTH_COOKIE_KEY_ausente_chave_aleatoria_por_processo "
+        "impacto=sessoes_caem_a_cada_restart_e_nao_funcionam_com_replicas "
+        "acao=defina_AUTH_COOKIE_KEY_no_ambiente"
+    )
+    return secrets.token_urlsafe(48), True
 
 
 class Settings:
@@ -29,7 +61,7 @@ class Settings:
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
     # Autenticação
-    AUTH_COOKIE_KEY: str = os.getenv("AUTH_COOKIE_KEY", "dev_fallback_key")
+    AUTH_COOKIE_KEY, AUTH_COOKIE_KEY_GERADA = _resolver_chave_do_cookie()
 
     # Limites de custo LLM
     LLM_DAILY_TOKEN_BUDGET: int = int(os.getenv("LLM_DAILY_TOKEN_BUDGET", "100000"))

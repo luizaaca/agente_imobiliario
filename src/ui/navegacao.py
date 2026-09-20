@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 import streamlit as st
 
+from src.config import settings
+
 # Lead que o dashboard pediu para abrir no simulador. O chat consome e limpa.
 CHAVE_CONVERSA_PEDIDA = "conversa_pedida"
 
@@ -34,6 +36,30 @@ def abrir_conversa_no_simulador(lead_id: int) -> None:
 def conversa_pedida() -> Optional[int]:
     """Consome o pedido pendente de abertura de conversa, se houver."""
     return st.session_state.pop(CHAVE_CONVERSA_PEDIDA, None)
+
+
+# Marca que o balão da chave de cookie já foi mostrado nesta sessão.
+CHAVE_AVISO_COOKIE = "aviso_cookie_visto"
+
+
+def aviso_de_chave_de_cookie_gerada() -> None:
+    """Balão dispensável avisando que a chave do cookie foi sorteada.
+
+    Aparece uma vez por sessão: o log registra o alerta para quem opera, e este
+    balão existe para quem está usando a tela entender por que pode ser
+    deslogado sem motivo aparente depois de um restart.
+    """
+    if not settings.AUTH_COOKIE_KEY_GERADA:
+        return
+    if st.session_state.get(CHAVE_AVISO_COOKIE):
+        return
+
+    st.session_state[CHAVE_AVISO_COOKIE] = True
+    st.toast(
+        "`AUTH_COOKIE_KEY` ausente — uma chave temporária foi gerada. "
+        "Sua sessão cai a cada reinício da aplicação.",
+        icon=":material/key_off:",
+    )
 
 
 def menu_do_usuario(nome: str, authenticator: Any) -> None:
