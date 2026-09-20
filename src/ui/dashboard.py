@@ -1,9 +1,12 @@
 """Dashboard do corretor com KPIs, custo de LLM, leads e conversas."""
+import asyncio
+
 import streamlit as st
 from sqlalchemy import desc, func
 
-from src.db.models import Agendamento, Lead
+from src.db.models import Agendamento, FollowUpAttempt, Lead
 from src.db.session import get_db
+from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
@@ -13,6 +16,10 @@ from src.ui.texto import markdown_seguro
 # Guarda o id do lead cujo botao de excluir foi clicado, para que o segundo
 # clique — o que apaga de verdade — seja deliberado.
 CHAVE_EXCLUSAO = "lead_a_excluir"
+
+# Desfecho do ultimo disparo manual de follow-up: (lead_id, tipo, texto).
+# Precisa sobreviver ao rerun para a mensagem aparecer na tela seguinte.
+CHAVE_AVISO_FOLLOWUP = "aviso_followup"
 
 STATUS_DISPONIVEIS = [
     "Todos", "novo", "em_qualificacao", "qualificado", "agendado", "inativo",
@@ -39,11 +46,59 @@ COR_DO_STATUS = {
 FAIXAS_DE_SCORE = ((7.0, "red", "quente"), (4.0, "orange", "morno"))
 
 
+def _alerta_de_budget(resumo: dict) -> None:
+    """Avisa, fora do expander, quando o teto de tokens estourou.
+
+    Dentro do expander fechado o aviso nao existe na pratica: quem abre o
+    dashboard com o orcamento estourado veria uma tela normal e so descobriria
+    o bloqueio quando o chat parasse de responder.
+    """
+    if resumo["monthly_budget_exceeded"]:
+        st.error(
+            "**Orçamento mensal de LLM esgotado.** Conversas novas recebem "
+            "mensagem de indisponibilidade até a virada do mês ou até "
+            "`LLM_MONTHLY_TOKEN_BUDGET` subir.",
+            icon=":material/credit_card_off:",
+        )
+    elif resumo["daily_budget_exceeded"]:
+        st.warning(
+            "**Orçamento diário de LLM esgotado.** O chat e o follow-up ficam "
+            "bloqueados até amanhã, ou até `LLM_DAILY_TOKEN_BUDGET` subir.",
+            icon=":material/schedule:",
+        )
+
+
+def _saude_do_agente(resumo: dict) -> None:
+    """Tempo de resposta e taxa de erro do provider, hoje.
+
+    Ambos sao `None` enquanto nao houve chamada nenhuma no dia, e a tela
+    mostra "—": um zero ali afirmaria que esta tudo bem quando na verdade nada
+    foi exercitado.
+    """
+    latencia = resumo["daily_latency_ms"]
+    taxa = resumo["daily_error_rate"]
+
+    col_tempo, col_erro = st.columns(2)
+    col_tempo.metric(
+        "Tempo médio de resposta",
+        f"{latencia / 1000:.1f} s" if latencia is not None else "—",
+        help="Média das chamadas bem-sucedidas ao provider hoje.",
+    )
+    col_erro.metric(
+        "Taxa de erro",
+        f"{taxa:.0%}" if taxa is not None else "—",
+        help="Chamadas que falharam sobre o total de chamadas de hoje.",
+    )
+
+
 def _painel_de_custo(db) -> None:
     """Consumo de LLM do dia e do mes, com o quanto falta para o teto."""
     resumo = LLMUsageService().get_dashboard_summary(db)
+    _alerta_de_budget(resumo)
 
     with st.expander("Consumo de LLM", expanded=False, icon=":material/payments:"):
+        _saude_do_agente(resumo)
+        st.divider()
         col_dia, col_mes = st.columns(2)
         for coluna, periodo, rotulo in (
             (col_dia, "daily", "Hoje"),
@@ -78,10 +133,17 @@ def _kpis(db) -> None:
     leads_inativos = (
         db.query(func.count(Lead.id)).filter(Lead.status == "inativo").scalar() or 0
     )
+    # So as tentativas que sairam de fato: uma mensagem gerada sem canal ativo
+    # aparece no painel, mas nao foi disparada para ninguem.
+    followups = (
+        db.query(func.count(FollowUpAttempt.id))
+        .filter(FollowUpAttempt.status == "sent")
+        .scalar() or 0
+    )
 
-    # `border=True` fecha cada numero em um cartao: sem a borda os quatro
-    # viram texto solto no topo da pagina, sem separacao entre eles.
-    col1, col2, col3, col4 = st.columns(4)
+    # `border=True` fecha cada numero em um cartao: sem a borda os cinco viram
+    # texto solto no topo da pagina, sem separacao entre eles.
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total de leads", total_leads, icon=":material/group:", border=True)
     col2.metric(
         "Leads quentes",
@@ -90,7 +152,10 @@ def _kpis(db) -> None:
         border=True,
     )
     col3.metric("Agendamentos", agendamentos, icon=":material/event:", border=True)
-    col4.metric("Inativos", leads_inativos, icon=":material/bedtime:", border=True)
+    col4.metric(
+        "Follow-ups enviados", followups, icon=":material/send:", border=True
+    )
+    col5.metric("Inativos", leads_inativos, icon=":material/bedtime:", border=True)
 
 
 def _leads_filtrados(db) -> list[Lead]:
@@ -150,8 +215,51 @@ def _mostrar_agendamentos(lead: Lead, db) -> None:
         )
 
 
+def _disparar_followup(lead: Lead) -> None:
+    """Gera e despacha o follow-up deste lead agora.
+
+    Sem `sender`: o dashboard nao tem canal de saida proprio. A mensagem e
+    gerada, persistida e aparece na conversa do lead — para os canais com push,
+    quem despacha e o processo do Telegram.
+    """
+    with st.spinner("Gerando follow-up..."):
+        resultado = asyncio.run(run_followup_para_lead(lead.id))
+
+    if not resultado.executado:
+        st.session_state[CHAVE_AVISO_FOLLOWUP] = (lead.id, "aviso", resultado.motivo)
+    else:
+        st.session_state[CHAVE_AVISO_FOLLOWUP] = (
+            lead.id,
+            "ok",
+            "Follow-up gerado e registrado na conversa do lead.",
+        )
+    st.rerun()
+
+
+def _aviso_do_followup(lead: Lead) -> None:
+    """Desfecho do ultimo disparo, na largura toda do cartao."""
+    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
+    if not aviso or aviso[0] != lead.id:
+        return
+
+    _, tipo, texto = aviso
+    if tipo == "ok":
+        st.success(texto, icon=":material/send:")
+    else:
+        st.info(texto, icon=":material/info:")
+
+
 def _botoes_do_lead(lead: Lead) -> None:
-    """As duas acoes do cartao, na coluna da direita."""
+    """As acoes do cartao, na coluna da direita."""
+    if st.button(
+        "Disparar follow-up",
+        icon=":material/send:",
+        key=f"followup_{lead.id}",
+        width="stretch",
+        help="Mesma régua do follow-up automático, sem esperar a janela de inatividade.",
+    ):
+        _disparar_followup(lead)
+
     # Fora de `on_click` de proposito: `abrir_conversa_no_simulador` termina em
     # `st.switch_page`, que interrompe a execucao para trocar de pagina.
     if st.button(
@@ -293,6 +401,7 @@ def _cartao_do_lead(lead: Lead, db) -> None:
         with col_acoes:
             _botoes_do_lead(lead)
 
+        _aviso_do_followup(lead)
         _confirmacao_de_exclusao(lead)
 
         col_ficha, col_conversa = st.columns([1, 3], vertical_alignment="center")

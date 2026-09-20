@@ -130,6 +130,18 @@ class FollowUpService:
             .all()
         )
 
+    def regua_do_status(self, status: str) -> Optional[str]:
+        """Régua que atende um lead neste estágio do funil.
+
+        Só o estágio, sem a janela de inatividade: serve ao disparo manual do
+        dashboard, em que o corretor já decidiu que é hora de falar com o lead.
+        A seleção automática continua em `get_eligible_leads`.
+        """
+        for nome, config in REGUAS.items():
+            if status in config["status_alvo"]:
+                return nome
+        return None
+
     def get_attempts_count(
         self, lead_id: int, regua: str, db: Session
     ) -> int:
