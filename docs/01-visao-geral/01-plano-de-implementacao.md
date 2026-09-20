@@ -312,8 +312,8 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   - **Pós-envio de imóveis** (>24h): pergunta se viu as opções, qual agradou mais.
   - **Pós-agendamento** (<24h antes): confirmação/lembrete de visita ou ligação.
 - [x] Registrar cada follow-up no histórico do lead.
-- [ ] Manter botão "Disparar Follow-up" no dashboard para ação manual sob demanda (mesma lógica, gatilho diferente).
-  > O disparo manual existe como `python -m scripts.run_followup_once`, fora da tela.
+- [x] Manter botão "Disparar Follow-up" no dashboard para ação manual sob demanda (mesma lógica, gatilho diferente).
+  > O botão do cartão dispensa apenas a janela de inatividade — quem está olhando o lead já decidiu que é hora. O teto de tentativas da régua e o orçamento de LLM continuam valendo. `python -m scripts.run_followup_once` roda um ciclo inteiro pela linha de comando.
 
 ### Fase 5: Canal Telegram
 - [ ] Criar bot via @BotFather e configurar `TELEGRAM_BOT_TOKEN` no `.env`.
@@ -335,19 +335,19 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   > Histórico funciona. Não há streaming: a resposta aparece inteira de uma vez.
 - [x] Desenvolver dashboard centrado no **goal principal: agendar ligação do corretor com o cliente**.
 - [x] Implementar componentes do dashboard:
-  - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Ligações agendadas, Leads inativos.
+  - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups enviados, Leads inativos.
   - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
   - [x] **Filtros** (`st.selectbox`): Status (Novo, Em Qualificação, Qualificado, Agendado, Inativo) e Intenção (Compra, Aluguel, Investimento).
-  - [ ] **Tabela de leads ordenável por score** (`st.dataframe`):
-    > A lista é ordenada por score decrescente e traz o indicador visual, em `st.expander` e não em `st.dataframe`: o expander comporta a conversa e o perfil narrativo, que não cabem numa célula. Não há botões de ação por linha.
+  - [x] **Lista de leads ordenada por score**, um cartão por lead:
+    > Cartão e não `st.dataframe`: a ficha e a conversa do lead não cabem numa célula de tabela.
     - Ordenação padrão: score decrescente (quem ligar primeiro no topo).
-    - Colunas: Nome, Status, Intenção, Região/Bairro, Score (com indicador visual 🔴🟠🟡⚪).
-    - Botão 📞 na coluna de ação para leads qualificados.
-  - [x] **Expander por lead** (`st.expander`):
+    - Aberto no cartão, sem precisar clicar: nome, score e selos de status, temperatura (quente/morno/frio), intenção e região.
+    - Ações por linha: **Disparar follow-up**, **Abrir no simulador** e **Excluir lead**.
+  - [x] **Ficha e conversa atrás de um clique**, na largura do cartão:
     - Perfil narrativo completo (artefato principal).
     - Reuniões/ligações agendadas com datas e imóveis.
     - Resumo executivo com score e próximos passos.
-    - Botões: [📞 Agendar Ligação] e [🔄 Disparar Follow-up].
+    - Conversa do lead como ela aconteceu.
 
 ### Fase 7: Observabilidade, Testes e Refino
 - [x] Instrumentar logs do agente e tools.

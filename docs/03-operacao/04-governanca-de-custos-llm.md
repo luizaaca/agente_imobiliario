@@ -49,8 +49,13 @@ Evita que o custo total saia do controle.
 
 | Limite | Valor Padrão | Variável de Ambiente | Comportamento ao atingir |
 |---|---|---|---|
-| Budget diário (tokens) | 100.000 | `LLM_DAILY_TOKEN_BUDGET` | Warning no log + conversas novas recebem mensagem de indisponibilidade; conversas existentes concluem o turno atual |
-| Budget mensal (tokens) | 3.000.000 | `LLM_MONTHLY_TOKEN_BUDGET` | Alerta no dashboard + bloqueia novas conversas |
+| Budget diário (tokens) | 100.000 | `LLM_DAILY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno, inclusive nas conversas já em andamento |
+| Budget mensal (tokens) | 3.000.000 | `LLM_MONTHLY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno |
+
+O teto vale para todo turno, e não só para conversas novas: um limite que só
+barra quem chega deixa o custo depender de quantas conversas estavam abertas
+no momento em que ele estourou. O ciclo de follow-up checa o mesmo teto antes
+de começar a gerar mensagens.
 
 **Mensagem de indisponibilidade:**
 > "Nosso atendimento digital está temporariamente indisponível. Um corretor entrará em contato em breve pelo número cadastrado."
@@ -81,16 +86,29 @@ class LLMUsage(Base):
     created_at = Column(DateTime, server_default=func.now())
 ```
 
-### Enum de operações
+### Valores de `operation`
 
-```python
-class LLMOperation(str, Enum):
-    CHAT = "chat"             # Resposta conversacional ao lead
-    FOLLOWUP = "followup"     # Mensagem de follow-up automático
-    RESUMO = "resumo"         # Geração de resumo para corretor
-    PERFIL = "perfil"         # Atualização do perfil narrativo
-    BUSCA = "busca"           # Ranking textual (se usar LLM para reranking)
-```
+| Valor | Quando é gravado |
+|---|---|
+| `chat` | resposta conversacional ao lead, em qualquer canal |
+| `followup` | mensagem de follow-up, automática ou disparada pelo corretor |
+
+São os dois únicos, porque são as duas únicas chamadas ao provider que
+existem. O resumo do corretor é montado por template a partir do que já está
+no banco, o perfil narrativo é escrito pelo próprio turno de chat via tool, e
+o ranking da busca é do PostgreSQL — nenhum dos três chama LLM por fora.
+
+### Status de cada chamada
+
+A tabela é o livro-caixa de **toda** chamada ao provider, não só das que
+consumiram token. Uma chamada que falhou entra com `status='erro'`,
+`error_type` e zero token: sem essa linha, a taxa de erro do dashboard seria
+sempre zero, já que a falha existiria apenas no log. A contagem de turnos da
+conversa ignora as falhas — uma instabilidade nossa não pode empurrar o lead
+para o handover por limite.
+
+`latency_ms` guarda o tempo da chamada ao provider, e é a base do tempo médio
+de resposta exibido no painel.
 
 ---
 
@@ -238,33 +256,19 @@ Adicionar uma seção/card no dashboard do corretor:
 ```python
 # src/ui/dashboard.py (trecho conceitual)
 
-st.subheader("📊 Consumo de LLM")
-
-summary = await llm_usage_service.get_dashboard_summary()
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(
-        "Tokens Hoje",
-        f"{summary['daily_tokens']:,}",
-        delta=f"de {summary['daily_budget']:,}",
-    )
-with col2:
-    st.metric(
-        "Tokens Mês",
-        f"{summary['monthly_tokens']:,}",
-        delta=f"de {summary['monthly_budget']:,}",
-    )
-with col3:
-    st.metric(
-        "Custo Estimado Mês",
-        f"${summary['monthly_cost_usd']:.2f}",
-    )
-
-# Barra de progresso visual
-daily_pct = summary["daily_tokens"] / summary["daily_budget"]
-st.progress(min(daily_pct, 1.0), text=f"Budget diário: {daily_pct:.0%}")
+resumo = LLMUsageService().get_dashboard_summary(db)
 ```
+
+O alerta de estouro fica **fora** do expander, na página: dentro de um painel
+fechado ele não existe na prática, e quem abrisse o dashboard com o orçamento
+esgotado veria uma tela normal, descobrindo o bloqueio só quando o chat
+parasse de responder.
+
+Dentro do expander, por período (hoje e mês): tokens consumidos, barra de
+progresso contra o teto e custo estimado. No topo dele, a saúde do agente no
+dia: **tempo médio de resposta** e **taxa de erro**. Os dois aparecem como
+`—`, e não como zero, enquanto não houve chamada nenhuma — zero afirmaria que
+está tudo bem quando nada foi exercitado.
 
 ---
 

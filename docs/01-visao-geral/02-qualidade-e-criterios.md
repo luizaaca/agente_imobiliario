@@ -193,35 +193,56 @@ Para a POC:
 ## 7. Observabilidade
 
 ### 7.1 Eventos mínimos a registrar
-- criação de lead;
-- recebimento de mensagem;
-- resposta do agente;
-- execução de tool;
-- falha de tool;
-- agendamento criado;
-- follow-up disparado;
-- erro de provider LLM;
-- consumo de tokens/custo.
 
-### 7.2 Campos recomendados nos logs
-- `timestamp`
-- `level`
-- `event`
-- `lead_id`
-- `channel`
-- `conversation_id` (quando existir)
-- `tool_name` (quando aplicável)
-- `status`
-- `error_type` (quando aplicável)
+| Evento mínimo | `event=` emitido |
+|---|---|
+| criação de lead | `lead_criado` |
+| recebimento de mensagem | `mensagem_registrada` com `role=user` |
+| resposta do agente | `mensagem_registrada` com `role=assistant` |
+| execução de tool | `tool_iniciada` e `tool_finalizada` |
+| falha de tool | `tool_finalizada` com `status=erro` |
+| agendamento criado | `agendamento_criado` |
+| follow-up disparado | `followup_processado`, `followup_tentativa_registrada` |
+| erro de provider LLM | `llm_call_failed` |
+| consumo de tokens/custo | `llm_usage_registrado` |
+
+Nenhuma linha de log carrega o conteúdo da mensagem: o texto é dado pessoal e
+o que se registra dele é só o tamanho (§6.2).
+
+### 7.2 Campos nos logs
+
+Toda linha emitida pela aplicação começa por `event=<nome>` e segue em pares
+`chave=valor`, para ser filtrável com `grep` sem precisar de um coletor:
+
+| Campo | Quando aparece |
+|---|---|
+| `timestamp`, `level` | sempre, postos pelo `logging` |
+| `event` | sempre |
+| `lead_id` | sempre que a operação tem um lead |
+| `channel` | nas operações de conversa |
+| `correlation_id` | amarra as tools de um turno à chamada que as disparou |
+| `tool_name` | nas execuções de tool |
+| `status` | `ok` ou `erro`, nas operações que podem falhar |
+| `duracao_ms` | nas execuções de tool |
+| `tipo_erro` | classe da exceção, quando houve falha |
 
 ### 7.3 Métricas operacionais mínimas
-- total de leads;
-- leads por status;
-- follow-ups disparados;
-- agendamentos criados;
-- taxa de erro do agente;
-- custo/token por dia;
-- tempo médio de resposta.
+
+Todas visíveis no dashboard do corretor:
+
+| Métrica | Onde aparece |
+|---|---|
+| total de leads | KPI no topo |
+| leads por status | KPIs de leads quentes e inativos, e filtro de status da lista |
+| follow-ups disparados | KPI no topo, contando as tentativas efetivamente enviadas |
+| agendamentos criados | KPI no topo |
+| taxa de erro do agente | painel **Consumo de LLM**, sobre as chamadas do dia |
+| custo/token por dia | painel **Consumo de LLM**, por dia e por mês |
+| tempo médio de resposta | painel **Consumo de LLM**, média das chamadas bem-sucedidas do dia |
+
+Taxa de erro e tempo médio aparecem como `—` enquanto não houve chamada
+nenhuma no dia: um zero afirmaria que está tudo bem quando nada foi
+exercitado.
 
 ---
 

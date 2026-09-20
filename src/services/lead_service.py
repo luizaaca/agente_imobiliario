@@ -140,6 +140,10 @@ class LeadService:
         db.add(new_identity)
         db.commit()
         db.refresh(lead)
+        logger.info(
+            "event=lead_criado lead_id=%s channel=%s status=%s",
+            lead.id, channel, lead.status,
+        )
         return lead
 
     def get_lead(self, lead_id: int, db: Session) -> Optional[Lead]:
@@ -326,6 +330,13 @@ class LeadService:
         db.add(msg)
         db.commit()
         db.refresh(msg)
+        # `role` distingue o que chegou do lead do que o agente respondeu;
+        # o conteúdo fica de fora de propósito, porque é dado pessoal.
+        logger.info(
+            "event=mensagem_registrada lead_id=%s mensagem_id=%s channel=%s "
+            "role=%s tipo=%s tamanho=%s status=%s",
+            lead_id, msg.id, channel, role, message_type, len(content or ""), status,
+        )
         return msg
 
     def mark_message_sent(self, message_id: int, db: Session) -> None:
