@@ -46,14 +46,18 @@ class Settings:
     """Configurações da aplicação carregadas de variáveis de ambiente."""
 
     # LLM
+    # Nomes genéricos de propósito. A POC fala com todo provider pela API
+    # OpenAI-compatible (ADR 0006), mas chamar a credencial de
+    # `OPENAI_API_KEY` sugeria que só servia para a OpenAI — e ficava
+    # incoerente em `LLM_PROVIDER=gemini` com `OPENAI_API_KEY` preenchida.
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "openai")
     # Sem valor padrão de propósito: o nome do modelo é específico do
     # deployment de quem roda (no Azure é o nome do deployment, não o do
     # modelo). Um chute produziria um 404 do provider em vez de uma mensagem
     # dizendo o que falta configurar. Ver `provider.configuracao_ausente`.
     LLM_MODEL: str = os.getenv("LLM_MODEL", "")
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "")
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
 
     # Banco de Dados
     DATABASE_URL: str = os.getenv(

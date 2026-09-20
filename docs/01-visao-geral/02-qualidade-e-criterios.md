@@ -185,7 +185,7 @@ Para a POC:
 - em produção futura, a política de retenção deverá ser formalizada.
 
 ### 6.4 Segredos
-- `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `DATABASE_URL` e chaves de autenticação não devem ser commitados;
+- `LLM_API_KEY`, `TELEGRAM_BOT_TOKEN`, `DATABASE_URL` e chaves de autenticação não devem ser commitados;
 - usar `.env.example` para documentação e `.env` local para execução.
 
 ---

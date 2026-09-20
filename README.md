@@ -98,7 +98,7 @@ Sem chave de LLM a aplicação sobe normalmente e você pode navegar pelo dashbo
 cp .env.example .env
 ```
 
-Preencha `OPENAI_API_KEY` e `LLM_MODEL` (e `OPENAI_BASE_URL`, se não for a OpenAI), depois suba de novo. Qualquer provider OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local.
+Preencha `LLM_API_KEY` e `LLM_MODEL` (e `LLM_BASE_URL`, se não for a OpenAI), depois suba de novo. Qualquer provider OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local.
 
 > O `.env` é opcional para o Compose (`required: false`), mas o `DATABASE_URL` que estiver nele é ignorado dentro dos containers: o Compose aponta para `postgres:5432`, porque `127.0.0.1` dentro do container seria o próprio container.
 
@@ -108,7 +108,7 @@ Preencha `OPENAI_API_KEY` e `LLM_MODEL` (e `OPENAI_BASE_URL`, se não for a Open
 |---|---|
 | `Bind for 0.0.0.0:5432 failed: port is already allocated` | já há um PostgreSQL na 5432. Pare o outro, ou mapeie outra porta em um `docker-compose.override.yml` |
 | `Bind for 0.0.0.0:8501 failed` | já há um Streamlit rodando na 8501 |
-| O chat responde só "atendimento temporariamente indisponível" | falta `OPENAI_API_KEY` no `.env` — ver o passo acima |
+| O chat responde só "atendimento temporariamente indisponível" | falta `LLM_API_KEY` ou `LLM_MODEL` — a própria tela do chat diz quais |
 | `checking context: can't stat ... .pytest_cache` | diretório de cache com permissões travadas na cópia local; apague-o e rode de novo |
 
 Para encerrar: `docker compose down`. **Não use `-v`** a menos que queira apagar o banco junto.
@@ -133,7 +133,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Preencha no `.env` pelo menos `OPENAI_API_KEY`, `LLM_MODEL` e `AUTH_COOKIE_KEY`. Depois:
+Preencha no `.env` pelo menos `LLM_API_KEY`, `LLM_MODEL` e `AUTH_COOKIE_KEY`. Depois:
 
 ```bash
 alembic upgrade head
@@ -166,7 +166,7 @@ Precisa de `TELEGRAM_BOT_TOKEN` no `.env`, obtido com o @BotFather. Este caminho
 Tudo se configura por **variável de ambiente**. Como elas chegam ao processo é escolha de quem executa — a aplicação não distingue:
 
 - um arquivo `.env` na raiz (o Compose o lê sozinho; `cp .env.example .env`);
-- variáveis do shell: `OPENAI_API_KEY=sk-... docker compose up`;
+- variáveis do shell: `LLM_API_KEY=sk-... docker compose up`;
 - secrets do pipeline de CD, injetados como `env` do passo.
 
 Quando a mesma variável vem de mais de uma origem, **a do ambiente vence a do `.env`**. Nenhum segredo entra na imagem: as variáveis só existem em tempo de execução.
@@ -175,12 +175,36 @@ Quando a mesma variável vem de mais de uma origem, **a do ambiente vence a do `
 
 | Variável | Para quê |
 |---|---|
-| `LLM_PROVIDER` | `openai`, `groq`, `gemini`, `ollama` ou `custom`. Padrão: `openai` |
+| `LLM_PROVIDER` | atalho de endpoint. `openai`, `groq`, `gemini`, `ollama` ou `custom`. Padrão: `openai` |
 | `LLM_MODEL` | nome do modelo ou do *deployment*. **Sem padrão** — no Azure é o nome do deployment, e chutar um nome daria um 404 do provider em vez de uma mensagem dizendo o que falta |
-| `OPENAI_API_KEY` | chave do provider. Dispensável só no `ollama`, que roda local |
-| `OPENAI_BASE_URL` | endpoint OpenAI-compatible. Obrigatória apenas no `custom`; nos demais, vazia significa usar o endpoint padrão do provider |
+| `LLM_API_KEY` | credencial do provider escolhido. Dispensável só no `ollama`, que roda local |
+| `LLM_BASE_URL` | endpoint OpenAI-compatible. Obrigatória apenas no `custom`; nos demais, vazia significa usar o endpoint padrão do provider |
 
 Faltando qualquer uma delas, a aplicação **sobe do mesmo jeito**: o dashboard e o catálogo funcionam, e a aba do chat mostra quais variáveis estão ausentes e desativa o campo de mensagem. Não há falha silenciosa nem `compose up` abortado.
+
+> **Por que os nomes são genéricos.** A POC fala com todo provider pela API OpenAI-compatible ([ADR 0006](./docs/06-decisoes/adr/0006-provider-openai-compatible-configuravel.md)), mas chamar a credencial de `OPENAI_API_KEY` sugeria que ela só servia para a OpenAI — e ficava incoerente em `LLM_PROVIDER=gemini` com `OPENAI_API_KEY` preenchida. A credencial é *do provider que você escolher*.
+
+### O que `LLM_PROVIDER` faz — e o que não faz
+
+Ele **não chega ao SDK**. Só `LLM_API_KEY` e a base URL resolvida chegam. O que ele decide é:
+
+| Valor | Base URL padrão | Chave obrigatória? |
+|---|---|---|
+| `openai` | `https://api.openai.com/v1` | sim |
+| `groq` | `https://api.groq.com/openai/v1` | sim |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` | sim |
+| `ollama` | `http://localhost:11434/v1` | **não** — roda local |
+| `custom` | nenhuma: **exige `LLM_BASE_URL`** | sim |
+
+**`LLM_BASE_URL`, quando preenchida, vence sempre.** É por isso que um endpoint Azure funciona com qualquer valor de `LLM_PROVIDER`: o destino vem da base URL, não do nome do provider.
+
+**Para Azure AI Foundry, vLLM, LM Studio, OpenRouter e afins, use `custom`.** Não por causa do comportamento de hoje, que é idêntico, mas do dia em que a `LLM_BASE_URL` faltar:
+
+| Com `LLM_PROVIDER=openai` | Com `LLM_PROVIDER=custom` |
+|---|---|
+| A aplicação sobe e manda sua chave do Azure para `api.openai.com` | Falha dizendo que `LLM_BASE_URL` está ausente |
+
+A base URL do `openai` é passada explicitamente ao SDK, e não deixada em branco, porque o SDK da OpenAI lê a variável `OPENAI_BASE_URL` do ambiente por conta própria quando não recebe `base_url` — uma variável solta redirecionaria as chamadas sem nada no código indicar isso.
 
 ### Autenticação
 

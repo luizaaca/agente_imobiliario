@@ -284,7 +284,7 @@ LLM_MONTHLY_TOKEN_BUDGET=3000000
 
 ## 8.1 Configuração ausente
 
-`LLM_MODEL` e `OPENAI_API_KEY` não têm valor padrão, e `OPENAI_BASE_URL` é obrigatória no provider `custom`. A checagem vive em um lugar só, `provider.configuracao_ausente()`, usada tanto pela UI quanto por `_construir_modelo` — duas listas separadas divergiriam com o tempo.
+`LLM_MODEL` e `LLM_API_KEY` não têm valor padrão, e `LLM_BASE_URL` é obrigatória no provider `custom`. A checagem vive em um lugar só, `provider.configuracao_ausente()`, usada tanto pela UI quanto por `_construir_modelo` — duas listas separadas divergiriam com o tempo.
 
 Faltando qualquer uma delas, a aplicação sobe normalmente: dashboard e catálogo funcionam, e a aba do chat nomeia as variáveis ausentes e **desabilita o campo de mensagem**. Deixá-lo ativo levaria o usuário a escrever e receber apenas "atendimento indisponível", sem entender a causa.
 

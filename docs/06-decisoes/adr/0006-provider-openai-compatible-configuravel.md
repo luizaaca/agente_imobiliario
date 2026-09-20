@@ -50,7 +50,20 @@ A nomenclatura definitiva adotada para o projeto é:
 |---|:---:|---|---|
 | `LLM_PROVIDER` | Sim | Identificador do provedor | `openai`, `groq`, `gemini`, `ollama` |
 | `LLM_MODEL` | Sim | Nome do modelo específico | `gpt-4o-mini`, `gemini-2.5-flash` |
-| `OPENAI_API_KEY` | Sim | API key do provedor (nome mantido por compatibilidade com SDKs OpenAI-compatible) | `sk-...`, `gsk_...` |
-| `OPENAI_BASE_URL` | Não | URL base para provedores alternativos; deixar vazio para OpenAI padrão | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `LLM_API_KEY` | Sim | Credencial do provedor escolhido | `sk-...`, `gsk_...` |
+| `LLM_BASE_URL` | Não | Endpoint OpenAI-compatible; vazio usa o padrão do `LLM_PROVIDER` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
 
-> **Nota sobre nomenclatura**: `OPENAI_API_KEY` e `OPENAI_BASE_URL` usam o prefixo `OPENAI_` por compatibilidade com a maioria dos SDKs e bibliotecas que seguem o padrão OpenAI-compatible (incluindo PydanticAI). O `LLM_PROVIDER` e `LLM_MODEL` são variáveis de projeto que permitem lógica condicional na aplicação.
+### Revisão de 20/09/2026 — nomenclatura
+
+A versão original desta ADR adotava `OPENAI_API_KEY` e `OPENAI_BASE_URL`, com esta justificativa:
+
+> "usam o prefixo `OPENAI_` por compatibilidade com a maioria dos SDKs e bibliotecas que seguem o padrão OpenAI-compatible (incluindo PydanticAI)".
+
+O argumento não se sustentou na prática, por dois motivos:
+
+1. **A aplicação sempre passa `api_key` e `base_url` explicitamente** ao `OpenAIProvider`. Nunca dependeu da leitura automática de variáveis pelo SDK, então a "compatibilidade" não estava sendo exercida.
+2. **O nome ficava incoerente com o próprio modelo de configuração.** `LLM_PROVIDER=gemini` acompanhado de `OPENAI_API_KEY` sugere que a chave é da OpenAI, quando é do Gemini. O prefixo comunicava o oposto do desenho da ADR, que é justamente tratar todos os provedores de forma uniforme.
+
+Renomeadas para `LLM_API_KEY` e `LLM_BASE_URL`, alinhadas a `LLM_PROVIDER` e `LLM_MODEL`.
+
+**Efeito colateral corrigido junto:** o SDK da OpenAI lê `OPENAI_BASE_URL` do ambiente por conta própria quando não recebe `base_url`. Com os nomes antigos, uma variável solta no ambiente redirecionava as chamadas sem nada no código indicar isso. A base URL do provider `openai` passou a ser explícita (`https://api.openai.com/v1`) em vez de omitida, tornando o destino determinado apenas pela configuração da aplicação.

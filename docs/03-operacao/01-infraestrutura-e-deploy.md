@@ -150,8 +150,8 @@ CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0
 # === LLM ===
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=  # deixar vazio para OpenAI padrão
+LLM_API_KEY=sk-...
+LLM_BASE_URL=  # vazio usa o endpoint padrao do LLM_PROVIDER
 
 # === Banco de Dados ===
 DB_PASSWORD=sdr_dev_pass

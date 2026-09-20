@@ -22,8 +22,8 @@ As variáveis esperadas incluem:
 - `DATABASE_URL`
 - `LLM_PROVIDER`
 - `LLM_MODEL`
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL` (opcional)
+- `LLM_API_KEY`
+- `LLM_BASE_URL` (opcional; obrigatoria no `LLM_PROVIDER=custom`)
 - `TELEGRAM_BOT_TOKEN`
 - `AUTH_COOKIE_KEY`
 

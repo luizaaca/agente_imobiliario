@@ -35,8 +35,8 @@ os.environ["DATABASE_URL"] = DATABASE_URL_TESTE
 # Sobrescrito, não `setdefault`: o .env do desenvolvedor já populou o ambiente
 # e vazaria provider e modelo reais para dentro da suíte. A chave é fictícia de
 # propósito — nenhum teste deve alcançar um provider de verdade.
-os.environ["OPENAI_API_KEY"] = "sk-teste"
-os.environ["OPENAI_BASE_URL"] = ""
+os.environ["LLM_API_KEY"] = "sk-teste"
+os.environ["LLM_BASE_URL"] = ""
 os.environ["LLM_PROVIDER"] = "openai"
 os.environ["LLM_MODEL"] = "modelo-de-teste"
 

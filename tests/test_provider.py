@@ -13,17 +13,17 @@ from src.agent.provider import LLMConfigError, _construir_modelo, build_model
 def configuracao_limpa(monkeypatch):
     """Cada teste parte de uma configuração conhecida e sem cache.
 
-    As variáveis de ambiente também são removidas: quando não recebe
-    `base_url`, o SDK da OpenAI cai no `OPENAI_BASE_URL` do ambiente, e o .env
-    do desenvolvedor vazaria para dentro dos testes.
+    As variáveis de ambiente também são removidas, inclusive as com nome
+    antigo: o SDK da OpenAI lê `OPENAI_BASE_URL` sozinho quando não recebe
+    `base_url`, e o .env do desenvolvedor vazaria para dentro dos testes.
     """
-    for variavel in ("OPENAI_BASE_URL", "OPENAI_API_KEY"):
+    for variavel in ("LLM_BASE_URL", "LLM_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_KEY"):
         monkeypatch.delenv(variavel, raising=False)
 
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "openai")
     monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "modelo-de-teste")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-teste")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "sk-teste")
+    monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "")
     monkeypatch.setattr(provider_mod, "_modelo_sem_loop", None)
     provider_mod._modelos_por_loop.clear()
 
@@ -56,7 +56,7 @@ def test_cada_provider_resolve_sua_base_url(monkeypatch, provider, trecho_espera
 
 def test_base_url_explicita_vence_o_padrao_do_provider(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "groq")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "https://meu.endpoint/v1")
+    monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "https://meu.endpoint/v1")
     assert "meu.endpoint" in base_url_de(_construir_modelo())
 
 
@@ -80,26 +80,26 @@ def test_provider_desconhecido_falha_com_mensagem_util(monkeypatch):
 
 
 def test_chave_ausente_falha(monkeypatch):
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    with pytest.raises(LLMConfigError, match="OPENAI_API_KEY"):
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
+    with pytest.raises(LLMConfigError, match="LLM_API_KEY"):
         _construir_modelo()
 
 
 def test_ollama_dispensa_chave(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "ollama")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
     assert _construir_modelo() is not None
 
 
 def test_custom_sem_base_url_falha(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "custom")
-    with pytest.raises(LLMConfigError, match="OPENAI_BASE_URL"):
+    with pytest.raises(LLMConfigError, match="LLM_BASE_URL"):
         _construir_modelo()
 
 
 def test_custom_com_base_url_funciona(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "custom")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "https://interno/v1")
+    monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "https://interno/v1")
     assert "interno" in base_url_de(_construir_modelo())
 
 
@@ -152,32 +152,32 @@ def test_configuracao_completa_nao_acusa_nada(monkeypatch):
 
 
 def test_acusa_a_chave_ausente(monkeypatch):
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    assert provider_mod.configuracao_ausente() == ["OPENAI_API_KEY"]
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
+    assert provider_mod.configuracao_ausente() == ["LLM_API_KEY"]
 
 
 def test_acusa_varias_de_uma_vez(monkeypatch):
     """A tela precisa listar tudo o que falta, nao so o primeiro problema."""
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "custom")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "")
     monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "")
 
     assert provider_mod.configuracao_ausente() == [
-        "OPENAI_API_KEY", "LLM_MODEL", "OPENAI_BASE_URL",
+        "LLM_API_KEY", "LLM_MODEL", "LLM_BASE_URL",
     ]
 
 
 def test_provider_desconhecido_acusa_so_o_provider(monkeypatch):
     """Sem saber qual e o provider, nao da para dizer o que mais ele exige."""
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "inventado")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
     assert provider_mod.configuracao_ausente() == ["LLM_PROVIDER"]
 
 
 def test_ollama_sem_chave_esta_completo(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "ollama")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
     assert provider_mod.configuracao_ausente() == []
 
 
@@ -185,10 +185,10 @@ def test_chat_desabilita_quando_falta_configuracao(monkeypatch):
     """O campo de mensagem so fica ativo com o LLM configurado."""
     from src.ui import chat as chat_mod
 
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    assert chat_mod.configuracao_ausente() == ["OPENAI_API_KEY"]
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "")
+    assert chat_mod.configuracao_ausente() == ["LLM_API_KEY"]
 
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-existe")
+    monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "sk-existe")
     assert chat_mod.configuracao_ausente() == []
 
 
@@ -236,5 +236,5 @@ def test_modelo_ausente_e_acusado(monkeypatch):
 def test_base_url_vazia_e_normal_fora_do_custom(monkeypatch):
     """Nos providers conhecidos, base URL vazia significa usar a padrao."""
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "groq")
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "")
     assert provider_mod.configuracao_ausente() == []

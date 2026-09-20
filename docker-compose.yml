@@ -9,7 +9,7 @@
 #
 # Aqui usamos o (1). Com isso:
 #   - `.env` continua funcionando local, sem nenhuma configuracao;
-#   - `OPENAI_API_KEY=sk-... docker compose up` tambem funciona, e a variavel
+#   - `LLM_API_KEY=sk-... docker compose up` tambem funciona, e a variavel
 #     de ambiente vence a do `.env`;
 #   - este arquivo documenta exatamente o que cada servico consome;
 #   - um clone recem-feito, sem `.env`, sobe assim mesmo: os defaults abaixo
@@ -24,8 +24,8 @@ x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   # Sem default: o nome do modelo e especifico do deployment de quem roda.
   # Vazia, a aplicacao lista LLM_MODEL entre as variaveis ausentes.
   LLM_MODEL: ${LLM_MODEL:-}
-  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
   # Sem default: um valor fixo aqui seria publico e daria para forjar cookie
   # de admin. Vazia, a aplicacao sorteia uma chave por processo e avisa.
   AUTH_COOKIE_KEY: ${AUTH_COOKIE_KEY:-}
