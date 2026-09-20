@@ -23,6 +23,7 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Follow-up automático com 4 réguas e limite de tentativas | funcionando; envio ativo só no Telegram |
 | Dashboard: KPIs, distribuição da carteira, tabela ordenável, custo de LLM | funcionando |
 | Menu de leads: ficha editável, criação manual, vínculo de canal, conversa, exclusão | funcionando |
+| Agendamento pela tela: criar e editar, com seletor de data e hora | funcionando |
 | Disparo manual de follow-up pela tela | funcionando |
 | Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
 | Página de ajuda com estado da instalação e FAQ | funcionando |
@@ -327,7 +328,6 @@ São limitações reais da entrega, não do desenho:
 - **O follow-up só envia ativamente pelo Telegram.** Sem canal com push, a mensagem é gerada e registrada com status `generated`, mas não sai. No Streamlit ela aparece no histórico do lead.
 - **Custo estimado por tabela fixa** (`LLMUsageService.PRICING`). Modelo fora da tabela cai num preço genérico e registra aviso no log — o número aparece no dashboard, mas é um palpite.
 - **O tom do agente degrada em conversas longas.** Ele tende a voltar a listar opções e oferecer menus de próximos passos, porque imita as próprias mensagens anteriores no histórico.
-- **Não há "agendar ligação" pela tela.** O agendamento nasce da conversa, pela tool `agendar_reuniao`; o corretor lê os agendamentos na ficha, mas não cria um ali.
 - **Lead criado à mão ainda não é atendível ponta a ponta.** O corretor cria a ficha e vincula um canal, e o follow-up passa a alcançá-lo — mas o identificador do canal não é validado na hora de vincular, e no Telegram o bot não consegue iniciar conversa com quem nunca falou com ele.
 - **Sem CRM nem calendário externos.** Agendamento é uma linha no banco.
 - **Autenticação simples**, por arquivo de credenciais com hash bcrypt. Os papéis `admin` e `corretor` escondem links do menu, mas não são autorização: o YAML é versionado e as páginas não verificam papel dentro de si.
@@ -398,5 +398,5 @@ As versões têm teto de major em `requirements.txt` de propósito: sem isso o p
 - Streaming de resposta no chat.
 - Testes automatizados da UI.
 - Preços reais por modelo na tabela de custo.
-- Ações de escrita no dashboard (agendar ligação, disparar follow-up).
+- Fechar o ciclo do lead criado à mão: validar o identificador no canal e resolver o caso do Telegram, em que o bot não inicia conversa.
 - Busca vetorial com `pgvector` como evolução do ranking textual.

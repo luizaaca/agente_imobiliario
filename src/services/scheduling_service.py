@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 class SchedulingService:
     """Serviço de domínio para agendamentos."""
 
+    STATUS_VALIDOS = ("pendente", "confirmado", "cancelado", "realizado")
+    TIPOS_VALIDOS = ("visita", "reuniao")
+
     def create(
         self,
         lead_id: int,
@@ -24,7 +27,7 @@ class SchedulingService:
         imovel_id: Optional[int] = None,
     ) -> Agendamento:
         """Cria um novo agendamento e atualiza o status do lead."""
-        if tipo not in ("visita", "reuniao"):
+        if tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"Tipo de agendamento inválido: {tipo}")
 
         agendamento = Agendamento(
@@ -64,6 +67,58 @@ class SchedulingService:
             .all()
         )
 
+    def get(self, agendamento_id: int, db: Session) -> Optional[Agendamento]:
+        """Busca um agendamento pelo ID."""
+        return (
+            db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
+        )
+
+    def editar(
+        self,
+        agendamento_id: int,
+        db: Session,
+        tipo: str,
+        data_hora: datetime,
+        status: str,
+        observacoes: Optional[str] = None,
+        imovel_id: Optional[int] = None,
+    ) -> Optional[Agendamento]:
+        """Reescreve um agendamento com o que o corretor deixou na ficha.
+
+        Grava todos os campos, inclusive os vazios: aqui `None` significa "o
+        corretor apagou", e não "não foi informado". É o mesmo critério da
+        edição de lead — o caminho manual precisa conseguir limpar o que veio
+        errado da conversa.
+
+        O status do lead não é tocado: cancelar uma visita não devolve o lead
+        para `qualificado` sozinho, porque só quem está atendendo sabe se a
+        oportunidade morreu ou vai ser remarcada.
+        """
+        if tipo not in self.TIPOS_VALIDOS:
+            raise ValueError(f"Tipo de agendamento inválido: {tipo}")
+        if status not in self.STATUS_VALIDOS:
+            raise ValueError(f"Status inválido: {status}")
+
+        agendamento = self.get(agendamento_id, db)
+        if not agendamento:
+            return None
+
+        agendamento.tipo = tipo
+        agendamento.data_hora = data_hora
+        agendamento.status = status
+        agendamento.observacoes = observacoes
+        agendamento.imovel_id = imovel_id
+
+        db.commit()
+        db.refresh(agendamento)
+        logger.info(
+            "event=agendamento_editado agendamento_id=%s lead_id=%s tipo=%s "
+            "data_hora=%s status=%s imovel_id=%s",
+            agendamento_id, agendamento.lead_id, tipo, data_hora, status,
+            imovel_id,
+        )
+        return agendamento
+
     def update_status(
         self,
         agendamento_id: int,
@@ -71,9 +126,10 @@ class SchedulingService:
         db: Session,
     ) -> Optional[Agendamento]:
         """Atualiza o status de um agendamento."""
-        valid_statuses = ("pendente", "confirmado", "cancelado", "realizado")
-        if status not in valid_statuses:
-            raise ValueError(f"Status inválido: {status}. Válidos: {valid_statuses}")
+        if status not in self.STATUS_VALIDOS:
+            raise ValueError(
+                f"Status inválido: {status}. Válidos: {self.STATUS_VALIDOS}"
+            )
 
         agendamento = db.query(Agendamento).filter(
             Agendamento.id == agendamento_id

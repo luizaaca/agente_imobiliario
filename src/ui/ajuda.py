@@ -66,7 +66,7 @@ Cada menu tem um assunto:
 | Menu | Para quê |
 |---|---|
 | **Dashboard** | Leitura. Como está a carteira: volume, distribuição pelo funil, consumo de LLM. A tabela do fim é ordenável, e clicar numa linha abre a ficha daquele lead. |
-| **Leads** | Operação. Tudo que se faz com um lead: ficha, canal, follow-up, conversa, exclusão. |
+| **Leads** | Operação. Tudo que se faz com um lead: ficha, canal, agendamentos, follow-up, conversa, exclusão. |
 | **Chat Simulador** | Teste. Conversar com o agente fingindo ser um lead, para ver o comportamento dele sem depender do Telegram. Só o `admin` vê este menu. |
 | **Ajuda** | Esta página. |
 
@@ -86,8 +86,9 @@ def _como_trabalhar_um_lead() -> None:
 3. **Aba Conversa** para ler o que já foi dito, e **Ficha** para o perfil
    narrativo — o texto que o agente mantém com preferências, objeções e
    rejeições. É o que vale ler antes de ligar.
-4. **Disparar follow-up** quando quiser reengajar sem esperar o robô.
-5. **Salvar ficha** depois de corrigir o que o agente entendeu errado. Um campo
+4. **Aba Agendamentos** para marcar ou remarcar uma visita, com data e hora.
+5. **Disparar follow-up** quando quiser reengajar sem esperar o robô.
+6. **Salvar ficha** depois de corrigir o que o agente entendeu errado. Um campo
    apagado fica vazio de verdade, e o status que você escolher não é
    recalculado por cima.
 """

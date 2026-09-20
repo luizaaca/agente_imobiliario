@@ -41,8 +41,9 @@ def menu_do_papel(
     chat: Any,
     ajuda: Any,
     papeis: Optional[Sequence[str]],
+    ficha: Any = None,
 ) -> list[Any]:
-    """Paginas visiveis para estes papeis, na ordem do menu.
+    """Paginas entregues ao `st.navigation`, na ordem do menu.
 
     O simulador de chat so aparece para o admin: e ferramenta de teste, nao de
     atendimento. A ajuda fica por ultimo e aparece para todos — quem mais
@@ -50,9 +51,15 @@ def menu_do_papel(
 
     A primeira da lista e a que responde por `default=True`, entao todo papel
     tem o dashboard como pagina inicial.
+
+    A ficha do lead vai junto, no fim, mas e criada com
+    `visibility="hidden"`: precisa estar registrada para ter URL e receber
+    `st.switch_page`, e nao deve virar um item de menu.
     """
     paginas = [dashboard, leads]
     if e_admin(papeis):
         paginas.append(chat)
     paginas.append(ajuda)
+    if ficha is not None:
+        paginas.append(ficha)
     return paginas

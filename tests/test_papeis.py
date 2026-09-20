@@ -12,9 +12,11 @@ import yaml
 from src.ui.papeis import PAPEL_ADMIN, PAPEL_CORRETOR, e_admin, menu_do_papel
 
 DASHBOARD, LEADS, CHAT, AJUDA = "dashboard", "leads", "chat", "ajuda"
+FICHA = "ficha"
 
 
 def _menu(papeis):
+    """Só os itens de menu: a ficha entra separada, escondida."""
     return menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, papeis)
 
 
@@ -58,3 +60,15 @@ def test_credenciais_versionadas_declaram_os_papeis():
     usuarios = config["credentials"]["usernames"]
     assert usuarios["admin"]["roles"] == [PAPEL_ADMIN]
     assert usuarios["corretor1"]["roles"] == [PAPEL_CORRETOR]
+
+
+def test_ficha_vai_junto_mas_no_fim_da_lista():
+    """Ela precisa estar registrada para ter URL, e `visibility="hidden"` em
+    `app.py` é o que a mantém fora do menu."""
+    paginas = menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, [PAPEL_ADMIN], FICHA)
+
+    assert paginas == [DASHBOARD, LEADS, CHAT, AJUDA, FICHA]
+
+
+def test_sem_ficha_o_menu_nao_ganha_item_vazio():
+    assert FICHA not in menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, [PAPEL_ADMIN])

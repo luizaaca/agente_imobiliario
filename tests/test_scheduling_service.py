@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from src.db.models import Lead
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 
@@ -95,3 +96,89 @@ def test_agendamento_sem_imovel_continua_valido(scheduling, lead_id, amanha, db)
 
     assert agendamento.imovel_id is None
     assert agendamento.imovel is None
+
+
+# --- Edição pela ficha -------------------------------------------------------
+
+
+def test_editar_reescreve_data_tipo_e_status(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+    depois = amanha + timedelta(days=3)
+
+    scheduling.editar(
+        agendamento.id, db, tipo="reuniao", data_hora=depois, status="confirmado"
+    )
+
+    atual = scheduling.get(agendamento.id, db)
+    assert (atual.tipo, atual.status) == ("reuniao", "confirmado")
+    assert atual.data_hora.date() == depois.date()
+
+
+def test_editar_apaga_o_que_o_corretor_deixou_em_branco(
+    scheduling, lead_id, amanha, catalogo, db
+):
+    """`None` aqui é "o corretor apagou", não "não foi informado".
+
+    É o mesmo critério da edição de lead: o caminho manual precisa conseguir
+    limpar o que veio errado da conversa.
+    """
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db,
+        observacoes="levar a planta", imovel_id=3,
+    )
+
+    scheduling.editar(
+        agendamento.id, db, tipo="visita", data_hora=amanha, status="pendente",
+        observacoes=None, imovel_id=None,
+    )
+
+    atual = scheduling.get(agendamento.id, db)
+    assert atual.observacoes is None
+    assert atual.imovel_id is None
+
+
+def test_editar_nao_mexe_no_status_do_lead(scheduling, lead_id, amanha, db):
+    """Cancelar uma visita não devolve o lead ao funil sozinho.
+
+    Só quem está atendendo sabe se a oportunidade morreu ou vai ser remarcada.
+    """
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+    assert db.query(Lead).filter(Lead.id == lead_id).one().status == "agendado"
+
+    scheduling.editar(
+        agendamento.id, db, tipo="visita", data_hora=amanha, status="cancelado"
+    )
+
+    assert db.query(Lead).filter(Lead.id == lead_id).one().status == "agendado"
+
+
+def test_editar_rejeita_tipo_invalido(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    with pytest.raises(ValueError):
+        scheduling.editar(
+            agendamento.id, db, tipo="churrasco", data_hora=amanha, status="pendente"
+        )
+
+
+def test_editar_rejeita_status_invalido(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    with pytest.raises(ValueError):
+        scheduling.editar(
+            agendamento.id, db, tipo="visita", data_hora=amanha, status="talvez"
+        )
+
+
+def test_editar_agendamento_inexistente_devolve_none(scheduling, amanha, db):
+    assert scheduling.editar(
+        999999, db, tipo="visita", data_hora=amanha, status="pendente"
+    ) is None

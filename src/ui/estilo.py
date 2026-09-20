@@ -149,6 +149,28 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverButton"] div[aria-hidden="true"] {{
   display: none !important;
 }}
+
+/* O nome do lead na lista e um botao `tertiary` — sem borda nem fundo — que
+   precisa se ler como titulo clicavel, e nao como um link perdido no cartao.
+   O Streamlit publica a `key` do widget como classe `st-key-<key>`, entao o
+   alvo aqui e exatamente a chave escolhida em `leads._cartao_da_lista`, e nao
+   "todo botao tertiary da aplicacao". */
+[class*="st-key-nome_do_lead_"] button {{
+  font-size: 1.45rem !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}}
+/* O hover de um botao `tertiary` muda a cor para a primaria, que no tema
+   padrao e vermelha — num nome de lead isso le como alerta. O sublinhado ja
+   diz que e clicavel. */
+[class*="st-key-nome_do_lead_"] button:hover,
+[class*="st-key-nome_do_lead_"] button:focus,
+[class*="st-key-nome_do_lead_"] button:active {{
+  color: inherit !important;
+  text-decoration: underline !important;
+}}
 </style>
 """
 

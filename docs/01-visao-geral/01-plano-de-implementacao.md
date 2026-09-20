@@ -341,6 +341,8 @@ A interface se divide por assunto, e o papel do usuário decide quais menus apar
 | **Chat Simulador** | testar o agente como se fosse um lead | só o admin |
 | **Ajuda** | o que a aplicação faz, como usar e por que ela se comporta assim | todos |
 
+A ficha do lead é uma página própria (`/lead`), criada com `visibility="hidden"` para ficar fora do menu. Duas páginas, e não dois estados da mesma tela: é o que faz o link **Leads** devolver a listagem quando se está dentro de uma ficha, sem precisar adivinhar se o clique veio do menu ou de um botão da própria tela.
+
 A separação é de assunto, não de permissão: o dashboard responde "como está a
 carteira" e o menu de leads responde "o que eu faço com este lead". Misturar os
 dois era o que fazia a tela de estatísticas carregar o histórico de conversa de
@@ -354,16 +356,17 @@ cada lead.
 - [x] **Dashboard** centrado no **goal principal: agendar ligação do corretor com o cliente**.
   - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups enviados, Leads inativos.
   - [x] **Distribuição da carteira**: leads por status, na ordem do funil, e leads por intenção.
-  - [x] **Carteira ordenável** (`st.dataframe`): clicar numa linha abre a ficha do lead no menu Leads.
+  - [x] **Carteira ordenável** (`st.dataframe`): a lupa de cada linha abre a ficha daquele lead. Seleção por célula, e não por linha — a coluna de caixas de marcar prometeria uma ação em lote que não existe.
   - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
 - [x] **Menu de leads** com o ciclo completo:
   - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
   - [x] **Filtros** (`st.selectbox`): Status e Intenção.
-  - [x] **Lista ordenada por score**, um cartão por lead, com selos de status, temperatura (quente/morno/frio), intenção e região.
+  - [x] **Lista ordenada por score**, um cartão por lead, com selos de status, temperatura (quente/morno/frio), intenção e região. O próprio nome é o link para a ficha.
   - [x] **Ficha editável**: qualificação, contato e perfil narrativo. Um campo apagado é gravado como nulo, para o corretor conseguir limpar o que o agente entendeu errado; o status que ele escolher não é recalculado por cima.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
   - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.
-  - [x] **Conversa e agendamentos** em abas, somente leitura.
+  - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável.
+  - [x] **Agendamentos** em aba, com formulário de criação e edição: tipo, data e hora em seletores próprios, imóvel opcional, observações e status.
   - [x] **Ações**: disparar follow-up e excluir lead.
 
 ### Fase 7: Observabilidade, Testes e Refino

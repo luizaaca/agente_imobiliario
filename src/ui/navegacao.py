@@ -15,21 +15,32 @@ from src.ui.papeis import papeis_da_sessao
 _paginas: dict[str, Any] = {}
 
 
-def registrar_paginas(chat: Any, dashboard: Any, leads: Any) -> None:
+def registrar_paginas(chat: Any, dashboard: Any, leads: Any, ficha: Any) -> None:
     """Guarda as `st.Page` criadas em app.py para uso em `st.switch_page`."""
     _paginas["chat"] = chat
     _paginas["dashboard"] = dashboard
     _paginas["leads"] = leads
+    _paginas["ficha"] = ficha
 
 
-def abrir_leads() -> None:
-    """Leva quem clicou para o menu de leads.
+# As duas funcoes abaixo sao chamadas no fluxo normal do script, e nunca em
+# `on_click`: `st.switch_page` interrompe a execucao para trocar de pagina.
 
-    Chamada no fluxo normal do script (nao em `on_click`), porque
-    `st.switch_page` interrompe a execucao para trocar de pagina. Qual lead
-    abrir ja foi guardado na sessao por `leads.abrir_ficha`.
-    """
+
+def abrir_lista_de_leads() -> None:
+    """Volta para a listagem de leads."""
     st.switch_page(_paginas["leads"])
+
+
+def abrir_pagina_da_ficha() -> None:
+    """Abre a ficha do lead que ja foi escolhido na sessao.
+
+    Lista e ficha sao paginas de verdade, com URLs proprias, e nao dois estados
+    da mesma tela. E o que faz o link "Leads" do menu devolver a listagem: de
+    dentro da ficha ele leva a outra pagina, sem heuristica nenhuma para
+    adivinhar se o clique veio do menu ou de um botao da propria tela.
+    """
+    st.switch_page(_paginas["ficha"])
 
 
 # Marca que o balão da chave de cookie já foi mostrado nesta sessão.

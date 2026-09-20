@@ -6,9 +6,11 @@
 
 # --- Aplicacao ---
 streamlit>=1.64,<2
-# Declarado mesmo vindo junto do streamlit: o dashboard monta DataFrames
-# proprios para os graficos e a tabela, entao o import e nosso, nao transitivo.
+# Declarados mesmo vindo junto do streamlit: o dashboard monta DataFrames
+# proprios e desenha os graficos em Altair, entao os imports sao nossos, nao
+# transitivos.
 pandas>=2.2,<3
+altair>=5.5,<7
 streamlit-authenticator>=0.4.2,<0.5
 pydantic>=2.13,<3
 pydantic-ai-slim[openai]>=2.46,<3

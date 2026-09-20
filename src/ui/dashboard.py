@@ -2,9 +2,10 @@
 
 Tela de leitura, nao de operacao. O que se faz com um lead — editar, vincular
 canal, disparar follow-up, excluir — mora no menu **Leads**; aqui a carteira
-existe para ordenar e escolher, e clicar numa linha abre a ficha la.
+existe para ordenar e escolher, e a lupa de cada linha abre a ficha la.
 """
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from sqlalchemy import func
@@ -13,12 +14,36 @@ from src.db.models import Agendamento, FollowUpAttempt, Lead
 from src.db.session import get_db
 from src.services.llm_usage_service import LLMUsageService
 from src.ui.leads import abrir_ficha, temperatura
-from src.ui.navegacao import abrir_leads
 from src.ui.papeis import e_admin, papeis_da_sessao
 
 # Ordem do funil, para o grafico nao sair em ordem alfabetica — a leitura util
 # e a do caminho que o lead percorre.
 ORDEM_DO_FUNIL = ["novo", "em_qualificacao", "qualificado", "agendado", "inativo"]
+
+NAO_INFORMADO = "não informado"
+CINZA_NEUTRO = "#CBD5E1"
+
+# As cores do funil sao as mesmas dos selos de status na ficha do lead: o
+# mesmo estagio tem a mesma cor em toda a aplicacao, entao o grafico se le sem
+# consultar legenda. A progressao vai do amarelo (entrou agora) ao verde
+# (agendou), com o cinza do inativo fora dela.
+CORES_DO_FUNIL = {
+    "novo": "#EAB308",
+    "em qualificacao": "#8B5CF6",
+    "qualificado": "#3B82F6",
+    "agendado": "#22C55E",
+    "inativo": "#94A3B8",
+    NAO_INFORMADO: CINZA_NEUTRO,
+}
+
+# Intencao nao tem progressao, entao as cores so precisam se distinguir entre
+# si e nao colidir com as do funil.
+CORES_DA_INTENCAO = {
+    "compra": "#6366F1",
+    "aluguel": "#06B6D4",
+    "investimento": "#F59E0B",
+    NAO_INFORMADO: CINZA_NEUTRO,
+}
 
 
 def _alerta_de_budget(resumo: dict) -> None:
@@ -157,11 +182,53 @@ def _contagem(db, coluna, ordem: list[str] | None = None) -> pd.DataFrame:
     contagens = dict(db.query(coluna, func.count(Lead.id)).group_by(coluna).all())
 
     chaves = ordem if ordem else sorted(k for k in contagens if k is not None)
-    dados = {k.replace("_", " "): contagens.get(k, 0) for k in chaves}
+    linhas = [
+        {"categoria": chave.replace("_", " "), "leads": contagens.get(chave, 0)}
+        for chave in chaves
+    ]
     if contagens.get(None):
-        dados["não informado"] = contagens[None]
+        linhas.append({"categoria": NAO_INFORMADO, "leads": contagens[None]})
 
-    return pd.DataFrame({"leads": list(dados.values())}, index=list(dados))
+    return pd.DataFrame(linhas)
+
+
+def _grafico(dados: pd.DataFrame, cores: dict[str, str]) -> alt.Chart:
+    """Barras horizontais com uma cor por categoria.
+
+    Altair, e nao `st.bar_chart`, porque so aqui da para fixar qual cor cai em
+    qual categoria: no `st.bar_chart` a paleta e atribuida na ordem em que os
+    valores aparecem, entao `qualificado` mudaria de cor conforme a carteira
+    mudasse — e a cor deixaria de significar alguma coisa.
+
+    `sort=None` preserva a ordem do DataFrame, que no funil e a do caminho que
+    o lead percorre.
+    """
+    categorias = list(dados["categoria"])
+    return (
+        alt.Chart(dados)
+        .mark_bar(cornerRadiusEnd=5, height=22)
+        .encode(
+            y=alt.Y("categoria:N", sort=None, title=None),
+            x=alt.X(
+                "leads:Q",
+                title=None,
+                axis=alt.Axis(tickMinStep=1, format="d", grid=True),
+            ),
+            color=alt.Color(
+                "categoria:N",
+                scale=alt.Scale(
+                    domain=categorias,
+                    range=[cores.get(c, CINZA_NEUTRO) for c in categorias],
+                ),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("categoria:N", title=" "),
+                alt.Tooltip("leads:Q", title="Leads"),
+            ],
+        )
+        .properties(height=alt.Step(30))
+    )
 
 
 def _distribuicao(db) -> None:
@@ -170,21 +237,30 @@ def _distribuicao(db) -> None:
 
     with col_status:
         st.markdown("##### Leads por status")
-        # `sort=False` mantem a ordem que `_contagem` devolveu. No padrao o
-        # Streamlit ordena alfabeticamente, e "agendado, em qualificacao,
-        # inativo, novo, qualificado" nao diz nada sobre o funil.
-        st.bar_chart(
-            _contagem(db, Lead.status, ORDEM_DO_FUNIL),
-            horizontal=True,
-            sort=False,
+        st.altair_chart(
+            _grafico(_contagem(db, Lead.status, ORDEM_DO_FUNIL), CORES_DO_FUNIL),
+            use_container_width=True,
         )
     with col_intencao:
         st.markdown("##### Leads por intenção")
-        st.bar_chart(_contagem(db, Lead.intencao), horizontal=True)
+        st.altair_chart(
+            _grafico(_contagem(db, Lead.intencao), CORES_DA_INTENCAO),
+            use_container_width=True,
+        )
+
+
+COLUNA_DA_LUPA = "🔍"
 
 
 def _tabela_de_leads(db) -> None:
-    """Carteira ordenavel. Clicar numa linha abre a ficha no menu Leads."""
+    """Carteira ordenavel. A lupa de cada linha abre a ficha no menu Leads.
+
+    Selecao por celula, e nao por linha: `single-row` acrescenta uma coluna de
+    caixas de marcar, que promete escolher varios para uma acao em lote — e
+    acao em lote nao existe aqui. Com `single-cell` a tabela nao ganha coluna
+    nenhuma, e so o clique na lupa navega; clicar em outra celula apenas a
+    destaca, como se espera de uma tabela que tambem se le.
+    """
     leads = db.query(Lead).order_by(Lead.score.desc().nullslast()).limit(200).all()
     if not leads:
         st.info("Nenhum lead registrado ainda.")
@@ -193,6 +269,9 @@ def _tabela_de_leads(db) -> None:
     tabela = pd.DataFrame(
         [
             {
+                # Emoji, e nao icone do Material: a celula da tabela e desenhada
+                # em canvas e nao carrega a fonte de icones.
+                COLUNA_DA_LUPA: "🔍",
                 "id": lead.id,
                 "Lead": lead.nome or f"Lead {lead.id}",
                 "Status": lead.status.replace("_", " "),
@@ -206,28 +285,30 @@ def _tabela_de_leads(db) -> None:
     )
 
     st.subheader("Carteira")
-    st.caption(
-        "Ordene clicando no cabeçalho da coluna. Clique em uma linha para "
-        "abrir a ficha do lead."
-    )
+    st.caption("Ordene clicando no cabeçalho da coluna. A lupa abre a ficha do lead.")
     selecao = st.dataframe(
         tabela,
         width="stretch",
         hide_index=True,
         on_select="rerun",
-        selection_mode="single-row",
-        column_order=("Lead", "Status", "Temperatura", "Intenção", "Região", "Score"),
+        selection_mode="single-cell",
+        column_order=(
+            COLUNA_DA_LUPA, "Lead", "Status", "Temperatura", "Intenção",
+            "Região", "Score",
+        ),
         column_config={
+            COLUNA_DA_LUPA: st.column_config.TextColumn(
+                "", width="small", help="Abrir a ficha deste lead"
+            ),
             "Score": st.column_config.ProgressColumn(
                 "Score", min_value=0, max_value=10, format="%.1f"
             ),
         },
     )
 
-    escolhidas = selecao["selection"]["rows"]
-    if escolhidas:
-        abrir_ficha(int(tabela.iloc[escolhidas[0]]["id"]))
-        abrir_leads()
+    for linha, coluna in selecao["selection"]["cells"]:
+        if coluna == COLUNA_DA_LUPA:
+            abrir_ficha(int(tabela.iloc[linha]["id"]))
 
 
 def render_dashboard():

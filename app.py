@@ -14,7 +14,7 @@ from src.ui.ajuda import render_ajuda
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
 from src.ui.estilo import aplicar_estilo
-from src.ui.leads import render_leads
+from src.ui.leads import render_ficha, render_leads
 from src.ui.navegacao import (
     aviso_de_chave_de_cookie_gerada,
     menu_do_usuario,
@@ -80,6 +80,15 @@ pagina_leads = st.Page(
     icon=":material/contacts:",
     url_path="leads",
 )
+# A ficha e pagina de verdade, com URL propria, mas fora do menu: e o que faz
+# o link "Leads" devolver a listagem quando se esta dentro de uma ficha.
+pagina_ficha = st.Page(
+    render_ficha,
+    title="Ficha do lead",
+    icon=":material/contacts:",
+    url_path="lead",
+    visibility="hidden",
+)
 pagina_chat = st.Page(
     render_chat,
     title="Chat Simulador",
@@ -92,7 +101,7 @@ pagina_ajuda = st.Page(
     icon=":material/help:",
     url_path="ajuda",
 )
-registrar_paginas(pagina_chat, pagina_dashboard, pagina_leads)
+registrar_paginas(pagina_chat, pagina_dashboard, pagina_leads, pagina_ficha)
 
 # O menu depende do papel: o simulador e ferramenta de teste e so aparece
 # para o admin. Ver `src/ui/papeis.py` — isto e separacao de telas, nao
@@ -104,6 +113,7 @@ navegacao = st.navigation(
         pagina_chat,
         pagina_ajuda,
         papeis_da_sessao(),
+        pagina_ficha,
     )
 )
 

@@ -166,7 +166,7 @@ Serve para **organizar a tela**, e não para proteger dado de quem já entrou. U
 |---|---|
 | **Toda a UI Streamlit** | `st.stop()` bloqueia renderização se `authentication_status != True` |
 | **Dashboard** | Renderizado apenas após autenticação bem-sucedida |
-| **Leads** | Renderizado apenas após autenticação bem-sucedida |
+| **Leads** e **Ficha do lead** | Renderizados apenas após autenticação bem-sucedida |
 | **Ajuda** | Renderizado apenas após autenticação bem-sucedida |
 | **Chat Simulador** | Após autenticação, e apenas para o papel `admin` |
 | **Bot Telegram** | Independente — identidade via `chat_id` |
