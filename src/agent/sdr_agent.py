@@ -9,14 +9,25 @@ from datetime import datetime
 from typing import Annotated, Optional
 
 from pydantic import Field
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from src.agent.history import HISTORY_LIMIT, build_message_history
 from src.agent.prompts import HANDOVER_MESSAGE, SYSTEM_PROMPT, UNAVAILABLE_MESSAGE
 from src.agent.provider import LLMConfigError, build_model
 from src.config import settings
 from src.db.session import get_db
-from src.services.catalog_service import CatalogService
+from src.services.catalog_service import (
+    OPERACAO_POR_INTENCAO,
+    CatalogService,
+    FiltroInvalido,
+    Finalidade,
+    Operacao,
+    Ordenacao,
+    PerfilIndicado,
+    TipoImovel,
+    Zona,
+    reais,
+)
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
@@ -119,72 +130,190 @@ FECHAMENTO_DA_BUSCA = (
 
 
 def _formatar_imovel(imovel) -> str:
-    descricao = (imovel.descricao or "")[:200]
-    return (
-        f"\n- **{imovel.titulo}** (ID: {imovel.id})\n"
-        f"  Tipo: {imovel.tipo} | {imovel.finalidade} | {imovel.operacao}\n"
-        f"  Bairro: {imovel.bairro} ({imovel.zona})\n"
-        f"  Preço: R$ {imovel.preco:,.2f}\n"
-        f"  Quartos: {imovel.quartos} | Suítes: {imovel.suites or 0} "
-        f"| Área: {imovel.area_m2}m²\n"
-        f"  {descricao}..."
+    """Uma ficha por imóvel, com o que decide uma escolha.
+
+    O condomínio só aparece no aluguel, onde entra na conta do mês; na venda
+    ele seria ruído ao lado de um preço seis vezes maior.
+    """
+    descricao = (imovel.descricao or "")[:160]
+    linhas = [
+        f"\n- **{imovel.titulo}** (ID: {imovel.id})",
+        f"  {imovel.tipo} | {imovel.operacao} | {imovel.bairro} ({imovel.zona})",
+    ]
+    if imovel.operacao == "aluguel" and imovel.condominio:
+        total = imovel.preco + imovel.condominio
+        linhas.append(
+            f"  Aluguel {reais(imovel.preco)} + condomínio "
+            f"{reais(imovel.condominio)} = {reais(total)}/mês"
+        )
+    else:
+        linhas.append(f"  Preço: {reais(imovel.preco)}")
+    linhas.append(
+        f"  {float(imovel.area_m2):g}m² | {imovel.quartos} quartos | "
+        f"{imovel.suites or 0} suítes | {imovel.banheiros or 0} banheiros | "
+        f"{imovel.vaga_garagem or 0} vagas"
     )
+    if imovel.perfil_indicado:
+        linhas.append(f"  Indicado para: {imovel.perfil_indicado}")
+    linhas.append(f"  {descricao}...")
+    return "\n".join(linhas)
+
+
+def _operacao_do_lead(ctx: RunContext[SDRDependencies]) -> Optional[str]:
+    """A operação que a intenção já registrada do lead implica, se houver.
+
+    Poupa o modelo de repetir numa tool o que ele já gravou noutra, e evita a
+    lista misturada quando ele simplesmente esquece de informar.
+    """
+    with get_db() as db:
+        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
+        intencao = lead.intencao if lead else None
+    return OPERACAO_POR_INTENCAO.get(intencao or "")
+
+
+# Aviso para quando a busca sai sem operação definida. A ordenação por preço
+# faria os aluguéis (a partir de R$ 1.500) enterrarem as vendas (a partir de
+# R$ 240 mil), e a pessoa veria só metade do que pediu.
+AVISO_DE_LISTA_MISTA = (
+    "\n---\n"
+    "Atenção: esta lista mistura venda e aluguel, porque a busca saiu sem "
+    "`operacao`. Se a pessoa aceita as duas, faça uma busca para cada uma e "
+    "apresente as duas separadamente — é o único jeito de ela ver as opções "
+    "de compra junto com as de aluguel."
+)
 
 
 @sdr_agent.tool
 @_instrumentada
 async def buscar_imoveis(
     ctx: RunContext[SDRDependencies],
-    intencao: Optional[str] = None,
-    finalidade: Annotated[Optional[str], Field(description=(
-        "Exatamente 'residencial' ou 'comercial'. Use sempre que a pessoa "
-        "procurar sala, escritório, loja, galpão ou consultório."))] = None,
-    orcamento_min: Optional[float] = None,
-    orcamento_max: Optional[float] = None,
-    regiao_interesse: Optional[str] = None,
-    bairro_interesse: Annotated[Optional[str], Field(description=(
-        "Nome do bairro. 'Paulista', 'Faria Lima' e afins são referências, "
-        "não bairros: nesses casos use regiao_interesse."))] = None,
-    quartos: Optional[int] = None,
-    termos_livres: Annotated[Optional[str], Field(description=(
-        "Só características desejáveis em texto livre (varanda, piscina, "
-        "reformado). Não coloque aqui tipo, bairro nem preço — eles têm "
-        "campos próprios."))] = None,
-    limite_resultados: int = 5,
+    operacao: Annotated[Optional[Operacao], Field(description=(
+        "'venda' para quem quer comprar ou investir, 'aluguel' para quem quer "
+        "alugar. UMA POR BUSCA: se a pessoa aceita as duas, chame esta tool "
+        "duas vezes, uma com cada valor. Omitir só é aceitável quando você "
+        "realmente não faz ideia — a lista sai misturada e os aluguéis, mais "
+        "baratos, escondem as vendas."))] = None,
+    tipo: Annotated[Optional[TipoImovel], Field(description=(
+        "Tipo exato do imóvel, quando a pessoa nomeia um. Este filtro NUNCA é "
+        "afrouxado: quem pede galpão não recebe sala comercial no lugar. "
+        "Residenciais: apartamento, casa, casa_condominio, cobertura, flat, "
+        "loft, sobrado, studio. Comerciais: andar_corporativo, consultorio, "
+        "escritorio, galpao, loja, predio_comercial, sala_comercial, "
+        "terreno_comercial. Se ela falar genericamente ('um lugar para minha "
+        "empresa'), deixe vazio e use finalidade."))] = None,
+    finalidade: Annotated[Optional[Finalidade], Field(description=(
+        "'residencial' ou 'comercial', para quando a pessoa não nomeia o tipo "
+        "mas o uso está claro. Não informe junto com `tipo`: o tipo já define "
+        "a finalidade."))] = None,
+    bairro: Annotated[Optional[str], Field(max_length=80, description=(
+        "Nome do bairro, e só dele: 'Pinheiros', 'Mooca', 'Bela Vista'. "
+        "NÃO use aqui cidade nem estado — todo o catálogo é da cidade de São "
+        "Paulo, então 'São Paulo' ou 'SP' zera a busca. 'Paulista', 'Faria "
+        "Lima' e 'Berrini' são referências, não bairros: para elas use "
+        "`termos_livres`."))] = None,
+    zona: Annotated[Optional[Zona], Field(description=(
+        "Região da cidade, quando a pessoa fala em zona em vez de bairro. "
+        "Também aceita nome de bairro, caso você não saiba a zona dele."))] = None,
+    preco_min: Annotated[Optional[float], Field(ge=0, description=(
+        "Piso de preço, em reais. Raro: use só quando a pessoa disser que não "
+        "quer nada abaixo de um valor."))] = None,
+    preco_max: Annotated[Optional[float], Field(gt=0, description=(
+        "Teto de preço, em reais. ATENÇÃO À ESCALA: no aluguel é o valor "
+        "MENSAL (o catálogo vai de R$ 1.500 a R$ 240 mil, mediana R$ 6.200); "
+        "na venda é o valor TOTAL (de R$ 240 mil a R$ 48 milhões, mediana "
+        "R$ 1,35 milhão). Mandar 5000 numa busca de venda não acha nada."))] = None,
+    custo_total_max: Annotated[Optional[float], Field(gt=0, description=(
+        "Teto de aluguel MAIS condomínio, para quando a pessoa fala do que cabe "
+        "no bolso por mês ('até 5 mil tudo incluso'). Use no lugar de "
+        "`preco_max`, não junto."))] = None,
+    quartos_min: Annotated[Optional[int], Field(ge=0, description=(
+        "Mínimo de quartos. Para um número exato, informe também quartos_max "
+        "com o mesmo valor: '2 quartos' é min=2 e max=2, 'pelo menos 2' é só "
+        "min=2, '2 ou 3' é min=2 e max=3."))] = None,
+    quartos_max: Annotated[Optional[int], Field(ge=0, description=(
+        "Máximo de quartos. Ver quartos_min."))] = None,
+    suites_min: Annotated[Optional[int], Field(ge=0, description=(
+        "Mínimo de suítes."))] = None,
+    banheiros_min: Annotated[Optional[int], Field(ge=0, description=(
+        "Mínimo de banheiros."))] = None,
+    vagas_min: Annotated[Optional[int], Field(ge=0, description=(
+        "Mínimo de vagas de garagem."))] = None,
+    area_min: Annotated[Optional[float], Field(gt=0, description=(
+        "Metragem mínima em m². É o filtro que importa no comercial, onde "
+        "quartos não diz nada. O catálogo vai de 21 a 4.200 m²."))] = None,
+    area_max: Annotated[Optional[float], Field(gt=0, description=(
+        "Metragem máxima em m²."))] = None,
+    perfil_indicado: Annotated[Optional[PerfilIndicado], Field(description=(
+        "Perfil a que o imóvel foi catalogado como adequado. Use quando a "
+        "pessoa revelar o uso e não o imóvel: quem vai abrir estacionamento é "
+        "logistica_industrial, quem compra para alugar é investidor_renda, "
+        "casal sem filhos é jovem_casal."))] = None,
+    termos_livres: Annotated[Optional[str], Field(max_length=200, description=(
+        "Só características desejáveis, em texto livre: varanda gourmet, "
+        "piscina, reformado, pet friendly, perto do metrô, Faria Lima. Os "
+        "termos valem como OU e entram no ranking, não como exigência. Não "
+        "coloque aqui tipo, bairro, preço nem quartos — todos têm campo "
+        "próprio, e repetir aqui só atrapalha."))] = None,
+    ordenar_por: Annotated[Optional[Ordenacao], Field(description=(
+        "'preco_asc' (mais baratos), 'preco_desc' (mais caros), 'area_desc' "
+        "(maiores), 'relevancia' (mais aderentes aos termos_livres). Vazio "
+        "escolhe sozinho: relevância se houver termos_livres, senão preço "
+        "crescente."))] = None,
+    limite_resultados: Annotated[int, Field(ge=1, le=10, description=(
+        "Quantos imóveis trazer. Peça 4 ou 5: você só vai mostrar dois ou três "
+        "à pessoa, e os extras te dão de onde escolher."))] = 5,
 ) -> str:
-    """Buscar imóveis no catálogo.
+    """Buscar imóveis no catálogo de São Paulo.
 
-    Se nada casar com os filtros exatos, a busca é refeita automaticamente
-    afrouxando um critério por vez, e a resposta diz o que foi afrouxado.
+    Use cedo e com pouca informação: mostrar imóvel é o que faz a pessoa
+    revelar orçamento, tamanho e bairro sem você perguntar. Não espere ter
+    todos os filtros para chamar.
+
+    Quando os filtros exatos não devolvem nada, a busca é refeita sozinha
+    afrouxando um critério por vez — do que menos importa (banheiros, perfil)
+    ao que mais importa (região) — e a resposta diz, em português, o que
+    precisou mudar. Operação, tipo e finalidade nunca são afrouxados; se o
+    catálogo não tem o que ela pediu, a resposta traz os números reais para
+    você dizer a verdade em vez de oferecer outra coisa.
     """
+    filtros = dict(
+        operacao=operacao or _operacao_do_lead(ctx),
+        tipo=tipo,
+        finalidade=finalidade,
+        bairro=bairro,
+        zona=zona,
+        preco_min=preco_min,
+        preco_max=preco_max,
+        custo_total_max=custo_total_max,
+        quartos_min=quartos_min,
+        quartos_max=quartos_max,
+        suites_min=suites_min,
+        banheiros_min=banheiros_min,
+        vagas_min=vagas_min,
+        area_min=area_min,
+        area_max=area_max,
+        perfil_indicado=perfil_indicado,
+        termos_livres=termos_livres,
+        ordenar_por=ordenar_por,
+        limite=limite_resultados,
+    )
+
     with get_db() as db:
-        resultado = ctx.deps.catalog_service.search_relaxando(
-            db,
-            intencao=intencao,
-            finalidade=finalidade,
-            orcamento_min=orcamento_min,
-            orcamento_max=orcamento_max,
-            regiao_interesse=regiao_interesse,
-            bairro_interesse=bairro_interesse,
-            quartos=quartos,
-            termos_livres=termos_livres,
-            limite=limite_resultados,
-        )
+        try:
+            resultado = ctx.deps.catalog_service.search_relaxando(db, **filtros)
+        except FiltroInvalido as e:
+            # Pedido impossível, não ausência de imóvel: o modelo consegue
+            # corrigir sozinho na retentativa se souber qual é a contradição.
+            logger.info(
+                "event=busca_com_filtro_invalido lead_id=%s motivo=%s",
+                ctx.deps.lead_id, e,
+            )
+            raise ModelRetry(str(e)) from e
 
         # A formatação fica dentro da sessão: os objetos são do ORM e acessar
         # um atributo depois do close levanta DetachedInstanceError.
         if not resultado.imoveis:
-            if resultado.relaxamentos:
-                tentativas = "; ".join(resultado.relaxamentos)
-                return (
-                    "Nenhum imóvel encontrado, nem afrouxando os filtros. Já "
-                    f"tentei: {tentativas}. Diga isso com honestidade e "
-                    "ofereça avisar quando entrar algo no perfil dela."
-                )
-            return (
-                "Nenhum imóvel encontrado com os critérios informados. Tente "
-                "de novo com menos filtros antes de responder."
-            )
+            return _nada_encontrado(resultado)
 
         linhas = []
         if resultado.relaxamentos:
@@ -201,7 +330,31 @@ async def buscar_imoveis(
 
         linhas.extend(_formatar_imovel(imovel) for imovel in resultado.imoveis)
         linhas.append(FECHAMENTO_DA_BUSCA)
+        if not filtros["operacao"]:
+            linhas.append(AVISO_DE_LISTA_MISTA)
         return "\n".join(linhas)
+
+
+def _nada_encontrado(resultado) -> str:
+    """Lista vazia é resposta válida, e precisa ser útil.
+
+    Zero resultado não é erro: é informação sobre o catálogo. O que torna isso
+    acionável são os números — quantos existem, qual o mais barato, em que
+    bairros há — porque é com eles que o agente diz o que existe de verdade em
+    vez de pedir desculpa no vazio.
+    """
+    linhas = ["Nenhum imóvel encontrado."]
+    if resultado.relaxamentos:
+        linhas.append(
+            "Já tentei, sem sucesso: " + "; ".join(resultado.relaxamentos) + "."
+        )
+    linhas.extend(resultado.diagnostico)
+    linhas.append(
+        "Diga à pessoa o que o catálogo realmente tem, com estes números. Não "
+        "ofereça um imóvel de outro tipo como se fosse o que ela pediu, e não "
+        "devolva a busca para ela refinar."
+    )
+    return "\n".join(linhas)
 
 
 @sdr_agent.tool
@@ -478,11 +631,11 @@ async def gerar_resumo_corretor(
 
 def _formatar_orcamento(lead) -> Optional[str]:
     if lead.orcamento_min and lead.orcamento_max:
-        return f"Orçamento: de R$ {lead.orcamento_min:,.0f} a R$ {lead.orcamento_max:,.0f}"
+        return f"Orçamento: de {reais(lead.orcamento_min)} a {reais(lead.orcamento_max)}"
     if lead.orcamento_max:
-        return f"Orçamento: até R$ {lead.orcamento_max:,.0f}"
+        return f"Orçamento: até {reais(lead.orcamento_max)}"
     if lead.orcamento_min:
-        return f"Orçamento: a partir de R$ {lead.orcamento_min:,.0f}"
+        return f"Orçamento: a partir de {reais(lead.orcamento_min)}"
     return None
 
 

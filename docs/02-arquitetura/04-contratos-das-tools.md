@@ -28,21 +28,44 @@ expressável. O mesmo vale para o canal.
 ## 2. `buscar_imoveis`
 
 ### Objetivo
-Consultar o catálogo de imóveis com filtros estruturados e ranking textual.
+Consultar o catálogo com filtros estruturados e ranking textual. É o
+instrumento de qualificação do agente: mostrar imóvel é o que faz a pessoa
+revelar orçamento, tamanho e bairro sem que ninguém pergunte.
 
 ### Input esperado
-- `intencao`
-- `orcamento_min` (opcional)
-- `orcamento_max` (opcional)
-- `regiao_interesse` ou `bairro_interesse` (opcional)
-- `quartos` (opcional)
-- `termos_livres` (opcional)
-- `limite_resultados` (opcional, default recomendado: 5)
+O que a pessoa procura (nunca afrouxado):
+- `operacao` — `venda` ou `aluguel`;
+- `tipo` — um dos 16 tipos do catálogo;
+- `finalidade` — `residencial` ou `comercial`, quando ela não nomeia o tipo.
+
+Onde:
+- `bairro` — só o nome do bairro;
+- `zona` — uma das 5 regiões, e também aceita nome de bairro.
+
+Quanto:
+- `preco_min`, `preco_max` — preço do imóvel;
+- `custo_total_max` — aluguel mais condomínio.
+
+Como é:
+- `quartos_min`, `quartos_max`, `suites_min`, `banheiros_min`, `vagas_min`;
+- `area_min`, `area_max`;
+- `perfil_indicado` — um dos 12 perfis de uso;
+- `termos_livres` — só amenidades, em texto livre.
+
+Apresentação:
+- `ordenar_por` — `preco_asc`, `preco_desc`, `area_desc` ou `relevancia`;
+- `limite_resultados` — 1 a 10, default 5.
+
+`operacao`, `tipo`, `finalidade`, `zona`, `perfil_indicado` e `ordenar_por` são
+`Literal` na assinatura, então viram `enum` no schema da tool: o valor inválido
+é rejeitado pelo provider antes de chegar ao banco. `tests/test_catalog_service.py`
+compara cada lista com o `SELECT DISTINCT` da coluna, para não envelhecerem.
 
 ### Output esperado
-- lista de imóveis aderentes;
-- justificativa resumida de aderência;
-- indicador de ausência de resultados quando aplicável.
+- lista de imóveis aderentes, com preço, metragem, quartos, suítes, banheiros e
+  vagas; no aluguel, também aluguel + condomínio = total do mês;
+- quando houve afrouxamento, a frase em português do que mudou;
+- quando não houve resultado, o diagnóstico (ver abaixo).
 
 ### Efeitos colaterais
 Nenhum efeito de escrita obrigatório.
@@ -50,12 +73,40 @@ Nenhum efeito de escrita obrigatório.
 ### Regras
 - aplicar filtros estruturados antes do ranking textual;
 - nunca retornar imóveis incompatíveis de forma gritante apenas para “preencher lista”;
-- ausência de resultado deve ser tratada como resposta válida.
+- ausência de resultado deve ser tratada como resposta válida;
+- uma operação por busca (ver abaixo).
 
 ### Erros tratáveis
 - falha de banco;
 - parâmetros inválidos;
 - catálogo indisponível.
+
+### O que a busca nunca troca
+`operacao`, `tipo` e `finalidade` ficam fora da escada de relaxamento. A escada
+existe para dar flexibilidade de **lugar e condição** — outro bairro, teto 30%
+maior, sem exigir a vaga —, não para trocar a coisa procurada por outra.
+
+Isto veio de uma falha real: a pessoa pediu galpão, a escada derrubou o termo
+antes de derrubar um filtro de região que não filtrava nada, e o agente
+apresentou salas comerciais como se fossem o que ela tinha pedido.
+
+Como `tipo` determina `finalidade` (não existe galpão residencial), a
+finalidade é deduzida quando só o tipo vem, e o par contraditório é recusado
+com `ModelRetry` — sem isso ele daria lista vazia para sempre, já que nenhum
+dos dois é afrouxado.
+
+### Lista vazia é resposta, não erro
+Quando nada resta depois da escada, o retorno traz os números do catálogo:
+quantos existem do que foi pedido, qual o mais barato, em que bairros há. É com
+eles que o agente diz o que existe de verdade, em vez de pedir desculpa no
+vazio ou oferecer outra coisa.
+
+### Uma operação por busca
+Sem `operacao`, a busca mistura venda e aluguel e a ordenação por preço faz os
+aluguéis (a partir de R$ 1.500) enterrarem as vendas (a partir de R$ 240 mil).
+Quando a pessoa aceita as duas, o agente busca duas vezes, uma por operação. O
+retorno avisa disso quando a operação não foi informada, e a tool usa a
+`intencao` já gravada do lead antes de cair na lista mista.
 
 ---
 

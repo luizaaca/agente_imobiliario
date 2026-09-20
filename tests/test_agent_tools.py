@@ -127,7 +127,7 @@ def test_buscar_imoveis_devolve_itens_do_catalogo(llm_fake, catalogo, lead_id, d
             achados["chamou"] = True
             return ModelResponse(parts=[ToolCallPart(
                 tool_name="buscar_imoveis",
-                args={"bairro_interesse": "Bela Vista", "limite_resultados": 5},
+                args={"bairro": "Bela Vista", "limite_resultados": 5},
             )])
         achados["retorno"] = str(messages[-1].parts[0].content)
         return ModelResponse(parts=[TextPart(content="Seguem as opcoes")])
@@ -160,7 +160,7 @@ def test_busca_sem_resultado_exato_e_refeita_e_o_agente_sabe_o_que_mudou(
     llm_fake, catalogo, lead_id, deps
 ):
     """O agente so pode dizer que ampliou a busca se a tool tiver ampliado de fato."""
-    retorno = _retorno_da_busca({"bairro_interesse": "Inexistente"}, lead_id, deps)
+    retorno = _retorno_da_busca({"bairro": "Inexistente"}, lead_id, deps)
 
     assert "Com os filtros exatos não havia nada" in retorno
     assert "olhando a região toda, não só o bairro" in retorno
@@ -171,11 +171,11 @@ def test_busca_sem_nada_em_lugar_nenhum_avisa_e_lista_o_que_tentou(
     llm_fake, catalogo, lead_id, deps
 ):
     retorno = _retorno_da_busca(
-        {"bairro_interesse": "Inexistente", "orcamento_max": 1}, lead_id, deps
+        {"bairro": "Inexistente", "preco_max": 1}, lead_id, deps
     )
 
     assert "Nenhum imóvel encontrado" in retorno
-    assert "Já tentei:" in retorno
+    assert "Já tentei, sem sucesso:" in retorno
 
 
 def test_finalidade_chega_ao_filtro_estruturado(llm_fake, catalogo, lead_id, deps):

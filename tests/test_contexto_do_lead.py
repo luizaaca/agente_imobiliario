@@ -54,7 +54,7 @@ def test_lead_completo_nao_tem_secao_de_lacunas():
 def test_orcamento_so_com_teto_e_escrito_como_ate():
     contexto = montar_contexto_do_lead(_lead(orcamento_max=Decimal("700000")))
 
-    assert "Orçamento: até R$ 700,000" in contexto
+    assert "Orçamento: até R$ 700.000" in contexto
 
 
 def test_orcamento_com_faixa_mostra_os_dois_extremos():
@@ -62,7 +62,7 @@ def test_orcamento_com_faixa_mostra_os_dois_extremos():
         _lead(orcamento_min=Decimal("400000"), orcamento_max=Decimal("700000"))
     )
 
-    assert "de R$ 400,000 a R$ 700,000" in contexto
+    assert "de R$ 400.000 a R$ 700.000" in contexto
 
 
 def test_lead_novo_sem_dado_nenhum_diz_isso_explicitamente():

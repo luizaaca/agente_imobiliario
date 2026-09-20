@@ -50,6 +50,7 @@ from sqlalchemy import text  # noqa: E402
 from alembic import command  # noqa: E402
 from src.db.models import Base, Imovel  # noqa: E402
 from src.db.session import engine, get_db  # noqa: E402
+from src.services.catalog_service import FINALIDADE_POR_TIPO  # noqa: E402
 
 
 def _recriar_banco_de_teste() -> None:
@@ -120,40 +121,42 @@ def db():
 
 # A zona segue o formato real da coluna no catalogo ('zona_oeste', com
 # underscore): e disso que depende o teste de quem escreve "zona oeste".
+#
+# Os bairros vao sem acento de proposito: o filtro e um ILIKE sobre o texto
+# cru, e "Belem" casa tanto quem escreve com acento quanto sem.
 IMOVEIS_DE_TESTE = [
-    # titulo, tipo, operacao, bairro, zona, preco, quartos, area, tags
-    ("Apartamento Bela Vista Compacto", "apartamento", "venda", "Bela Vista", "centro", 510000, 2, 55, "metro, reformado"),
-    ("Apartamento Bela Vista Vista Livre", "apartamento", "venda", "Bela Vista", "centro", 610000, 2, 62, "varanda gourmet"),
-    ("Cobertura Moema Alto Padrao", "cobertura", "venda", "Moema", "zona_sul", 1800000, 3, 180, "piscina, varanda gourmet"),
-    ("Studio Pinheiros Investidor", "studio", "venda", "Pinheiros", "zona_oeste", 420000, 1, 28, "investidor, metro"),
-    ("Apartamento Tatuape Aluguel", "apartamento", "aluguel", "Tatuape", "zona_leste", 3200, 2, 60, "metro"),
-    ("Sala Comercial Paulista", "sala_comercial", "aluguel", "Bela Vista", "centro", 4500, 0, 40, "corporativo"),
+    # titulo, tipo, operacao, bairro, zona, preco, quartos, area, tags,
+    # suites, banheiros, vagas, condominio, perfil_indicado
+    ("Apartamento Bela Vista Compacto", "apartamento", "venda", "Bela Vista", "centro", 510000, 2, 55, "metro, reformado", 1, 1, 1, 600, "primeiro_imovel"),
+    ("Apartamento Bela Vista Vista Livre", "apartamento", "venda", "Bela Vista", "centro", 610000, 2, 62, "varanda gourmet", 1, 2, 1, 750, "jovem_casal"),
+    ("Cobertura Moema Alto Padrao", "cobertura", "venda", "Moema", "zona_sul", 1800000, 3, 180, "piscina, varanda gourmet", 3, 4, 3, 2500, "alto_padrao"),
+    ("Studio Pinheiros Investidor", "studio", "venda", "Pinheiros", "zona_oeste", 420000, 1, 28, "investidor, metro", 0, 1, 0, 450, "investidor_renda"),
+    ("Apartamento Tatuape Aluguel", "apartamento", "aluguel", "Tatuape", "zona_leste", 3200, 2, 60, "metro", 1, 2, 1, 800, "residencial_familia"),
+    ("Sala Comercial Paulista", "sala_comercial", "aluguel", "Bela Vista", "centro", 4500, 0, 40, "corporativo", 0, 1, 0, 900, "pequena_empresa"),
+    ("Galpao Belem Logistico", "galpao", "aluguel", "Belem", "zona_leste", 18000, 0, 780, "logistica, doca", 0, 2, 4, 1200, "logistica_industrial"),
 ]
+
+CAMPOS_DO_IMOVEL_DE_TESTE = (
+    "titulo", "tipo", "operacao", "bairro", "zona", "preco", "quartos",
+    "area_m2", "tags", "suites", "banheiros", "vaga_garagem", "condominio",
+    "perfil_indicado",
+)
 
 
 @pytest.fixture
 def catalogo(db):
     """Insere um catálogo pequeno e previsível para os testes de busca."""
-    for i, (titulo, tipo, operacao, bairro, zona, preco, quartos, area, tags) in enumerate(
-        IMOVEIS_DE_TESTE, start=1
-    ):
+    for i, valores in enumerate(IMOVEIS_DE_TESTE, start=1):
+        campos = dict(zip(CAMPOS_DO_IMOVEL_DE_TESTE, valores, strict=True))
         db.add(
             Imovel(
                 id=i,
-                titulo=titulo,
-                tipo=tipo,
-                finalidade="comercial" if tipo == "sala_comercial" else "residencial",
-                operacao=operacao,
-                bairro=bairro,
-                zona=zona,
+                finalidade=FINALIDADE_POR_TIPO[campos["tipo"]],
                 cidade="Sao Paulo",
                 estado="SP",
-                preco=preco,
-                quartos=quartos,
-                area_m2=area,
-                descricao=f"Descricao de {titulo}",
-                tags=tags,
+                descricao=f"Descricao de {campos['titulo']}",
                 disponivel=True,
+                **campos,
             )
         )
     db.commit()
