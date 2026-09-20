@@ -21,9 +21,10 @@ Relacionar requisitos do desafio, cenários de negócio, componentes da soluçã
 | RT-05 | Agendamento | Compra residencial / Investimento | `SchedulingService`, `agendar_reuniao` | testes unitários + integração | agendamento persistido e visível |
 | RT-06 | Resumo para corretor | Todos | `SummaryService`, `gerar_resumo_corretor` | testes de contrato + revisão manual | resumo com score, objeções e próximos passos |
 | RT-07 | Persistência de dados | Todos | PostgreSQL, SQLAlchemy, Alembic | testes de integração | leads, mensagens e agendamentos no banco |
-| RT-08 | Dashboard operacional | Todos | `app.py`, `ui/dashboard.py`, `ui/estilo.py` | validação manual + integração | KPIs, cartão por lead com ações, ficha e conversa |
+| RT-08 | Dashboard operacional | Todos | `app.py`, `ui/dashboard.py`, `ui/estilo.py` | validação manual + integração | KPIs, distribuição da carteira e tabela ordenável |
+| RT-08b | Operação sobre o lead | Todos | `ui/leads.py`, `LeadService` | `test_lead_crud.py` + validação manual | ficha editável, vínculo de canal, follow-up manual, conversa e exclusão |
 | RT-09 | Controle de custos LLM | Todos | `LLMUsageService`, tabela `llm_usage` | `test_llm_usage_service.py` + integração | consumo, latência e erro por chamada; limites aplicados |
-| RT-10 | Autenticação da UI | Todos | Streamlit + autenticação | validação manual | acesso protegido ao dashboard |
+| RT-10 | Autenticação da UI | Todos | `app.py`, `ui/papeis.py`, `streamlit-authenticator` | `test_papeis.py` + validação manual | acesso protegido a toda a UI; menu conforme o papel |
 
 ---
 

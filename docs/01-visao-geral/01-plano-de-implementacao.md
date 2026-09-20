@@ -331,23 +331,37 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [ ] Exibir QR code do bot (`https://t.me/NomeDoBot`) no dashboard Streamlit.
 
 ### Fase 6: Interface Streamlit e Dashboard do Corretor
+
+A interface tem **três menus**, e o papel do usuário decide quais aparecem:
+
+| Menu | Para quê | Quem vê |
+|---|---|---|
+| **Dashboard** | leitura: KPIs, distribuição da carteira, custo de LLM | todos (o painel de custo, só o admin) |
+| **Leads** | operação: ficha, canal, follow-up, conversa, exclusão | todos |
+| **Chat Simulador** | testar o agente como se fosse um lead | só o admin |
+
+A separação é de assunto, não de permissão: o dashboard responde "como está a
+carteira" e o menu de leads responde "o que eu faço com este lead". Misturar os
+dois era o que fazia a tela de estatísticas carregar o histórico de conversa de
+cada lead.
+
 - [ ] Desenvolver aba de chat simulador com histórico e streaming de resposta.
   > Histórico funciona. Não há streaming: a resposta aparece inteira de uma vez.
-- [x] Desenvolver dashboard centrado no **goal principal: agendar ligação do corretor com o cliente**.
-- [x] Implementar componentes do dashboard:
+- [x] Restringir o simulador ao papel `admin`: é ferramenta de teste, não de atendimento.
+- [x] **Dashboard** centrado no **goal principal: agendar ligação do corretor com o cliente**.
   - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups enviados, Leads inativos.
+  - [x] **Distribuição da carteira**: leads por status, na ordem do funil, e leads por intenção.
+  - [x] **Carteira ordenável** (`st.dataframe`): clicar numa linha abre a ficha do lead no menu Leads.
+  - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
+- [x] **Menu de leads** com o ciclo completo:
   - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
-  - [x] **Filtros** (`st.selectbox`): Status (Novo, Em Qualificação, Qualificado, Agendado, Inativo) e Intenção (Compra, Aluguel, Investimento).
-  - [x] **Lista de leads ordenada por score**, um cartão por lead:
-    > Cartão e não `st.dataframe`: a ficha e a conversa do lead não cabem numa célula de tabela.
-    - Ordenação padrão: score decrescente (quem ligar primeiro no topo).
-    - Aberto no cartão, sem precisar clicar: nome, score e selos de status, temperatura (quente/morno/frio), intenção e região.
-    - Ações por linha: **Disparar follow-up**, **Abrir no simulador** e **Excluir lead**.
-  - [x] **Ficha e conversa atrás de um clique**, na largura do cartão:
-    - Perfil narrativo completo (artefato principal).
-    - Reuniões/ligações agendadas com datas e imóveis.
-    - Resumo executivo com score e próximos passos.
-    - Conversa do lead como ela aconteceu.
+  - [x] **Filtros** (`st.selectbox`): Status e Intenção.
+  - [x] **Lista ordenada por score**, um cartão por lead, com selos de status, temperatura (quente/morno/frio), intenção e região.
+  - [x] **Ficha editável**: qualificação, contato e perfil narrativo. Um campo apagado é gravado como nulo, para o corretor conseguir limpar o que o agente entendeu errado; o status que ele escolher não é recalculado por cima.
+  - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
+  - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.
+  - [x] **Conversa e agendamentos** em abas, somente leitura.
+  - [x] **Ações**: disparar follow-up e excluir lead.
 
 ### Fase 7: Observabilidade, Testes e Refino
 - [x] Instrumentar logs do agente e tools.
@@ -395,7 +409,8 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - Integrar com CRM imobiliário (Vista, Kenlo, Jetimob ou HubSpot).
 - Evoluir a busca Full-Text Search (FTS) nativa para **busca vetorial com embeddings** (`pgvector`), aprimorando o cruzamento semântico de longo alcance.
 - Incluir agenda real com Google Calendar ou Microsoft 365.
-- Evoluir autenticação para SSO/OAuth com perfis de corretor individuais.
+- Evoluir autenticação para SSO/OAuth com perfis de corretor individuais. Os papéis de hoje (`admin`, `corretor`) vivem num YAML versionado e separam telas, não protegem dados — ver [`03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md).
+- **Amadurecer o lead criado à mão até ele ser atendível ponta a ponta.** Hoje o corretor cria a ficha e vincula um canal, e o follow-up passa a alcançar o lead. Falta fechar o ciclo: validar que o identificador existe no canal antes de aceitar (hoje um `chat_id` inventado só falha na hora do envio); tratar o caso do Telegram, em que o bot não consegue iniciar conversa com quem nunca falou com ele; e decidir se o agente deve abrir a conversa com uma mensagem de apresentação em vez de um follow-up de retomada, que pressupõe um histórico que não existe.
 - Evoluir dashboard com métricas históricas e conversão por etapa.
 - Implementar processamento de áudio (transcrição de mensagens de voz no Telegram/WhatsApp).
 

@@ -6,7 +6,9 @@
 
 ## 1. Premissa
 
-**Toda a aplicação Streamlit fica protegida por login.** Nenhum conteúdo — dashboard, chat simulador, QR code do Telegram — é acessível sem autenticação. A tela de login é o primeiro ponto de contato ao abrir a URL.
+**Toda a aplicação Streamlit fica protegida por login.** Nenhum conteúdo — dashboard, leads, chat simulador — é acessível sem autenticação. A tela de login é o primeiro ponto de contato ao abrir a URL.
+
+Depois do login, o **papel** do usuário decide quais menus aparecem (seção 5). Isso organiza a tela; a fronteira de segurança continua sendo o login.
 
 O Bot Telegram não é afetado — ele opera com identidade implícita via `chat_id`.
 
@@ -34,9 +36,11 @@ credentials:
   usernames:
     admin:
       name: Administrador
+      roles: [admin]
       password: "$2b$12$..."   # hash bcrypt gerado pelo script abaixo
     corretor1:
       name: João Silva
+      roles: [corretor]
       password: "$2b$12$..."
 
 cookie:
@@ -44,6 +48,8 @@ cookie:
   key: ${AUTH_COOKIE_KEY}       # variável de ambiente
   expiry_days: 7
 ```
+
+O campo `roles` é lido pelo próprio `streamlit-authenticator`, que o publica em `st.session_state["roles"]` no login e o carrega no cookie de sessão — nada disso precisou ser construído.
 
 ### Script para gerar hash de senha
 
@@ -92,34 +98,31 @@ authenticator = stauth.Authenticate(
     cookie_expiry_days=config["cookie"]["expiry_days"],
 )
 
-name, authentication_status, username = authenticator.login()
+# streamlit-authenticator >= 0.4: login() renderiza o formulário e grava o
+# resultado em st.session_state; não retorna tupla.
+authenticator.login()
+
+authentication_status = st.session_state.get("authentication_status")
 
 if authentication_status is False:
-    st.error("❌ Usuário ou senha incorretos.")
+    st.error("Usuário ou senha incorretos.")
     st.stop()
 
 if authentication_status is None:
-    st.warning("🔒 Por favor, faça login para acessar o sistema.")
+    st.warning("Por favor, faça login para acessar o sistema.")
     st.stop()
 
 # --- A partir daqui, o usuário está autenticado ---
 
-# Sidebar com info do usuário e botão de logout
-with st.sidebar:
-    st.write(f"👤 **{name}**")
-    authenticator.logout("Sair", "sidebar")
-
-# Navegação entre abas (tudo protegido)
-tab_chat, tab_dashboard = st.tabs(["💬 Chat Simulador", "📊 Dashboard"])
-
-with tab_chat:
-    # ... renderiza o chat
-    pass
-
-with tab_dashboard:
-    # ... renderiza o dashboard do corretor
-    pass
+# Páginas de verdade, não abas: cada uma tem URL própria e monta só o seu
+# conteúdo. O menu depende do papel (seção 5).
+navegacao = st.navigation(
+    menu_do_papel(pagina_dashboard, pagina_leads, pagina_chat, papeis_da_sessao())
+)
+navegacao.run()
 ```
+
+O nome do usuário e o botão de sair ficam num menu flutuante no pé da barra lateral (`src/ui/navegacao.py`).
 
 ### Ponto-chave: `st.stop()`
 
@@ -127,14 +130,41 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 
 ---
 
-## 5. Proteção por componente
+## 5. Papéis e o que cada um enxerga
+
+| Menu | `admin` | `corretor` |
+|---|:---:|:---:|
+| **Dashboard** — KPIs, distribuição da carteira | sim | sim |
+| **Leads** — ficha, canal, follow-up, conversa, exclusão | sim | sim |
+| **Chat Simulador** | sim | não |
+| Painel **Consumo de LLM**, dentro do dashboard | sim | não |
+| Alerta de orçamento de LLM estourado | sim | sim |
+
+Dois critérios definem essa divisão:
+
+- **o simulador é ferramenta de teste**, não de atendimento. Ele conversa com o agente fingindo ser um lead e cria leads de mentira na base; na tela de quem atende de verdade, é ruído;
+- **o custo em dólar do provider é informação de quem opera a aplicação**, não de quem atende leads. O *alerta* de estouro, esse, todo mundo vê: sem ele, o corretor veria o chat parar de responder sem explicação.
+
+A regra de visibilidade mora em `src/ui/papeis.py`, numa função pura (`menu_do_papel`) fora do Streamlit, para caber em teste — é a única regra de visibilidade da aplicação.
+
+Um usuário **sem `roles:`** cai no menu do corretor: ausência de papel não promove ninguém.
+
+### Isto não é controle de acesso
+
+O papel vem de um YAML que acompanha o repositório. Quem consegue editá-lo se dá o papel que quiser, e nenhuma das duas páginas restritas verifica papel *dentro* de si — esconder o link do menu é o que se faz, e a URL direta continua existindo.
+
+Serve para **organizar a tela**, e não para proteger dado de quem já entrou. Uma fronteira de verdade exigiria provedor de identidade e autorização por operação, o que o §9 dos [critérios de qualidade](../01-visao-geral/02-qualidade-e-criterios.md) mantém fora do escopo da POC.
+
+---
+
+## 5.1 Proteção por componente
 
 | Componente | Mecanismo |
 |---|---|
 | **Toda a UI Streamlit** | `st.stop()` bloqueia renderização se `authentication_status != True` |
 | **Dashboard** | Renderizado apenas após autenticação bem-sucedida |
-| **Chat Simulador** | Renderizado apenas após autenticação bem-sucedida |
-| **QR Code Telegram** | Renderizado apenas após autenticação bem-sucedida |
+| **Leads** | Renderizado apenas após autenticação bem-sucedida |
+| **Chat Simulador** | Após autenticação, e apenas para o papel `admin` |
 | **Bot Telegram** | Independente — identidade via `chat_id` |
 | **Banco de dados** | Acesso interno — não exposto via HTTP |
 
@@ -195,6 +225,7 @@ agente_imobiliario/
 
 - [x] Instalar `streamlit-authenticator` e `pyyaml` no `requirements.txt`.
 - [x] Criar `config/credentials.yaml` com pelo menos um usuário admin.
+- [x] Declarar `roles:` para cada usuário e montar o menu a partir do papel.
 - [x] Criar `scripts/generate_password_hash.py`.
 - [x] Integrar autenticação no início de `app.py` com `st.stop()`.
 - [x] Adicionar `AUTH_COOKIE_KEY` ao `.env.example`.

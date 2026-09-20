@@ -1,41 +1,34 @@
 """Navegacao entre as paginas da UI.
 
 As paginas sao criadas em `app.py` e registradas aqui. O registro existe para o
-dashboard conseguir mandar o usuario para o simulador sem importar o chat — e
-sem que os dois modulos se importem em circulo.
+dashboard conseguir mandar o usuario para a ficha do lead sem importar a pagina
+de leads inteira — e sem que os dois modulos se importem em circulo.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import streamlit as st
 
 from src.config import settings
 
-# Lead que o dashboard pediu para abrir no simulador. O chat consome e limpa.
-CHAVE_CONVERSA_PEDIDA = "conversa_pedida"
-
 _paginas: dict[str, Any] = {}
 
 
-def registrar_paginas(chat: Any, dashboard: Any) -> None:
+def registrar_paginas(chat: Any, dashboard: Any, leads: Any) -> None:
     """Guarda as `st.Page` criadas em app.py para uso em `st.switch_page`."""
     _paginas["chat"] = chat
     _paginas["dashboard"] = dashboard
+    _paginas["leads"] = leads
 
 
-def abrir_conversa_no_simulador(lead_id: int) -> None:
-    """Leva o lead para a pagina do chat.
+def abrir_leads() -> None:
+    """Leva quem clicou para o menu de leads.
 
     Chamada no fluxo normal do script (nao em `on_click`), porque
-    `st.switch_page` interrompe a execucao para trocar de pagina.
+    `st.switch_page` interrompe a execucao para trocar de pagina. Qual lead
+    abrir ja foi guardado na sessao por `leads.abrir_ficha`.
     """
-    st.session_state[CHAVE_CONVERSA_PEDIDA] = lead_id
-    st.switch_page(_paginas["chat"])
-
-
-def conversa_pedida() -> Optional[int]:
-    """Consome o pedido pendente de abertura de conversa, se houver."""
-    return st.session_state.pop(CHAVE_CONVERSA_PEDIDA, None)
+    st.switch_page(_paginas["leads"])
 
 
 # Marca que o balão da chave de cookie já foi mostrado nesta sessão.

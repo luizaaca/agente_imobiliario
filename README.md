@@ -4,7 +4,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 157 testes automatizados. O canal Telegram está implementado mas **nunca foi exercitado com um bot real** — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 209 testes automatizados. O canal Telegram está implementado mas **nunca foi exercitado com um bot real** — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -21,7 +21,10 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Agendamento de visita/reunião, com vínculo ao imóvel | funcionando |
 | Resumo executivo para o corretor | funcionando |
 | Follow-up automático com 4 réguas e limite de tentativas | funcionando; envio ativo só no Telegram |
-| Dashboard: KPIs, filtros, conversa do lead, exclusão, custo de LLM | funcionando |
+| Dashboard: KPIs, distribuição da carteira, tabela ordenável, custo de LLM | funcionando |
+| Menu de leads: ficha editável, criação manual, vínculo de canal, conversa, exclusão | funcionando |
+| Disparo manual de follow-up pela tela | funcionando |
+| Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
 | Budgets de token (conversa, dia, mês) e custo estimado | funcionando |
 | Canal Telegram | implementado, não exercitado |
 
@@ -58,10 +61,14 @@ docker compose --profile telegram up --build
 
 Toda a aplicação está atrás de login. O repositório já traz usuários prontos em `config/credentials.yaml` — só os hashes bcrypt, nunca a senha em texto:
 
-| Usuário | Senha | Papel |
-|---|---|---|
-| `admin` | `admin123` | administrador |
-| `corretor1` | `corretor123` | corretor (João Silva) |
+| Usuário | Senha | Papel (`roles`) | Vê o Chat Simulador e o custo de LLM? |
+|---|---|---|---|
+| `admin` | `admin123` | `admin` | sim |
+| `corretor1` | `corretor123` | `corretor` | não |
+
+**Entre como `admin` para avaliar a POC inteira.** O simulador de chat é ferramenta de teste e o consumo de LLM é informação de quem opera, então nenhum dos dois aparece para o `corretor` — entre como `corretor1` se quiser ver a tela enxuta de quem só atende leads. Dashboard e menu de Leads são iguais para os dois.
+
+O papel esconde links do menu; **não é controle de acesso**. Ele mora neste YAML versionado, e quem o edita se dá o papel que quiser. Ver [`docs/03-operacao/03-autenticacao-da-ui.md`](docs/03-operacao/03-autenticacao-da-ui.md).
 
 > Este arquivo é versionado **de propósito, e só por ser uma POC de avaliação**: sem ele ninguém entra na aplicação depois de clonar. As senhas são públicas e não protegem nada. Em uso real, gere hashes novos e tire o arquivo do versionamento — a linha já está comentada no `.gitignore`.
 
@@ -81,8 +88,11 @@ Localmente, com o ambiente virtual ativo, é `python -m scripts.generate_passwor
     avaliador:
       name: Avaliador POC
       email: avaliador@exemplo.local
+      roles: [admin]
       password: "$2b$12$cole_o_hash_gerado_aqui"
 ```
+
+O `roles` aceita `[admin]` ou `[corretor]`. Sem ele, o usuário entra com o menu do corretor — ausência de papel não promove ninguém.
 
 **3. Aplique a mudança.** Em execução local, basta recarregar a página: o arquivo é lido a cada carga. No Docker, o `Dockerfile` copia o projeto para dentro da imagem, então é preciso reconstruir — rápido, porque só a última camada muda:
 
@@ -92,7 +102,7 @@ docker compose up -d --build app
 
 #### Para o chat responder de verdade
 
-Sem chave de LLM a aplicação sobe normalmente e você pode navegar pelo dashboard e pelo catálogo, mas o chat responde apenas que o atendimento está indisponível. Para conversar com o agente:
+Sem chave de LLM a aplicação sobe normalmente — dashboard e menu de Leads funcionam, incluindo a ficha e a conversa já registrada —, mas o chat fica desativado e o disparo de follow-up não gera mensagem. Para conversar com o agente:
 
 ```bash
 cp .env.example .env
@@ -280,7 +290,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 pytest
 ```
 
-157 testes, ~10 segundos. Cobrem services, contrato das cinco tools, ciclo de mensagem, budgets, réguas de follow-up, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+209 testes, ~15 segundos. Cobrem services, contrato das cinco tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -310,13 +320,14 @@ São limitações reais da entrega, não do desenho:
 
 - **O canal Telegram nunca foi executado.** O código existe (`src/channels/telegram_bot.py`, `run_telegram.py`, scheduler no `post_init`), mas sem um `TELEGRAM_BOT_TOKEN` real o fluxo Telegram → agente → banco → dashboard não foi verificado ponta a ponta.
 - **Sem streaming de resposta.** O chat espera a resposta completa e então a exibe.
-- **A UI não tem teste automatizado.** Os fluxos foram verificados manualmente no navegador.
+- **A UI não tem teste automatizado.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), mas a renderização em si foi verificada manualmente no navegador.
 - **O follow-up só envia ativamente pelo Telegram.** Sem canal com push, a mensagem é gerada e registrada com status `generated`, mas não sai. No Streamlit ela aparece no histórico do lead.
 - **Custo estimado por tabela fixa** (`LLMUsageService.PRICING`). Modelo fora da tabela cai num preço genérico e registra aviso no log — o número aparece no dashboard, mas é um palpite.
 - **O tom do agente degrada em conversas longas.** Ele tende a voltar a listar opções e oferecer menus de próximos passos, porque imita as próprias mensagens anteriores no histórico.
-- **Dashboard sem ações de escrita além de excluir.** Não há "agendar ligação" nem "disparar follow-up" pela tela; o follow-up manual roda por `python -m scripts.run_followup_once`.
+- **Não há "agendar ligação" pela tela.** O agendamento nasce da conversa, pela tool `agendar_reuniao`; o corretor lê os agendamentos na ficha, mas não cria um ali.
+- **Lead criado à mão ainda não é atendível ponta a ponta.** O corretor cria a ficha e vincula um canal, e o follow-up passa a alcançá-lo — mas o identificador do canal não é validado na hora de vincular, e no Telegram o bot não consegue iniciar conversa com quem nunca falou com ele.
 - **Sem CRM nem calendário externos.** Agendamento é uma linha no banco.
-- **Autenticação simples**, por arquivo de credenciais com hash bcrypt, sem perfis nem permissões.
+- **Autenticação simples**, por arquivo de credenciais com hash bcrypt. Os papéis `admin` e `corretor` escondem links do menu, mas não são autorização: o YAML é versionado e as páginas não verificam papel dentro de si.
 - **Busca vetorial (`pgvector`) não entra na POC** — o FTS do PostgreSQL cobre o caso.
 
 ---
@@ -325,7 +336,7 @@ São limitações reais da entrega, não do desenho:
 
 ```text
 agente_imobiliario/
-├── app.py                  # Streamlit: chat + dashboard
+├── app.py                  # Streamlit: autenticação, papéis e navegação
 ├── run_telegram.py         # bot + scheduler de follow-up
 ├── run_all.py              # sobe os dois em paralelo
 ├── src/
@@ -335,11 +346,11 @@ agente_imobiliario/
 │   ├── scheduler/          # ciclo e agendamento do follow-up
 │   ├── schemas/            # contratos Pydantic (espelham o ORM)
 │   ├── services/           # regras de domínio
-│   └── ui/                 # páginas Streamlit
+│   └── ui/                 # páginas Streamlit (dashboard, leads, chat) e papéis
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 157 testes
+├── tests/                  # 209 testes
 └── docs/                   # especificação funcional e técnica
 ```
 

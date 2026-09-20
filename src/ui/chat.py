@@ -11,7 +11,6 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
-from src.ui.navegacao import conversa_pedida
 from src.ui.texto import markdown_seguro
 
 CANAL = "streamlit"
@@ -197,11 +196,6 @@ def render_chat():
 
     if "lead_id" not in st.session_state:
         _retomar_ultima_conversa()
-
-    # O dashboard pode ter pedido para abrir a conversa de um lead especifico.
-    pedido = conversa_pedida()
-    if pedido is not None and pedido != st.session_state.lead_id:
-        abrir_conversa(pedido)
 
     _painel_da_conversa()
     st.divider()

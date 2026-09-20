@@ -57,7 +57,7 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 | ID | Requisito | Meta da POC |
 |---|---|---|
 | QS-01 | Segredos | todas as credenciais devem vir de `.env` ou variáveis de ambiente |
-| QS-02 | Controle de acesso | dashboard protegido por autenticação obrigatória |
+| QS-02 | Controle de acesso | toda a UI protegida por autenticação obrigatória; o papel do usuário define quais menus aparecem, o que organiza a tela e não substitui autorização |
 | QS-03 | Logs | não registrar tokens, senhas ou dados sensíveis desnecessários |
 | QS-04 | Minimização de dados | armazenar apenas dados necessários para atendimento, qualificação e demonstração |
 

@@ -168,6 +168,115 @@ class LeadService:
         db.refresh(lead)
         return lead
 
+    # Campos que o corretor edita na ficha. Fora desta lista nada é gravado por
+    # essa via: score é calculado, resumo é gerado, e id/datas são do banco.
+    CAMPOS_EDITAVEIS = (
+        "nome", "telefone", "intencao", "tipologia_interesse",
+        "orcamento_min", "orcamento_max", "forma_pagamento",
+        "regiao_interesse", "bairro_interesse", "quartos", "urgencia",
+        "motivo_busca", "perfil", "amenidades_desejadas", "perfil_narrativo",
+        "status",
+    )
+
+    def editar_lead(
+        self, lead_id: int, campos: dict[str, Any], db: Session
+    ) -> Optional[Lead]:
+        """Grava a ficha editada pelo corretor, exatamente como ele a deixou.
+
+        Diferente de `update_qualification`, que vem da LLM: lá o `None`
+        significa "o modelo não falou disso" e é ignorado, aqui significa "o
+        corretor apagou este campo" e é gravado. Sem essa distinção não haveria
+        como limpar um dado que o agente entendeu errado.
+
+        O status também não é recalculado: se o corretor moveu o lead no funil
+        de propósito, `avaliar_status` desfaria a decisão dele no mesmo clique.
+        """
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return None
+
+        for campo, valor in campos.items():
+            if campo in self.CAMPOS_EDITAVEIS:
+                setattr(lead, campo, valor)
+
+        db.commit()
+        db.refresh(lead)
+        logger.info(
+            "event=lead_editado lead_id=%s campos=%s",
+            lead_id, sorted(c for c in campos if c in self.CAMPOS_EDITAVEIS),
+        )
+        return lead
+
+    def criar_lead_manual(
+        self, campos: dict[str, Any], db: Session
+    ) -> Lead:
+        """Cria um lead pela ficha, sem conversa que o tenha originado.
+
+        Nasce em `novo` e com score zero, como qualquer lead: o score vem dos
+        dados e do engajamento, e `calculate_score` recalcula na sequência.
+        """
+        lead = Lead(status=LeadStatus.NOVO.value, score=Decimal("0.0"))
+        db.add(lead)
+        db.flush()
+
+        for campo, valor in campos.items():
+            if campo in self.CAMPOS_EDITAVEIS:
+                setattr(lead, campo, valor)
+
+        db.commit()
+        db.refresh(lead)
+        logger.info("event=lead_criado lead_id=%s channel=manual status=%s",
+                    lead.id, lead.status)
+        return lead
+
+    def definir_identidade(
+        self, lead_id: int, channel: str, external_chat_id: str, db: Session
+    ) -> Optional[LeadChannelIdentity]:
+        """Liga o lead a um canal de conversa, ou corrige o que ele já tem.
+
+        É o que torna um lead criado à mão alcançável pelo follow-up: sem
+        identidade, `get_primary_identity` devolve `None`, o runner não acha
+        para onde despachar e a mensagem fica só registrada no painel.
+
+        O `external_chat_id` precisa ser o identificador real do canal — no
+        Telegram, o `chat_id` numérico que o bot enxerga. Um valor inventado
+        faz o envio falhar no canal, não aqui.
+        """
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            return None
+
+        identidade = (
+            db.query(LeadChannelIdentity)
+            .filter(
+                LeadChannelIdentity.lead_id == lead_id,
+                LeadChannelIdentity.channel == channel,
+            )
+            .first()
+        )
+        if identidade is None:
+            identidade = LeadChannelIdentity(lead_id=lead_id, channel=channel)
+            db.add(identidade)
+
+        identidade.external_chat_id = external_chat_id
+        # Passa a ser a preferencial, e as outras deixam de ser: o corretor
+        # acabou de dizer por onde falar com este lead.
+        db.query(LeadChannelIdentity).filter(
+            LeadChannelIdentity.lead_id == lead_id
+        ).update({"is_primary": False}, synchronize_session=False)
+        db.flush()
+        identidade.is_primary = True
+
+        if not lead.canal_origem:
+            lead.canal_origem = channel
+
+        db.commit()
+        db.refresh(identidade)
+        logger.info(
+            "event=identidade_definida lead_id=%s channel=%s", lead_id, channel
+        )
+        return identidade
+
     # Dados mínimos que caracterizam um lead qualificado: sem eles o corretor
     # não consegue trabalhar a oportunidade.
     CAMPOS_DE_QUALIFICACAO = (

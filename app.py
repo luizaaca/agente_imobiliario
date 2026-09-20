@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Ponto de entrada principal da aplicação Streamlit.
 
-Inclui autenticação, chat simulador e dashboard do corretor.
+Autenticação, montagem do menu conforme o papel do usuário e navegação entre
+dashboard, CRUD de leads e chat simulador.
 """
 
 import streamlit as st
@@ -12,11 +13,13 @@ from src.config import settings
 from src.ui.chat import render_chat
 from src.ui.dashboard import render_dashboard
 from src.ui.estilo import aplicar_estilo
+from src.ui.leads import render_leads
 from src.ui.navegacao import (
     aviso_de_chave_de_cookie_gerada,
     menu_do_usuario,
     registrar_paginas,
 )
+from src.ui.papeis import menu_do_papel, papeis_da_sessao
 
 st.set_page_config(
     page_title="Agente SDR Imobiliário",
@@ -61,14 +64,8 @@ if authentication_status is None:
 # Navegação como páginas de verdade: os links ficam na barra lateral recolhível
 # e cada página monta só o seu próprio conteúdo. `st.switch_page` é o que
 # permite ao dashboard abrir a conversa de um lead direto no simulador.
-pagina_chat = st.Page(
-    render_chat,
-    title="Chat Simulador",
-    icon=":material/forum:",
-    url_path="chat",
-)
-# Pagina inicial: quem abre a aplicacao cai no painel de trabalho, nao no
-# simulador. O simulador e ferramenta de demonstracao, e quem quer usa o link.
+# Pagina inicial em qualquer papel: quem abre a aplicacao cai no painel, nao
+# no simulador.
 pagina_dashboard = st.Page(
     render_dashboard,
     title="Dashboard",
@@ -76,9 +73,26 @@ pagina_dashboard = st.Page(
     url_path="dashboard",
     default=True,
 )
-registrar_paginas(pagina_chat, pagina_dashboard)
+pagina_leads = st.Page(
+    render_leads,
+    title="Leads",
+    icon=":material/contacts:",
+    url_path="leads",
+)
+pagina_chat = st.Page(
+    render_chat,
+    title="Chat Simulador",
+    icon=":material/forum:",
+    url_path="chat",
+)
+registrar_paginas(pagina_chat, pagina_dashboard, pagina_leads)
 
-navegacao = st.navigation([pagina_dashboard, pagina_chat])
+# O menu depende do papel: o simulador e ferramenta de teste e so aparece
+# para o admin. Ver `src/ui/papeis.py` — isto e separacao de telas, nao
+# fronteira de seguranca.
+navegacao = st.navigation(
+    menu_do_papel(pagina_dashboard, pagina_leads, pagina_chat, papeis_da_sessao())
+)
 
 aplicar_estilo()
 menu_do_usuario(name, authenticator)
