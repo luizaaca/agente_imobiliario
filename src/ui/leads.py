@@ -26,6 +26,7 @@ from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
 from src.ui.tabela import (
+    PLACEHOLDER_DA_BUSCA,
     Acao,
     Coluna,
     aplicar_ordem,
@@ -157,7 +158,7 @@ def _filtros(db):
     col_busca, col_status, col_intencao, col_ordem = st.columns([3, 2, 2, 3])
     with col_busca:
         busca = st.text_input(
-            "Buscar", placeholder="Nome, bairro, intenção...", type="search"
+            "Buscar", placeholder=PLACEHOLDER_DA_BUSCA, type="search"
         )
     with col_status:
         status_filtro = st.selectbox("Status", ["Todos", *STATUS])
@@ -186,7 +187,10 @@ def _selo_de_score(lead: Lead) -> str:
 
 
 COLUNAS_DA_LISTA = (
-    Coluna("Lead", 3, lambda lead: f"**{markdown_seguro(rotulo_do_lead(lead))}**"),
+    # O numero do lead ganha coluna propria: e o identificador que existe no
+    # banco, o que a busca encontra e o que sobra quando nao ha nome.
+    Coluna("#", 1, lambda lead: f"`{lead.id}`"),
+    Coluna("Nome", 3, lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—"),
     Coluna(
         "Status", 2,
         lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"

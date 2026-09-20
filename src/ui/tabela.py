@@ -41,21 +41,14 @@ class Acao:
 
 
 def rotulo_do_lead(lead: Lead) -> str:
-    """Como o lead aparece na tela: o nome, ou `Lead <id>` quando nao ha nome."""
-    return lead.nome or f"Lead {lead.id}"
+    """Como o lead aparece fora da tabela: o nome, ou `#<id>` quando nao ha.
 
-
-def _rotulo_em_sql():
-    """A mesma regra de `rotulo_do_lead`, mas para o banco ordenar por ela.
-
-    Sem isso, "Nome (A-Z)" ordenava pela coluna `nome` — que na maioria dos
-    leads e nula, porque o nome so aparece quando a pessoa o diz na conversa.
-    O resultado era uma ordenacao que nao correspondia a nada do que a tela
-    mostra. Aqui ela ordena pelo rotulo visivel.
+    `Lead 29` era um rotulo inventado na hora de desenhar: nao existia em
+    coluna nenhuma, entao procurar por ele nao achava nada e ordenar por ele
+    era ordenar por uma coisa que o banco desconhece. O id existe e e o mesmo
+    que a tabela mostra na coluna `#`.
     """
-    return func.coalesce(
-        func.nullif(func.trim(Lead.nome), ""), "Lead " + cast(Lead.id, String)
-    )
+    return lead.nome or f"#{lead.id}"
 
 
 # Ordenacoes oferecidas. O score decrescente vem primeiro porque e a leitura
@@ -63,10 +56,10 @@ def _rotulo_em_sql():
 ORDENS = {
     "Score (maior primeiro)": (lambda: Lead.score, True),
     "Score (menor primeiro)": (lambda: Lead.score, False),
-    "Nome (A-Z)": (_rotulo_em_sql, False),
-    "Nome (Z-A)": (_rotulo_em_sql, True),
+    "Nome (A-Z)": (lambda: func.nullif(func.trim(Lead.nome), ""), False),
+    "Nome (Z-A)": (lambda: func.nullif(func.trim(Lead.nome), ""), True),
+    "Mais recentes": (lambda: Lead.created_at, True),
     "Atualizado recentemente": (lambda: Lead.updated_at, True),
-    "Mais antigos": (lambda: Lead.created_at, False),
 }
 
 
@@ -76,7 +69,7 @@ def seletor_de_ordem(chave: str) -> tuple[Callable, bool]:
         "Ordenar por",
         list(ORDENS),
         key=chave,
-        help="Nome ordena pelo rótulo que aparece na tabela.",
+        help="Leads sem nome vão para o fim, ordenados por número.",
     )
     return ORDENS[escolha]
 
@@ -85,28 +78,31 @@ def aplicar_ordem(query, expressao: Callable, decrescente: bool):
     """Ordena a query, mandando os nulos para o fim em qualquer sentido.
 
     Desempata por `id` para a ordem nao dancar entre recargas quando varios
-    leads tem o mesmo valor — score igual e o caso comum.
+    leads tem o mesmo valor — score igual e nome ausente sao os casos comuns.
     """
     coluna = expressao()
     ordenacao = coluna.desc() if decrescente else coluna.asc()
     return query.order_by(ordenacao.nullslast(), Lead.id.asc())
 
 
-# Campos varridos pela busca livre. O que o placeholder promete e o que ela
-# olha precisam ser a mesma lista: `intencao` faltava aqui, entao procurar
-# "compra" so achava os leads cujo perfil narrativo por acaso citava a palavra.
+# Campos varridos pela busca livre. Sao exatamente os que a tabela mostra:
+# procurar so acha o que esta a vista, e todo resultado se explica olhando a
+# linha. Orcamento e score ficam de fora por serem faixas numericas, que se
+# filtram por intervalo e nao por trecho de texto.
 CAMPOS_DA_BUSCA = (
+    cast(Lead.id, String),
     Lead.nome,
-    Lead.telefone,
+    Lead.status,
     Lead.intencao,
     Lead.bairro_interesse,
     Lead.regiao_interesse,
-    Lead.tipologia_interesse,
-    Lead.perfil,
-    Lead.motivo_busca,
-    Lead.amenidades_desejadas,
-    Lead.perfil_narrativo,
+    Lead.telefone,
 )
+
+# O que o campo de busca promete. Fica junto da lista acima para as duas nao
+# se separarem com o tempo — foi assim que `intencao` ficou de fora da busca
+# enquanto o placeholder dizia que estava dentro.
+PLACEHOLDER_DA_BUSCA = "Número, nome, status, intenção, região, telefone..."
 
 
 def filtro_de_busca(termo: str):

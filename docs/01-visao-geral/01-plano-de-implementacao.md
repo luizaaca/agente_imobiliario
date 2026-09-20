@@ -361,9 +361,10 @@ cada lead.
   - [x] **Carteira ordenável**: mesmas linhas e selos da listagem de Leads, sem as ações de escrita. A lupa de cada linha abre a ficha daquele lead.
   - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
 - [x] **Menu de leads** com o ciclo completo:
-  - [x] **Busca livre** (`st.text_input`): varre nome, telefone, intenção, bairro, região, tipologia, perfil, motivo da busca, amenidades e perfil narrativo. A lista de campos é a mesma que o campo promete no *placeholder*.
+  - [x] **Busca livre** (`st.text_input`): varre exatamente os campos que a tabela mostra — número, nome, status, intenção, bairro, região e telefone. Todo resultado se explica olhando a linha; procurar em texto invisível devolvia leads sem nada que justificasse a presença deles na lista.
   - [x] **Filtros** (`st.selectbox`): Status e Intenção.
-  - [x] **Tabela ordenável** com cabeçalho: nome, status, intenção, região, orçamento, telefone e score com selo de temperatura (quente/morno/frio). Lápis abre a ficha, lixeira exclui com confirmação.
+  - [x] **Tabela ordenável** com cabeçalho: número, nome, status, intenção, região, orçamento, telefone e score com selo de temperatura (quente/morno/frio). Lápis abre a ficha, lixeira exclui com confirmação.
+    > O lead sem nome aparece pelo número, e não por um `Lead 29` montado na hora: um rótulo inventado não existe em coluna nenhuma, então não se acha pela busca nem se ordena por ele.
   - [x] **Ficha editável**: qualificação, contato e perfil narrativo. Um campo apagado é gravado como nulo, para o corretor conseguir limpar o que o agente entendeu errado; o status que ele escolher não é recalculado por cima.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
   - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.

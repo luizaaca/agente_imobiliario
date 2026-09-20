@@ -193,6 +193,21 @@ causas possíveis:
 """,
     ),
     (
+        "A busca não acha o que eu esperava.",
+        """
+Ela varre **exatamente os campos que a tabela mostra**: número, nome, status,
+intenção, bairro, região e telefone. É de propósito — assim todo resultado se
+explica olhando a linha.
+
+O que fica de fora: orçamento e score, que são faixas numéricas e se filtram
+por intervalo, e o **perfil narrativo**, que é texto longo e invisível na
+lista. Para procurar dentro dele, abra a ficha do lead.
+
+Um lead sem nome aparece pelo **número**, na coluna `#`, e é por ele que se
+procura.
+""",
+    ),
+    (
         "O que faz o botão **Vincular**, na aba Canal?",
         """
 Ele grava **por onde o agente fala com este lead**: o canal (hoje `telegram`

@@ -1,8 +1,9 @@
 """Busca livre e ordenação da tabela de leads.
 
-Os dois nasceram de defeitos encontrados usando a tela: a busca prometia
-procurar por intenção e não procurava, e "Nome (A-Z)" ordenava pela coluna
-`nome`, quase sempre nula, e não pelo rótulo que a tabela mostra.
+Duas regras sustentam esta tela: a busca varre exatamente os campos que a
+tabela mostra — todo resultado se explica olhando a linha — e a ordenação
+manda para o fim quem não tem o valor, sempre desempatando por número para a
+ordem não dançar entre recargas.
 """
 
 from decimal import Decimal
@@ -61,8 +62,25 @@ def test_busca_ignora_caixa_e_espacos_nas_pontas(leads, db):
     assert len(_buscar(db, "  ALUGUEL  ")) == 1
 
 
-def test_busca_no_perfil_narrativo_continua_valendo(leads, db):
-    assert [lead.id for lead in _buscar(db, "apartamento")] == [leads[1].id]
+def test_busca_nao_olha_o_perfil_narrativo(leads, db):
+    """A busca varre só o que a tabela mostra.
+
+    O perfil narrativo é texto longo e invisível na lista: procurar "lead"
+    devolvia os leads cujo texto por acaso começava com a palavra, sem nada
+    na linha que explicasse por que eles estavam ali.
+    """
+    assert _buscar(db, "apartamento") == []
+
+
+def test_busca_pelo_numero_do_lead(leads, db):
+    """O número é o identificador visível, então tem de ser procurável."""
+    alvo = leads[1]
+
+    assert [lead.id for lead in _buscar(db, str(alvo.id))] == [alvo.id]
+
+
+def test_busca_por_status(leads, db):
+    assert len(_buscar(db, "novo")) == len(leads)
 
 
 def test_busca_sem_correspondencia_devolve_vazio(leads, db):
@@ -77,20 +95,22 @@ def _ordenar(db, rotulo):
     return aplicar_ordem(db.query(Lead), expressao, decrescente).all()
 
 
-def test_nome_ordena_pelo_rotulo_visivel(db):
-    """Sem nome, o rótulo é `Lead <id>` — e é por ele que a tela ordena."""
+def test_nome_ordena_pelos_nomeados_e_joga_o_resto_para_o_fim(db):
     servico = LeadService()
     sem_nome = servico.criar_lead_manual({}, db)
     com_nome = servico.criar_lead_manual({"nome": "Ana Brandão"}, db)
 
     ordenados = _ordenar(db, "Nome (A-Z)")
 
-    assert [rotulo_do_lead(lead) for lead in ordenados] == [
-        "Ana Brandão",
-        f"Lead {sem_nome.id}",
-    ]
+    assert ordenados[0].id == com_nome.id
     assert ordenados[-1].id == sem_nome.id
-    assert com_nome.id == ordenados[0].id
+
+
+def test_lead_sem_nome_aparece_pelo_numero(db):
+    """`Lead 29` era um rótulo inventado; o número existe no banco."""
+    sem_nome = LeadService().criar_lead_manual({}, db)
+
+    assert rotulo_do_lead(sem_nome) == f"#{sem_nome.id}"
 
 
 def test_nome_vazio_conta_como_sem_nome(db):
