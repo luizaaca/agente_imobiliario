@@ -66,19 +66,18 @@ pagina_chat = st.Page(
     title="Chat Simulador",
     icon=":material/forum:",
     url_path="chat",
-    default=True,
 )
+# Pagina inicial: quem abre a aplicacao cai no painel de trabalho, nao no
+# simulador. O simulador e ferramenta de demonstracao, e quem quer usa o link.
 pagina_dashboard = st.Page(
     render_dashboard,
     title="Dashboard",
     icon=":material/space_dashboard:",
     url_path="dashboard",
+    default=True,
 )
 registrar_paginas(pagina_chat, pagina_dashboard)
 
-# O dashboard vem primeiro na lista e o simulador por ultimo. A ordem da lista
-# e so a ordem dos links: `default=True` no chat continua mandando quem abre a
-# aplicacao direto para ele.
 navegacao = st.navigation([pagina_dashboard, pagina_chat])
 
 aplicar_estilo()
