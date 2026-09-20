@@ -130,3 +130,37 @@ async def _pegar_modelo():
 
 def test_sem_loop_corrente_tambem_funciona():
     assert build_model() is build_model()
+
+
+# --- Aviso de configuracao ausente -------------------------------------------
+
+
+def test_provider_que_exige_chave(monkeypatch):
+    for provider in ("openai", "groq", "gemini", "custom"):
+        monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", provider)
+        assert provider_mod.exige_chave_de_api() is True
+
+
+def test_ollama_nao_exige_chave(monkeypatch):
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "Ollama")
+    assert provider_mod.exige_chave_de_api() is False
+
+
+def test_ui_avisa_quando_falta_chave(monkeypatch):
+    """Sem esse aviso o usuario so descobre conversando e recebendo 'indisponivel'."""
+    from src.ui import chat as chat_mod
+
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "openai")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    assert chat_mod.falta_chave_de_llm() is True
+
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-existe")
+    assert chat_mod.falta_chave_de_llm() is False
+
+
+def test_ui_nao_avisa_no_ollama_sem_chave(monkeypatch):
+    from src.ui import chat as chat_mod
+
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "ollama")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    assert chat_mod.falta_chave_de_llm() is False

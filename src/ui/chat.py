@@ -162,13 +162,22 @@ def _painel_da_conversa() -> None:
         st.rerun()
 
 
+def falta_chave_de_llm() -> bool:
+    """Se o chat vai falhar por falta de credencial do provider.
+
+    Separado do render para poder ser testado: é a condição que decide se a
+    aplicação avisa na tela ou deixa o usuário descobrir conversando.
+    """
+    return not settings.OPENAI_API_KEY and exige_chave_de_api()
+
+
 def _aviso_de_llm_ausente() -> None:
     """Diz na tela que falta chave, em vez de deixar o chat falhar calado.
 
     A aplicação sobe de propósito sem chave de LLM — dá para navegar pelo
     catálogo e pelo painel. Só o chat depende dela, e é aqui que o aviso serve.
     """
-    if settings.OPENAI_API_KEY or not exige_chave_de_api():
+    if not falta_chave_de_llm():
         return
 
     st.warning(
