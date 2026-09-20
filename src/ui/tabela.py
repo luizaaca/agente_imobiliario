@@ -85,10 +85,15 @@ def aplicar_ordem(query, expressao: Callable, decrescente: bool):
     return query.order_by(ordenacao.nullslast(), Lead.id.asc())
 
 
-# Campos varridos pela busca livre. Sao exatamente os que a tabela mostra:
-# procurar so acha o que esta a vista, e todo resultado se explica olhando a
-# linha. Orcamento e score ficam de fora por serem faixas numericas, que se
-# filtram por intervalo e nao por trecho de texto.
+# Campos varridos pela busca livre: os que a tabela mostra, mais o perfil
+# narrativo. O narrativo entra porque e o artefato central do lead — e onde
+# moram as preferencias, as objecoes e as rejeicoes, e procurar por "piscina"
+# ou "mudanca de trabalho" so funciona nele. Como ele nao aparece na lista, um
+# resultado pode nao se explicar olhando a linha; e o preco de alcanca-lo, e
+# esta dito no placeholder.
+#
+# Orcamento e score ficam de fora por serem faixas numericas, que se filtram
+# por intervalo e nao por trecho de texto.
 CAMPOS_DA_BUSCA = (
     cast(Lead.id, String),
     Lead.nome,
@@ -97,12 +102,13 @@ CAMPOS_DA_BUSCA = (
     Lead.bairro_interesse,
     Lead.regiao_interesse,
     Lead.telefone,
+    Lead.perfil_narrativo,
 )
 
 # O que o campo de busca promete. Fica junto da lista acima para as duas nao
 # se separarem com o tempo — foi assim que `intencao` ficou de fora da busca
 # enquanto o placeholder dizia que estava dentro.
-PLACEHOLDER_DA_BUSCA = "Número, nome, status, intenção, região, telefone..."
+PLACEHOLDER_DA_BUSCA = "Número, nome, status, intenção, região, telefone, perfil..."
 
 
 def filtro_de_busca(termo: str):

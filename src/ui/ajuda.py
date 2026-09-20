@@ -195,13 +195,17 @@ causas possíveis:
     (
         "A busca não acha o que eu esperava.",
         """
-Ela varre **exatamente os campos que a tabela mostra**: número, nome, status,
-intenção, bairro, região e telefone. É de propósito — assim todo resultado se
-explica olhando a linha.
+Ela varre número, nome, status, intenção, bairro, região, telefone e o
+**perfil narrativo**.
 
-O que fica de fora: orçamento e score, que são faixas numéricas e se filtram
-por intervalo, e o **perfil narrativo**, que é texto longo e invisível na
-lista. Para procurar dentro dele, abra a ficha do lead.
+Os sete primeiros aparecem na tabela, então o resultado se explica olhando a
+linha. O perfil narrativo não aparece — é onde moram preferências, objeções e
+rejeições, e procurar por *"piscina"* ou *"mudança de trabalho"* só funciona
+nele. Quando um lead aparecer sem motivo visível, abra a ficha: o casamento
+está no texto do perfil.
+
+Ficam de fora orçamento e score, que são faixas numéricas e se filtram por
+intervalo, não por trecho de texto.
 
 Um lead sem nome aparece pelo **número**, na coluna `#`, e é por ele que se
 procura.
@@ -229,10 +233,15 @@ inventado só falha quando o envio acontece.
 Porque o último compromisso dele deixou de existir — foi excluído, cancelado ou
 marcado como realizado.
 
-`agendado` afirma que existe visita ou reunião de pé. Quando isso deixa de ser
-verdade, o lead volta para onde os dados dele o colocam: `qualificado` se já tem
-intenção, orçamento, região e quartos; `em_qualificacao` caso contrário. Com
-outro compromisso ainda de pé, nada muda.
+`agendado` não é julgamento, é fato verificável: ou existe visita marcada, ou
+não existe. Por isso o status e a agenda ficam sincronizados **nos dois
+sentidos** — aparecendo compromisso o lead vai para `agendado`, sumindo o último
+ele volta para onde os dados o colocam (`qualificado` se já tem intenção,
+orçamento, região e quartos; `em_qualificacao` caso contrário).
+
+Isso vale inclusive por cima do status que você escolher na ficha: os outros
+estágios são sua decisão, `agendado` é da agenda. `inativo` fica de fora — quem
+parou de responder continua parado mesmo com uma visita antiga no calendário.
 """,
     ),
     (

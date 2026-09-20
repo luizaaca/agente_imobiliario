@@ -341,6 +341,8 @@ A interface se divide por assunto, e o papel do usuário decide quais menus apar
 | **Chat Simulador** | testar o agente como se fosse um lead | só o admin |
 | **Ajuda** | o que a aplicação faz, como usar e por que ela se comporta assim | todos |
 
+O menu vem em duas seções: os links de trabalho e, depois de um separador, a **Ajuda**.
+
 As duas listas de lead — a carteira do dashboard e a listagem de Leads — são o mesmo componente (`src/ui/tabela.py`), montado com `st.columns` e não com `st.dataframe`: a célula do dataframe é desenhada em canvas e não comporta botão. O preço é a ordenação, que deixa de ser clique no cabeçalho e vira um seletor explícito.
 
 A ficha do lead é uma página própria (`/lead`), criada com `visibility="hidden"` para ficar fora do menu. Duas páginas, e não dois estados da mesma tela: é o que faz o link **Leads** devolver a listagem quando se está dentro de uma ficha, sem precisar adivinhar se o clique veio do menu ou de um botão da própria tela.
@@ -361,7 +363,7 @@ cada lead.
   - [x] **Carteira ordenável**: mesmas linhas e selos da listagem de Leads, sem as ações de escrita. A lupa de cada linha abre a ficha daquele lead.
   - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
 - [x] **Menu de leads** com o ciclo completo:
-  - [x] **Busca livre** (`st.text_input`): varre exatamente os campos que a tabela mostra — número, nome, status, intenção, bairro, região e telefone. Todo resultado se explica olhando a linha; procurar em texto invisível devolvia leads sem nada que justificasse a presença deles na lista.
+  - [x] **Busca livre** (`st.text_input`): varre os campos que a tabela mostra — número, nome, status, intenção, bairro, região e telefone — mais o perfil narrativo, que é onde moram preferências, objeções e rejeições. A lista de campos e o *placeholder* saem da mesma constante, para não se separarem com o tempo.
   - [x] **Filtros** (`st.selectbox`): Status e Intenção.
   - [x] **Tabela ordenável** com cabeçalho: número, nome, status, intenção, região, orçamento, telefone e score com selo de temperatura (quente/morno/frio). Lápis abre a ficha, lixeira exclui com confirmação.
     > O lead sem nome aparece pelo número, e não por um `Lead 29` montado na hora: um rótulo inventado não existe em coluna nenhuma, então não se acha pela busca nem se ordena por ele.
@@ -369,7 +371,7 @@ cada lead.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
   - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.
   - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável.
-  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação. Excluir, cancelar ou dar por realizado o último compromisso de pé tira o lead de `agendado`: o status afirma que existe visita marcada, e ele não pode continuar afirmando isso sozinho.
+  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação. O status do lead e a agenda ficam sincronizados nos dois sentidos: aparecendo compromisso o lead vai para `agendado`, sumindo o último ele volta para onde os dados o colocam. `agendado` não é julgamento, é fato verificável — por isso a sincronização vale inclusive por cima do status escolhido à mão na ficha. `inativo` fica de fora: quem parou de responder continua parado mesmo com uma visita antiga no calendário.
   - [x] **Ações**: disparar follow-up e excluir lead.
 
 ### Fase 7: Observabilidade, Testes e Refino

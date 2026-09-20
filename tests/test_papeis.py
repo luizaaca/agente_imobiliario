@@ -16,8 +16,16 @@ FICHA = "ficha"
 
 
 def _menu(papeis):
-    """Só os itens de menu: a ficha entra separada, escondida."""
-    return menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, papeis)
+    """Todas as páginas, na ordem em que aparecem no menu.
+
+    A ficha entra separada, escondida, e por isso fica de fora daqui.
+    """
+    secoes = menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, papeis)
+    return [pagina for paginas in secoes.values() for pagina in paginas]
+
+
+def _secoes(papeis, ficha=None):
+    return menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, papeis, ficha)
 
 
 def test_admin_ve_o_simulador():
@@ -62,13 +70,23 @@ def test_credenciais_versionadas_declaram_os_papeis():
     assert usuarios["corretor1"]["roles"] == [PAPEL_CORRETOR]
 
 
-def test_ficha_vai_junto_mas_no_fim_da_lista():
+def test_ficha_vai_junto_mas_fora_dos_links_de_trabalho():
     """Ela precisa estar registrada para ter URL, e `visibility="hidden"` em
     `app.py` é o que a mantém fora do menu."""
-    paginas = menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, [PAPEL_ADMIN], FICHA)
+    secoes = _secoes([PAPEL_ADMIN], FICHA)
 
-    assert paginas == [DASHBOARD, LEADS, CHAT, AJUDA, FICHA]
+    assert FICHA not in secoes[""]
+    assert FICHA in secoes["Apoio"]
 
 
 def test_sem_ficha_o_menu_nao_ganha_item_vazio():
-    assert FICHA not in menu_do_papel(DASHBOARD, LEADS, CHAT, AJUDA, [PAPEL_ADMIN])
+    assert FICHA not in _menu([PAPEL_ADMIN])
+
+
+def test_ajuda_fica_em_secao_propria():
+    """É o que desenha o separador antes dela."""
+    secoes = _secoes([PAPEL_CORRETOR])
+
+    assert AJUDA not in secoes[""]
+    assert secoes["Apoio"][0] == AJUDA
+    assert list(secoes) == ["", "Apoio"]

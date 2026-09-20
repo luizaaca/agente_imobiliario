@@ -191,14 +191,16 @@ COLUNAS_DA_LISTA = (
     # banco, o que a busca encontra e o que sobra quando nao ha nome.
     Coluna("#", 1, lambda lead: f"`{lead.id}`"),
     Coluna("Nome", 3, lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—"),
+    # `em qualificacao` e a faixa fechada de orcamento sao os textos mais
+    # longos da tabela: sem folga, um trunca e o outro quebra em duas linhas.
     Coluna(
-        "Status", 2,
+        "Status", 3,
         lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
                      f"[{lead.status.replace('_', ' ')}]",
     ),
     Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
     Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
-    Coluna("Orçamento", 3, lambda lead: texto(faixa_de_orcamento(lead))),
+    Coluna("Orçamento", 4, lambda lead: texto(faixa_de_orcamento(lead))),
     Coluna("Telefone", 2, lambda lead: texto(lead.telefone)),
     Coluna("Score", 2, _selo_de_score),
 )
@@ -252,8 +254,14 @@ def _lista(db) -> None:
     with col_contagem:
         st.caption(f"{len(leads)} lead(s)")
     with col_novo:
-        if st.button("Novo lead", icon=":material/person_add:", width="stretch"):
-            abrir_ficha(FICHA_EM_BRANCO)
+        # Alinhado a direita para encostar na coluna dos icones da tabela,
+        # logo abaixo.
+        with st.container(horizontal=True, horizontal_alignment="right"):
+            if st.button(
+                "", icon=":material/person_add:", key="novo_lead",
+                help="Cadastrar um lead à mão",
+            ):
+                abrir_ficha(FICHA_EM_BRANCO)
 
     if not leads:
         st.info("Nenhum lead encontrado com os filtros selecionados.")
@@ -398,6 +406,11 @@ def _formulario(lead: Optional[Lead]) -> None:
                 )
                 lead_id = alvo.id
                 servico.calculate_score(lead_id, db)
+                # O status escolhido na ficha vale para os estagios de
+                # julgamento; `agendado` e fato verificavel, e quem manda e a
+                # agenda. Sem isto daria para marcar `agendado` sem visita
+                # nenhuma, ou tirar de `agendado` quem tem visita marcada.
+                SchedulingService().sincronizar_status_do_lead(lead_id, db)
 
             st.toast(
                 "Lead criado." if novo else "Ficha salva.", icon=":material/check:"
@@ -777,24 +790,27 @@ def _cabecalho_da_ficha(lead: Optional[Lead]) -> None:
         st.markdown(selos_do_lead(lead, float(lead.score or 0)))
 
     with col_acoes:
-        col_followup, col_excluir = st.columns(2)
-        if col_followup.button(
-            "", icon=":material/send:", key="acao_followup_da_ficha",
-            help=(
-                "Disparar follow-up: mesma régua do automático, sem esperar a "
-                "janela de inatividade."
-            ),
-            type="tertiary",
-        ):
-            _disparar_followup(lead)
-        # Some enquanto a confirmacao esta aberta, para nao ficarem dois
-        # botoes de excluir na mesma tela.
-        if st.session_state.get(CHAVE_EXCLUSAO) != lead.id and col_excluir.button(
-            "", icon=":material/delete:", key="acao_excluir_da_ficha",
-            help="Excluir este lead", type="tertiary",
-        ):
-            st.session_state[CHAVE_EXCLUSAO] = lead.id
-            st.rerun()
+        # `horizontal_alignment="right"` encosta os dois no canto. Em colunas
+        # de larguras iguais eles ficavam no inicio de cada metade, soltos no
+        # meio da faixa.
+        with st.container(horizontal=True, horizontal_alignment="right"):
+            if st.button(
+                "", icon=":material/send:", key="acao_followup_da_ficha",
+                help=(
+                    "Disparar follow-up: mesma régua do automático, sem "
+                    "esperar a janela de inatividade."
+                ),
+                type="tertiary",
+            ):
+                _disparar_followup(lead)
+            # Some enquanto a confirmacao esta aberta, para nao ficarem dois
+            # botoes de excluir na mesma tela.
+            if st.session_state.get(CHAVE_EXCLUSAO) != lead.id and st.button(
+                "", icon=":material/delete:", key="acao_excluir_da_ficha",
+                help="Excluir este lead", type="tertiary",
+            ):
+                st.session_state[CHAVE_EXCLUSAO] = lead.id
+                st.rerun()
 
 
 def _ficha(lead_id: int) -> None:

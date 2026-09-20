@@ -273,6 +273,7 @@ COLUNAS_DA_CARTEIRA = (
         "Nome", 3,
         lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—",
     ),
+    # Folga suficiente para `em qualificacao` nao truncar.
     Coluna(
         "Status", 3,
         lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"

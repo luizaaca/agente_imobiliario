@@ -1,9 +1,8 @@
 """Busca livre e ordenação da tabela de leads.
 
-Duas regras sustentam esta tela: a busca varre exatamente os campos que a
-tabela mostra — todo resultado se explica olhando a linha — e a ordenação
-manda para o fim quem não tem o valor, sempre desempatando por número para a
-ordem não dançar entre recargas.
+Duas regras sustentam esta tela: a busca varre os campos que a tabela mostra
+mais o perfil narrativo, e a ordenação manda para o fim quem não tem o valor,
+sempre desempatando por número para a ordem não dançar entre recargas.
 """
 
 from decimal import Decimal
@@ -62,14 +61,13 @@ def test_busca_ignora_caixa_e_espacos_nas_pontas(leads, db):
     assert len(_buscar(db, "  ALUGUEL  ")) == 1
 
 
-def test_busca_nao_olha_o_perfil_narrativo(leads, db):
-    """A busca varre só o que a tabela mostra.
+def test_busca_olha_o_perfil_narrativo(leads, db):
+    """É onde moram preferências, objeções e rejeições.
 
-    O perfil narrativo é texto longo e invisível na lista: procurar "lead"
-    devolvia os leads cujo texto por acaso começava com a palavra, sem nada
-    na linha que explicasse por que eles estavam ali.
+    Procurar por "piscina" ou "mudança de trabalho" só funciona nele — e é o
+    único campo pesquisado que não aparece na tabela.
     """
-    assert _buscar(db, "apartamento") == []
+    assert [lead.id for lead in _buscar(db, "apartamento")] == [leads[1].id]
 
 
 def test_busca_pelo_numero_do_lead(leads, db):

@@ -42,8 +42,8 @@ def menu_do_papel(
     ajuda: Any,
     papeis: Optional[Sequence[str]],
     ficha: Any = None,
-) -> list[Any]:
-    """Paginas entregues ao `st.navigation`, na ordem do menu.
+) -> dict[str, list[Any]]:
+    """Paginas entregues ao `st.navigation`, agrupadas por secao do menu.
 
     O simulador de chat so aparece para o admin: e ferramenta de teste, nao de
     atendimento. A ajuda fica por ultimo e aparece para todos — quem mais
@@ -56,10 +56,16 @@ def menu_do_papel(
     `visibility="hidden"`: precisa estar registrada para ter URL e receber
     `st.switch_page`, e nao deve virar um item de menu.
     """
-    paginas = [dashboard, leads]
+    trabalho = [dashboard, leads]
     if e_admin(papeis):
-        paginas.append(chat)
-    paginas.append(ajuda)
+        trabalho.append(chat)
+
+    # Dicionario, e nao lista: `st.navigation` separa cada chave em uma secao
+    # com titulo proprio, e e o que poe a Ajuda depois de um corte em vez de
+    # solta no fim dos links de trabalho. A primeira secao fica sem titulo,
+    # porque nomea-la ("Trabalho", "Principal") so acrescentaria uma palavra
+    # que ninguem precisa ler.
+    apoio = [ajuda]
     if ficha is not None:
-        paginas.append(ficha)
-    return paginas
+        apoio.append(ficha)
+    return {"": trabalho, "Apoio": apoio}

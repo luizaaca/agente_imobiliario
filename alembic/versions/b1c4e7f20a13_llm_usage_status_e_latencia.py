@@ -12,6 +12,7 @@ server_default 'ok' as classifica corretamente.
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "b1c4e7f20a13"

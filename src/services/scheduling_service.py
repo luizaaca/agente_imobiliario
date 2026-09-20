@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from src.db.models import Agendamento, Lead
+from src.schemas.lead import LeadStatus
 from src.services.lead_service import LeadService
 
 logger = logging.getLogger(__name__)
@@ -22,39 +23,54 @@ class SchedulingService:
     # ela.
     STATUS_ATIVOS = ("pendente", "confirmado")
 
-    def _reavaliar_status_do_lead(self, lead_id: int, db: Session) -> None:
-        """Tira o lead de `agendado` quando nao sobrou compromisso de pe.
-
-        Chamado depois de apagar ou desativar um agendamento. Sem isso o lead
-        fica marcado como `agendado` sem ter compromisso nenhum — o painel
-        conta um agendamento que nao existe e o corretor nao entende por que
-        aquele lead esta parado ali.
-
-        So mexe em quem esta `agendado`: um lead `inativo` ou `novo` nao
-        chegou nesse estagio por causa de um compromisso.
-        """
-        lead = db.query(Lead).filter(Lead.id == lead_id).first()
-        if lead is None or lead.status != "agendado":
-            return
-
-        ainda_tem = (
+    def tem_compromisso_ativo(self, lead_id: int, db: Session) -> bool:
+        """Se existe visita ou reuniao de pe para este lead."""
+        return (
             db.query(Agendamento.id)
             .filter(
                 Agendamento.lead_id == lead_id,
                 Agendamento.status.in_(self.STATUS_ATIVOS),
             )
             .first()
+            is not None
         )
-        if ainda_tem:
-            return
 
-        novo_status = LeadService().status_sem_compromisso(lead)
-        lead.status = novo_status
+    def sincronizar_status_do_lead(self, lead_id: int, db: Session) -> Optional[str]:
+        """Faz o status do lead concordar com os compromissos dele.
+
+        `agendado` nao e opiniao, e fato verificavel: ou existe visita marcada,
+        ou nao existe. Por isso a sincronizacao vale nos dois sentidos —
+        aparecendo compromisso o lead vai para `agendado`, sumindo o ultimo ele
+        volta para onde os dados o colocam.
+
+        Os outros estagios sao julgamento de quem atende e nao sao tocados
+        aqui; `inativo` tambem fica de fora, porque um lead que parou de
+        responder continua parado mesmo com uma visita antiga no calendario.
+
+        Devolve o novo status quando houve mudanca, e `None` quando ja estava
+        certo — e o que permite a quem chama saber se precisa avisar na tela.
+        """
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if lead is None or lead.status == LeadStatus.INATIVO.value:
+            return None
+
+        tem = self.tem_compromisso_ativo(lead_id, db)
+        esta_agendado = lead.status == LeadStatus.AGENDADO.value
+        if tem == esta_agendado:
+            return None
+
+        lead.status = (
+            LeadStatus.AGENDADO.value
+            if tem
+            else LeadService().status_sem_compromisso(lead)
+        )
         db.commit()
         logger.info(
-            "event=lead_sem_compromisso lead_id=%s novo_status=%s",
-            lead_id, novo_status,
+            "event=status_sincronizado_com_agenda lead_id=%s novo_status=%s "
+            "tem_compromisso=%s",
+            lead_id, lead.status, tem,
         )
+        return lead.status
 
     def create(
         self,
@@ -78,12 +94,6 @@ class SchedulingService:
             status="pendente",
         )
         db.add(agendamento)
-
-        # Atualizar status do lead para 'agendado'
-        lead = db.query(Lead).filter(Lead.id == lead_id).first()
-        if lead:
-            lead.status = "agendado"
-
         db.commit()
         db.refresh(agendamento)
         logger.info(
@@ -91,6 +101,8 @@ class SchedulingService:
             "data_hora=%s imovel_id=%s status=ok",
             lead_id, agendamento.id, tipo, data_hora, imovel_id,
         )
+        self.sincronizar_status_do_lead(lead_id, db)
+        db.refresh(agendamento)
         return agendamento
 
     def list_by_lead(
@@ -156,7 +168,7 @@ class SchedulingService:
             agendamento_id, agendamento.lead_id, tipo, data_hora, status,
             imovel_id,
         )
-        self._reavaliar_status_do_lead(agendamento.lead_id, db)
+        self.sincronizar_status_do_lead(agendamento.lead_id, db)
         db.refresh(agendamento)
         return agendamento
 
@@ -182,7 +194,7 @@ class SchedulingService:
             "event=agendamento_excluido agendamento_id=%s lead_id=%s",
             agendamento_id, lead_id,
         )
-        self._reavaliar_status_do_lead(lead_id, db)
+        self.sincronizar_status_do_lead(lead_id, db)
         return True
 
     def update_status(
@@ -209,7 +221,7 @@ class SchedulingService:
                 "novo_status=%s",
                 agendamento_id, agendamento.lead_id, status,
             )
-            self._reavaliar_status_do_lead(agendamento.lead_id, db)
+            self.sincronizar_status_do_lead(agendamento.lead_id, db)
             db.refresh(agendamento)
         return agendamento
 
