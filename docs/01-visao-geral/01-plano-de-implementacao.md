@@ -361,14 +361,14 @@ cada lead.
   - [x] **Carteira ordenável**: mesmas linhas e selos da listagem de Leads, sem as ações de escrita. A lupa de cada linha abre a ficha daquele lead.
   - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
 - [x] **Menu de leads** com o ciclo completo:
-  - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
+  - [x] **Busca livre** (`st.text_input`): varre nome, telefone, intenção, bairro, região, tipologia, perfil, motivo da busca, amenidades e perfil narrativo. A lista de campos é a mesma que o campo promete no *placeholder*.
   - [x] **Filtros** (`st.selectbox`): Status e Intenção.
   - [x] **Tabela ordenável** com cabeçalho: nome, status, intenção, região, orçamento, telefone e score com selo de temperatura (quente/morno/frio). Lápis abre a ficha, lixeira exclui com confirmação.
   - [x] **Ficha editável**: qualificação, contato e perfil narrativo. Um campo apagado é gravado como nulo, para o corretor conseguir limpar o que o agente entendeu errado; o status que ele escolher não é recalculado por cima.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
   - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.
   - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável.
-  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação.
+  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação. Excluir, cancelar ou dar por realizado o último compromisso de pé tira o lead de `agendado`: o status afirma que existe visita marcada, e ele não pode continuar afirmando isso sozinho.
   - [x] **Ações**: disparar follow-up e excluir lead.
 
 ### Fase 7: Observabilidade, Testes e Refino

@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from src.db.models import Agendamento, Lead
+from src.services.lead_service import LeadService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,44 @@ class SchedulingService:
 
     STATUS_VALIDOS = ("pendente", "confirmado", "cancelado", "realizado")
     TIPOS_VALIDOS = ("visita", "reuniao")
+    # Compromissos que ainda estao de pe. `realizado` sai da lista junto com
+    # `cancelado`: a visita ja aconteceu, e o lead nao esta mais esperando por
+    # ela.
+    STATUS_ATIVOS = ("pendente", "confirmado")
+
+    def _reavaliar_status_do_lead(self, lead_id: int, db: Session) -> None:
+        """Tira o lead de `agendado` quando nao sobrou compromisso de pe.
+
+        Chamado depois de apagar ou desativar um agendamento. Sem isso o lead
+        fica marcado como `agendado` sem ter compromisso nenhum — o painel
+        conta um agendamento que nao existe e o corretor nao entende por que
+        aquele lead esta parado ali.
+
+        So mexe em quem esta `agendado`: um lead `inativo` ou `novo` nao
+        chegou nesse estagio por causa de um compromisso.
+        """
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if lead is None or lead.status != "agendado":
+            return
+
+        ainda_tem = (
+            db.query(Agendamento.id)
+            .filter(
+                Agendamento.lead_id == lead_id,
+                Agendamento.status.in_(self.STATUS_ATIVOS),
+            )
+            .first()
+        )
+        if ainda_tem:
+            return
+
+        novo_status = LeadService().status_sem_compromisso(lead)
+        lead.status = novo_status
+        db.commit()
+        logger.info(
+            "event=lead_sem_compromisso lead_id=%s novo_status=%s",
+            lead_id, novo_status,
+        )
 
     def create(
         self,
@@ -90,9 +129,9 @@ class SchedulingService:
         edição de lead — o caminho manual precisa conseguir limpar o que veio
         errado da conversa.
 
-        O status do lead não é tocado: cancelar uma visita não devolve o lead
-        para `qualificado` sozinho, porque só quem está atendendo sabe se a
-        oportunidade morreu ou vai ser remarcada.
+        Cancelar ou dar por realizado o último compromisso de pé tira o lead de
+        `agendado`, pelo mesmo motivo de `excluir`: o status afirma que existe
+        visita ou reunião marcada. Confirmar não mexe em nada.
         """
         if tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"Tipo de agendamento inválido: {tipo}")
@@ -117,6 +156,8 @@ class SchedulingService:
             agendamento_id, agendamento.lead_id, tipo, data_hora, status,
             imovel_id,
         )
+        self._reavaliar_status_do_lead(agendamento.lead_id, db)
+        db.refresh(agendamento)
         return agendamento
 
     def excluir(self, agendamento_id: int, db: Session) -> bool:
@@ -126,8 +167,9 @@ class SchedulingService:
         visita existiu e nao aconteceu: excluir e para o compromisso que nunca
         deveria ter sido criado — a data errada, o lead errado, o teste.
 
-        O status do lead nao volta atras. Ele pode ter outros agendamentos, e
-        decidir se a oportunidade regrediu no funil e de quem esta atendendo.
+        Se este era o ultimo compromisso de pe, o lead sai de `agendado`: o
+        status afirma que existe uma visita marcada, e apagar a ultima torna
+        essa afirmacao falsa.
         """
         agendamento = self.get(agendamento_id, db)
         if not agendamento:
@@ -140,6 +182,7 @@ class SchedulingService:
             "event=agendamento_excluido agendamento_id=%s lead_id=%s",
             agendamento_id, lead_id,
         )
+        self._reavaliar_status_do_lead(lead_id, db)
         return True
 
     def update_status(
@@ -166,6 +209,8 @@ class SchedulingService:
                 "novo_status=%s",
                 agendamento_id, agendamento.lead_id, status,
             )
+            self._reavaliar_status_do_lead(agendamento.lead_id, db)
+            db.refresh(agendamento)
         return agendamento
 
     def get_pending_count(self, db: Session) -> int:

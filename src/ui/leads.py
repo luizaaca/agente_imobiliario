@@ -29,6 +29,8 @@ from src.ui.tabela import (
     Acao,
     Coluna,
     aplicar_ordem,
+    filtro_de_busca,
+    rotulo_do_lead,
     seletor_de_ordem,
     tabela_de_leads,
     texto,
@@ -170,12 +172,7 @@ def _filtros(db):
     if intencao_filtro != "Todas":
         query = query.filter(Lead.intencao == intencao_filtro)
     if busca:
-        termo = f"%{busca}%"
-        query = query.filter(
-            Lead.nome.ilike(termo)
-            | Lead.bairro_interesse.ilike(termo)
-            | Lead.perfil_narrativo.ilike(termo)
-        )
+        query = query.filter(filtro_de_busca(busca))
     return aplicar_ordem(query, campo, decrescente).limit(200).all()
 
 
@@ -189,7 +186,7 @@ def _selo_de_score(lead: Lead) -> str:
 
 
 COLUNAS_DA_LISTA = (
-    Coluna("Lead", 3, lambda lead: f"**{markdown_seguro(lead.nome or f'Lead {lead.id}')}**"),
+    Coluna("Lead", 3, lambda lead: f"**{markdown_seguro(rotulo_do_lead(lead))}**"),
     Coluna(
         "Status", 2,
         lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
@@ -217,7 +214,7 @@ def _confirmacao_na_lista(lead: Lead) -> None:
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return
 
-    nome = lead.nome or f"Lead {lead.id}"
+    nome = rotulo_do_lead(lead)
     st.warning(
         f"Excluir **{markdown_seguro(nome)}** e todas as suas mensagens?",
         icon=":material/warning:",
@@ -420,11 +417,23 @@ def _canal_do_lead(lead: Lead) -> None:
         canal_atual = identidade.channel if identidade else None
         id_atual = identidade.external_chat_id if identidade else ""
 
+    st.markdown(
+        "**Por onde o agente fala com este lead.** Um lead que chegou pelo "
+        "Telegram já vem ligado ao canal; um cadastrado à mão, não. "
+        "**Vincular** grava esse endereço — é o que permite ao follow-up sair "
+        "daqui e chegar na pessoa."
+    )
+
     if canal_atual is None:
         st.warning(
             "Este lead não está ligado a nenhum canal. O follow-up é gerado e "
             "fica registrado na conversa, mas não é despachado para ninguém.",
             icon=":material/link_off:",
+        )
+    else:
+        st.caption(
+            f"Vinculado a **{canal_atual}**. Vincular de novo corrige o "
+            "identificador ou troca o canal preferencial."
         )
 
     col_canal, col_id, col_botao = st.columns([2, 3, 2], vertical_alignment="bottom")
@@ -707,62 +716,81 @@ def _disparar_followup(lead: Lead) -> None:
     st.rerun()
 
 
-def _acoes(lead: Lead) -> None:
-    confirmando = st.session_state.get(CHAVE_EXCLUSAO) == lead.id
+def _avisos_e_confirmacao(lead: Lead) -> None:
+    """Desfecho do follow-up e confirmacao de exclusao, na largura da pagina.
 
-    col_followup, col_excluir = st.columns(2)
-    with col_followup:
-        if st.button(
-            "Disparar follow-up",
-            icon=":material/send:",
-            width="stretch",
-            help=(
-                "Mesma régua do follow-up automático, sem esperar a janela de "
-                "inatividade."
-            ),
-        ):
-            _disparar_followup(lead)
-    with col_excluir:
-        # Some enquanto a confirmacao esta aberta, para nao ficarem dois
-        # botoes de excluir na mesma tela.
-        if not confirmando and st.button(
-            "Excluir lead", icon=":material/delete:", width="stretch"
-        ):
-            st.session_state[CHAVE_EXCLUSAO] = lead.id
-            st.rerun()
-
+    Fora do cabecalho de proposito: espremidos na faixa dos botoes de icone
+    eles quebrariam em varias linhas, e a confirmacao de uma acao sem desfazer
+    precisa de espaco para ser lida antes de clicada.
+    """
     aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
     if aviso and aviso[0] == lead.id:
         mostrar = st.success if aviso[1] == "ok" else st.info
         mostrar(aviso[2], icon=":material/send:")
 
-    if confirmando:
-        st.warning(
-            f"Excluir o lead {lead.id} e todas as suas mensagens?",
-            icon=":material/warning:",
-        )
-        col_sim, col_nao, _ = st.columns([2, 2, 6])
-        if col_sim.button("Confirmar", type="primary", width="stretch"):
-            with get_db() as db:
-                LeadService().delete_lead(lead.id, db)
-            st.toast("Lead excluído.", icon=":material/delete:")
-            _voltar_para_a_lista()
-        if col_nao.button("Cancelar", width="stretch"):
-            st.session_state.pop(CHAVE_EXCLUSAO, None)
-            st.rerun()
+    if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
+        return
+
+    st.warning(
+        f"Excluir **{markdown_seguro(rotulo_do_lead(lead))}** e todas as suas "
+        "mensagens?",
+        icon=":material/warning:",
+    )
+    col_sim, col_nao, _ = st.columns([2, 2, 8])
+    if col_sim.button("Confirmar", type="primary", width="stretch"):
+        with get_db() as db:
+            LeadService().delete_lead(lead.id, db)
+        st.toast("Lead excluído.", icon=":material/delete:")
+        _voltar_para_a_lista()
+    if col_nao.button("Cancelar", width="stretch"):
+        st.session_state.pop(CHAVE_EXCLUSAO, None)
+        st.rerun()
 
 
 def _cabecalho_da_ficha(lead: Optional[Lead]) -> None:
-    col_voltar, col_titulo = st.columns([1, 6], vertical_alignment="center")
+    """Uma faixa so: voltar, nome com selos e as acoes do lead.
+
+    Os tres botoes viram icones com tooltip e sobem para a linha do nome. Em
+    tamanho cheio e empilhados eles ocupavam um terco da altura util da ficha,
+    e "Excluir lead" desenhado na largura de meia tela pesava mais que o
+    proprio lead.
+    """
+    col_voltar, col_titulo, col_acoes = st.columns(
+        [1, 7, 2], vertical_alignment="center"
+    )
     with col_voltar:
-        if st.button("Voltar", icon=":material/arrow_back:", width="stretch"):
+        if st.button(
+            "", icon=":material/arrow_back:", key="voltar_da_ficha",
+            help="Voltar para a lista", type="tertiary",
+        ):
             _voltar_para_a_lista()
+
     with col_titulo:
         if lead is None:
             st.subheader("Novo lead")
             return
-        st.subheader(markdown_seguro(lead.nome or f"Lead {lead.id}"))
+        st.subheader(markdown_seguro(rotulo_do_lead(lead)))
         st.markdown(selos_do_lead(lead, float(lead.score or 0)))
+
+    with col_acoes:
+        col_followup, col_excluir = st.columns(2)
+        if col_followup.button(
+            "", icon=":material/send:", key="acao_followup_da_ficha",
+            help=(
+                "Disparar follow-up: mesma régua do automático, sem esperar a "
+                "janela de inatividade."
+            ),
+            type="tertiary",
+        ):
+            _disparar_followup(lead)
+        # Some enquanto a confirmacao esta aberta, para nao ficarem dois
+        # botoes de excluir na mesma tela.
+        if st.session_state.get(CHAVE_EXCLUSAO) != lead.id and col_excluir.button(
+            "", icon=":material/delete:", key="acao_excluir_da_ficha",
+            help="Excluir este lead", type="tertiary",
+        ):
+            st.session_state[CHAVE_EXCLUSAO] = lead.id
+            st.rerun()
 
 
 def _ficha(lead_id: int) -> None:
@@ -786,12 +814,7 @@ def _ficha(lead_id: int) -> None:
         return
 
     _cabecalho_da_ficha(lead)
-
-    # As acoes vem antes das abas: elas sao do lead, nao da aba aberta. Embaixo
-    # ficavam fora da tela sempre que a aba tivesse conteudo alto — a conversa,
-    # por exemplo — e sumiam justamente quando se acabou de ler o motivo para
-    # disparar um follow-up.
-    _acoes(lead)
+    _avisos_e_confirmacao(lead)
     st.divider()
 
     ficha, canal, conversa, agenda = st.tabs(

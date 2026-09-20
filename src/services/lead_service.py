@@ -307,6 +307,19 @@ class LeadService:
 
         return LeadStatus.EM_QUALIFICACAO.value
 
+    def status_sem_compromisso(self, lead: Lead) -> str:
+        """Status que o lead teria se nao houvesse compromisso marcado.
+
+        `agendado` afirma que existe uma visita ou reuniao de pe. Quando o
+        ultimo compromisso e apagado ou cancelado, essa afirmacao deixa de ser
+        verdadeira e o lead precisa voltar para onde os dados dele o colocam —
+        senao ele fica parado num estagio que ninguem consegue explicar
+        olhando a ficha.
+        """
+        if self.esta_qualificado(lead):
+            return LeadStatus.QUALIFICADO.value
+        return LeadStatus.EM_QUALIFICACAO.value
+
     def update_perfil_narrativo(
         self, lead_id: int, novo_texto: str, db: Session
     ) -> Optional[Lead]:

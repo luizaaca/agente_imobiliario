@@ -139,10 +139,13 @@ def test_editar_apaga_o_que_o_corretor_deixou_em_branco(
     assert atual.imovel_id is None
 
 
-def test_editar_nao_mexe_no_status_do_lead(scheduling, lead_id, amanha, db):
-    """Cancelar uma visita não devolve o lead ao funil sozinho.
+def test_cancelar_o_ultimo_compromisso_tira_o_lead_de_agendado(
+    scheduling, lead_id, amanha, db
+):
+    """`agendado` afirma que existe visita marcada.
 
-    Só quem está atendendo sabe se a oportunidade morreu ou vai ser remarcada.
+    Cancelar a última torna a afirmação falsa, e o lead precisa voltar para
+    onde os dados dele o colocam.
     """
     agendamento = scheduling.create(
         lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
@@ -151,6 +154,18 @@ def test_editar_nao_mexe_no_status_do_lead(scheduling, lead_id, amanha, db):
 
     scheduling.editar(
         agendamento.id, db, tipo="visita", data_hora=amanha, status="cancelado"
+    )
+
+    assert db.query(Lead).filter(Lead.id == lead_id).one().status != "agendado"
+
+
+def test_confirmar_mantem_o_lead_agendado(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    scheduling.editar(
+        agendamento.id, db, tipo="visita", data_hora=amanha, status="confirmado"
     )
 
     assert db.query(Lead).filter(Lead.id == lead_id).one().status == "agendado"
@@ -194,16 +209,54 @@ def test_excluir_apaga_o_agendamento(scheduling, lead_id, amanha, db):
     assert scheduling.list_by_lead(lead_id, db) == []
 
 
-def test_excluir_nao_devolve_o_lead_ao_funil(scheduling, lead_id, amanha, db):
-    """O lead pode ter outros compromissos, e regredir no funil é decisão de
-    quem está atendendo — não efeito colateral de apagar uma linha."""
+def test_excluir_o_ultimo_compromisso_tira_o_lead_de_agendado(
+    scheduling, lead_id, amanha, db
+):
     agendamento = scheduling.create(
         lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
     )
 
     scheduling.excluir(agendamento.id, db)
 
+    assert db.query(Lead).filter(Lead.id == lead_id).one().status != "agendado"
+
+
+def test_excluir_um_de_dois_compromissos_mantem_agendado(
+    scheduling, lead_id, amanha, db
+):
+    """Só o último importa: com outra visita de pé, o lead segue agendado."""
+    primeiro = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+    scheduling.create(
+        lead_id=lead_id, tipo="reuniao", data_hora=amanha + timedelta(days=2), db=db
+    )
+
+    scheduling.excluir(primeiro.id, db)
+
     assert db.query(Lead).filter(Lead.id == lead_id).one().status == "agendado"
+
+
+def test_lead_qualificado_volta_para_qualificado(scheduling, db):
+    """Ele volta para onde os dados o colocam, não para o começo do funil."""
+    servico = LeadService()
+    lead = servico.criar_lead_manual(
+        {
+            "intencao": "compra",
+            "orcamento_max": 700000,
+            "bairro_interesse": "Bela Vista",
+            "quartos": 2,
+        },
+        db,
+    )
+    agendamento = scheduling.create(
+        lead_id=lead.id, tipo="visita", data_hora=datetime.now(UTC) + timedelta(days=1),
+        db=db,
+    )
+
+    scheduling.excluir(agendamento.id, db)
+
+    assert db.query(Lead).filter(Lead.id == lead.id).one().status == "qualificado"
 
 
 def test_excluir_agendamento_inexistente_devolve_false(scheduling, db):

@@ -193,6 +193,34 @@ causas possíveis:
 """,
     ),
     (
+        "O que faz o botão **Vincular**, na aba Canal?",
+        """
+Ele grava **por onde o agente fala com este lead**: o canal (hoje `telegram`
+ou `streamlit`) e o identificador da pessoa nesse canal — no Telegram, o
+`chat_id` numérico que o bot enxerga.
+
+Um lead que chegou conversando já vem vinculado; um cadastrado à mão, não. Sem
+vínculo, o follow-up é gerado e fica registrado na conversa, mas não tem para
+onde ser despachado.
+
+Vincular de novo corrige um identificador digitado errado ou troca qual canal é
+o preferencial. O identificador **não é validado** na hora de gravar: um valor
+inventado só falha quando o envio acontece.
+""",
+    ),
+    (
+        "Por que um lead saiu de *agendado* sozinho?",
+        """
+Porque o último compromisso dele deixou de existir — foi excluído, cancelado ou
+marcado como realizado.
+
+`agendado` afirma que existe visita ou reunião de pé. Quando isso deixa de ser
+verdade, o lead volta para onde os dados dele o colocam: `qualificado` se já tem
+intenção, orçamento, região e quartos; `em_qualificacao` caso contrário. Com
+outro compromisso ainda de pé, nada muda.
+""",
+    ),
+    (
         "Posso cadastrar um lead na mão?",
         """
 Pode: **Leads → Novo lead**. Preencha a ficha e, na aba **Canal**, ligue-o a um

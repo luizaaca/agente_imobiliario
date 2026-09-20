@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import streamlit as st
+from sqlalchemy import String, cast, func, or_
 
 from src.db.models import Lead
 from src.ui.texto import markdown_seguro
@@ -39,29 +40,79 @@ class Acao:
     callback: Callable[[Lead], None]
 
 
-# Ordenacoes oferecidas, com o atributo do ORM e o sentido. O score decrescente
-# vem primeiro porque e a leitura que a tela existe para dar: quem ligar
-# primeiro no topo.
+def rotulo_do_lead(lead: Lead) -> str:
+    """Como o lead aparece na tela: o nome, ou `Lead <id>` quando nao ha nome."""
+    return lead.nome or f"Lead {lead.id}"
+
+
+def _rotulo_em_sql():
+    """A mesma regra de `rotulo_do_lead`, mas para o banco ordenar por ela.
+
+    Sem isso, "Nome (A-Z)" ordenava pela coluna `nome` — que na maioria dos
+    leads e nula, porque o nome so aparece quando a pessoa o diz na conversa.
+    O resultado era uma ordenacao que nao correspondia a nada do que a tela
+    mostra. Aqui ela ordena pelo rotulo visivel.
+    """
+    return func.coalesce(
+        func.nullif(func.trim(Lead.nome), ""), "Lead " + cast(Lead.id, String)
+    )
+
+
+# Ordenacoes oferecidas. O score decrescente vem primeiro porque e a leitura
+# que a tela existe para dar: quem ligar primeiro no topo.
 ORDENS = {
-    "Score (maior primeiro)": ("score", True),
-    "Score (menor primeiro)": ("score", False),
-    "Nome (A-Z)": ("nome", False),
-    "Atualizado recentemente": ("updated_at", True),
-    "Mais antigos": ("created_at", False),
+    "Score (maior primeiro)": (lambda: Lead.score, True),
+    "Score (menor primeiro)": (lambda: Lead.score, False),
+    "Nome (A-Z)": (_rotulo_em_sql, False),
+    "Nome (Z-A)": (_rotulo_em_sql, True),
+    "Atualizado recentemente": (lambda: Lead.updated_at, True),
+    "Mais antigos": (lambda: Lead.created_at, False),
 }
 
 
-def seletor_de_ordem(chave: str) -> tuple[str, bool]:
-    """Desenha o seletor e devolve (campo, decrescente)."""
-    escolha = st.selectbox("Ordenar por", list(ORDENS), key=chave)
+def seletor_de_ordem(chave: str) -> tuple[Callable, bool]:
+    """Desenha o seletor e devolve (expressao, decrescente)."""
+    escolha = st.selectbox(
+        "Ordenar por",
+        list(ORDENS),
+        key=chave,
+        help="Nome ordena pelo rótulo que aparece na tabela.",
+    )
     return ORDENS[escolha]
 
 
-def aplicar_ordem(query, campo: str, decrescente: bool):
-    """Ordena a query, mandando os nulos para o fim em qualquer sentido."""
-    coluna = getattr(Lead, campo)
+def aplicar_ordem(query, expressao: Callable, decrescente: bool):
+    """Ordena a query, mandando os nulos para o fim em qualquer sentido.
+
+    Desempata por `id` para a ordem nao dancar entre recargas quando varios
+    leads tem o mesmo valor — score igual e o caso comum.
+    """
+    coluna = expressao()
     ordenacao = coluna.desc() if decrescente else coluna.asc()
-    return query.order_by(ordenacao.nullslast())
+    return query.order_by(ordenacao.nullslast(), Lead.id.asc())
+
+
+# Campos varridos pela busca livre. O que o placeholder promete e o que ela
+# olha precisam ser a mesma lista: `intencao` faltava aqui, entao procurar
+# "compra" so achava os leads cujo perfil narrativo por acaso citava a palavra.
+CAMPOS_DA_BUSCA = (
+    Lead.nome,
+    Lead.telefone,
+    Lead.intencao,
+    Lead.bairro_interesse,
+    Lead.regiao_interesse,
+    Lead.tipologia_interesse,
+    Lead.perfil,
+    Lead.motivo_busca,
+    Lead.amenidades_desejadas,
+    Lead.perfil_narrativo,
+)
+
+
+def filtro_de_busca(termo: str):
+    """Condicao `OR` sobre todos os campos de texto que a busca cobre."""
+    padrao = f"%{termo.strip()}%"
+    return or_(*(campo.ilike(padrao) for campo in CAMPOS_DA_BUSCA))
 
 
 def _cabecalho(colunas: Sequence[Coluna], peso_das_acoes: int) -> None:

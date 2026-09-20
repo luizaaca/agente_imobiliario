@@ -177,7 +177,10 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 [class*="st-key-acao_editar_"] button,
 [class*="st-key-acao_excluir_"] button,
 [class*="st-key-editar_ag_"] button,
-[class*="st-key-excluir_ag_"] button {{
+[class*="st-key-excluir_ag_"] button,
+.st-key-voltar_da_ficha button,
+.st-key-acao_followup_da_ficha button,
+.st-key-acao_excluir_da_ficha button {{
   width: {_ICONE}px !important;
   min-width: {_ICONE}px !important;
   height: {_ICONE}px !important;
@@ -189,14 +192,17 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 }}
 [class*="st-key-acao_abrir_"] button:hover,
 [class*="st-key-acao_editar_"] button:hover,
-[class*="st-key-editar_ag_"] button:hover {{
+[class*="st-key-editar_ag_"] button:hover,
+.st-key-voltar_da_ficha button:hover,
+.st-key-acao_followup_da_ficha button:hover {{
   color: inherit !important;
   background: color-mix(in srgb, currentColor 10%, transparent) !important;
 }}
 /* Excluir e a unica acao sem desfazer: o vermelho so aparece no hover, para
    nao gritar em toda linha da tabela, mas aparece antes do clique. */
 [class*="st-key-acao_excluir_"] button:hover,
-[class*="st-key-excluir_ag_"] button:hover {{
+[class*="st-key-excluir_ag_"] button:hover,
+.st-key-acao_excluir_da_ficha button:hover {{
   color: #DC2626 !important;
   background: rgba(220, 38, 38, 0.10) !important;
 }}

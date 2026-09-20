@@ -19,6 +19,7 @@ from src.ui.tabela import (
     Acao,
     Coluna,
     aplicar_ordem,
+    rotulo_do_lead,
     seletor_de_ordem,
     tabela_de_leads,
     texto,
@@ -270,7 +271,7 @@ def _selo_de_score(lead: Lead) -> str:
 COLUNAS_DA_CARTEIRA = (
     Coluna(
         "Lead", 3,
-        lambda lead: f"**{markdown_seguro(lead.nome or f'Lead {lead.id}')}**",
+        lambda lead: f"**{markdown_seguro(rotulo_do_lead(lead))}**",
     ),
     Coluna(
         "Status", 3,
