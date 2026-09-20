@@ -76,6 +76,47 @@ def _chamar(tool, args, lead_id, deps, db):
     return capturado["retorno"]
 
 
+# --- Listar ------------------------------------------------------------------
+#
+# A lista tambem abre as instrucoes, mas la ela fica antes de toda a conversa.
+# Quando o historico recente contradiz — o agente repetindo que nao acha os IDs
+# —, o modelo segue o que esta perto. A tool devolve a mesma verdade no fim.
+
+
+def test_listar_devolve_os_compromissos_com_id(agendamento, lead_id, deps, db):
+    retorno = _chamar("listar_agendamentos", {}, lead_id, deps, db)
+
+    assert f"ID {agendamento.id}" in retorno
+    assert "Compromissos marcados (1)" in retorno
+
+
+def test_listar_sem_nenhum_diz_isso(lead_id, deps, db):
+    retorno = _chamar("listar_agendamentos", {}, lead_id, deps, db)
+
+    assert "Compromissos marcados: nenhum" in retorno
+
+
+def test_listar_nao_mostra_compromisso_de_outro_lead(lead_id, deps, amanha, db):
+    outro = LeadService().get_or_create_lead(
+        channel="teste", external_id="alheio-na-lista", db=db
+    )
+    alheio = SchedulingService().create(
+        lead_id=outro.id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    retorno = _chamar("listar_agendamentos", {}, lead_id, deps, db)
+
+    assert f"ID {alheio.id}" not in retorno
+
+
+def test_listar_reflete_o_cancelamento(agendamento, lead_id, deps, db):
+    SchedulingService().update_status(agendamento.id, "cancelado", db)
+
+    retorno = _chamar("listar_agendamentos", {}, lead_id, deps, db)
+
+    assert "Compromissos marcados: nenhum" in retorno
+
+
 # --- Confirmar ---------------------------------------------------------------
 
 

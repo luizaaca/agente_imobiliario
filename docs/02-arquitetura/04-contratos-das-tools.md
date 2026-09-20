@@ -110,6 +110,31 @@ retorno avisa disso quando a operação não foi informada, e a tool usa a
 
 ---
 
+## 2b. `listar_agendamentos`
+
+### Objetivo
+Devolver os compromissos de pé do lead, com o ID de cada um.
+
+### Input esperado
+Nenhum: o lead vem das dependências.
+
+### Output esperado
+O mesmo texto que abre as instruções — id, tipo, data e imóvel de cada
+compromisso, ou a linha "nenhum".
+
+### Efeitos colaterais
+Nenhum.
+
+### Por que existe, se a lista já está nas instruções
+Posição. As instruções abrem a requisição; o histórico vem depois delas. Numa
+conversa em que o agente já respondeu várias vezes que não achava os IDs, o
+modelo seguiu o padrão recente e contradisse a própria lista — chegou a chamar
+`gerar_resumo_corretor` como substituto e a relatar honestamente que aquilo não
+trazia os IDs. A tool devolve a mesma verdade na posição mais recente da
+conversa, que é onde o modelo olha.
+
+---
+
 ## 3. `registrar_qualificacao`
 
 ### Objetivo

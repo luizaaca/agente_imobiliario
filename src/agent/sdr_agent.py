@@ -188,77 +188,59 @@ AVISO_DE_LISTA_MISTA = (
 async def buscar_imoveis(
     ctx: RunContext[SDRDependencies],
     operacao: Annotated[Optional[Operacao], Field(description=(
-        "'venda' para quem quer comprar ou investir, 'aluguel' para quem quer "
-        "alugar. UMA POR BUSCA: se a pessoa aceita as duas, chame esta tool "
-        "duas vezes, uma com cada valor. Omitir só é aceitável quando você "
-        "realmente não faz ideia — a lista sai misturada e os aluguéis, mais "
+        "Comprar ou investir é 'venda'. UMA POR BUSCA: se ela aceita as duas, "
+        "chame duas vezes. Sem isto a lista sai misturada e os aluguéis, mais "
         "baratos, escondem as vendas."))] = None,
     tipo: Annotated[Optional[TipoImovel], Field(description=(
-        "Tipo exato do imóvel, quando a pessoa nomeia um. Este filtro NUNCA é "
-        "afrouxado: quem pede galpão não recebe sala comercial no lugar. "
-        "Residenciais: apartamento, casa, casa_condominio, cobertura, flat, "
-        "loft, sobrado, studio. Comerciais: andar_corporativo, consultorio, "
-        "escritorio, galpao, loja, predio_comercial, sala_comercial, "
-        "terreno_comercial. Se ela falar genericamente ('um lugar para minha "
-        "empresa'), deixe vazio e use finalidade."))] = None,
+        "Tipo exato, quando ela nomeia um. NUNCA é afrouxado: quem pede galpão "
+        "não recebe sala comercial. Se ela falar genericamente ('um lugar para "
+        "minha empresa'), deixe vazio e use finalidade."))] = None,
     finalidade: Annotated[Optional[Finalidade], Field(description=(
-        "'residencial' ou 'comercial', para quando a pessoa não nomeia o tipo "
-        "mas o uso está claro. Não informe junto com `tipo`: o tipo já define "
-        "a finalidade."))] = None,
+        "Para quando ela não nomeia o tipo mas o uso está claro. Não informe "
+        "junto com `tipo`, que já define a finalidade."))] = None,
     bairro: Annotated[Optional[str], Field(max_length=80, description=(
-        "Nome do bairro, e só dele: 'Pinheiros', 'Mooca', 'Bela Vista'. "
-        "NÃO use aqui cidade nem estado — todo o catálogo é da cidade de São "
-        "Paulo, então 'São Paulo' ou 'SP' zera a busca. 'Paulista', 'Faria "
-        "Lima' e 'Berrini' são referências, não bairros: para elas use "
-        "`termos_livres`."))] = None,
+        "Só o nome do bairro. NÃO use cidade nem estado: o catálogo inteiro é "
+        "da cidade de São Paulo, então 'São Paulo' ou 'SP' zera a busca. "
+        "'Paulista', 'Faria Lima' e 'Berrini' são referências, não bairros — "
+        "para elas use `termos_livres`."))] = None,
     zona: Annotated[Optional[Zona], Field(description=(
-        "Região da cidade, quando a pessoa fala em zona em vez de bairro. "
-        "Também aceita nome de bairro, caso você não saiba a zona dele."))] = None,
+        "Região da cidade. Aceita também nome de bairro, se você não souber a "
+        "zona dele."))] = None,
     preco_min: Annotated[Optional[float], Field(ge=0, description=(
-        "Piso de preço, em reais. Raro: use só quando a pessoa disser que não "
-        "quer nada abaixo de um valor."))] = None,
+        "Piso de preço. Raro."))] = None,
     preco_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Teto de preço, em reais. ATENÇÃO À ESCALA: no aluguel é o valor "
-        "MENSAL (o catálogo vai de R$ 1.500 a R$ 240 mil, mediana R$ 6.200); "
-        "na venda é o valor TOTAL (de R$ 240 mil a R$ 48 milhões, mediana "
-        "R$ 1,35 milhão). Mandar 5000 numa busca de venda não acha nada."))] = None,
+        "Teto de preço. ESCALA: no aluguel é o valor MENSAL (mediana "
+        "R$ 6.200); na venda é o TOTAL (mediana R$ 1,35 milhão). Mandar 5000 "
+        "numa busca de venda não acha nada."))] = None,
     custo_total_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Teto de aluguel MAIS condomínio, para quando a pessoa fala do que cabe "
-        "no bolso por mês ('até 5 mil tudo incluso'). Use no lugar de "
-        "`preco_max`, não junto."))] = None,
+        "Teto de aluguel MAIS condomínio ('até 5 mil tudo incluso'). Use no "
+        "lugar de `preco_max`, não junto."))] = None,
     quartos_min: Annotated[Optional[int], Field(ge=0, description=(
-        "Mínimo de quartos. Para um número exato, informe também quartos_max "
-        "com o mesmo valor: '2 quartos' é min=2 e max=2, 'pelo menos 2' é só "
-        "min=2, '2 ou 3' é min=2 e max=3."))] = None,
+        "'2 quartos' é min=2 e max=2; 'pelo menos 2' é só min=2; '2 ou 3' é "
+        "min=2 e max=3."))] = None,
     quartos_max: Annotated[Optional[int], Field(ge=0, description=(
-        "Máximo de quartos. Ver quartos_min."))] = None,
+        "Ver quartos_min."))] = None,
     suites_min: Annotated[Optional[int], Field(ge=0, description=(
         "Mínimo de suítes."))] = None,
     banheiros_min: Annotated[Optional[int], Field(ge=0, description=(
         "Mínimo de banheiros."))] = None,
     vagas_min: Annotated[Optional[int], Field(ge=0, description=(
-        "Mínimo de vagas de garagem."))] = None,
+        "Mínimo de vagas."))] = None,
     area_min: Annotated[Optional[float], Field(gt=0, description=(
-        "Metragem mínima em m². É o filtro que importa no comercial, onde "
-        "quartos não diz nada. O catálogo vai de 21 a 4.200 m²."))] = None,
+        "Metragem mínima. É o filtro que importa no comercial, onde quartos "
+        "não diz nada."))] = None,
     area_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Metragem máxima em m²."))] = None,
+        "Metragem máxima."))] = None,
     perfil_indicado: Annotated[Optional[PerfilIndicado], Field(description=(
-        "Perfil a que o imóvel foi catalogado como adequado. Use quando a "
-        "pessoa revelar o uso e não o imóvel: quem vai abrir estacionamento é "
-        "logistica_industrial, quem compra para alugar é investidor_renda, "
-        "casal sem filhos é jovem_casal."))] = None,
+        "Use quando ela revelar o uso e não o imóvel: abrir estacionamento é "
+        "logistica_industrial, comprar para alugar é investidor_renda."))] = None,
     termos_livres: Annotated[Optional[str], Field(max_length=200, description=(
-        "Só características desejáveis, em texto livre: varanda gourmet, "
-        "piscina, reformado, pet friendly, perto do metrô, Faria Lima. Os "
-        "termos valem como OU e entram no ranking, não como exigência. Não "
-        "coloque aqui tipo, bairro, preço nem quartos — todos têm campo "
-        "próprio, e repetir aqui só atrapalha."))] = None,
+        "Só amenidades: varanda gourmet, piscina, reformado, perto do metrô. "
+        "Valem como OU, entram no ranking e não como exigência. Não repita "
+        "aqui tipo, bairro, preço nem quartos — todos têm campo próprio."))] = None,
     ordenar_por: Annotated[Optional[Ordenacao], Field(description=(
-        "'preco_asc' (mais baratos), 'preco_desc' (mais caros), 'area_desc' "
-        "(maiores), 'relevancia' (mais aderentes aos termos_livres). Vazio "
-        "escolhe sozinho: relevância se houver termos_livres, senão preço "
-        "crescente."))] = None,
+        "Vazio escolhe sozinho: relevância se houver termos_livres, senão "
+        "preço crescente."))] = None,
     limite_resultados: Annotated[int, Field(ge=1, le=10, description=(
         "Quantos imóveis trazer. Peça 4 ou 5: você só vai mostrar dois ou três "
         "à pessoa, e os extras te dão de onde escolher."))] = 5,
@@ -266,15 +248,12 @@ async def buscar_imoveis(
     """Buscar imóveis no catálogo de São Paulo.
 
     Use cedo e com pouca informação: mostrar imóvel é o que faz a pessoa
-    revelar orçamento, tamanho e bairro sem você perguntar. Não espere ter
-    todos os filtros para chamar.
+    revelar orçamento, tamanho e bairro sem você perguntar.
 
-    Quando os filtros exatos não devolvem nada, a busca é refeita sozinha
-    afrouxando um critério por vez — do que menos importa (banheiros, perfil)
-    ao que mais importa (região) — e a resposta diz, em português, o que
-    precisou mudar. Operação, tipo e finalidade nunca são afrouxados; se o
-    catálogo não tem o que ela pediu, a resposta traz os números reais para
-    você dizer a verdade em vez de oferecer outra coisa.
+    Se os filtros exatos não devolvem nada, a busca é refeita sozinha
+    afrouxando um critério por vez, e a resposta diz o que mudou. Operação,
+    tipo e finalidade nunca são afrouxados: quando o catálogo não tem o que
+    ela pediu, a resposta traz os números reais para você dizer a verdade.
     """
     filtros = dict(
         operacao=operacao or _operacao_do_lead(ctx),
@@ -511,6 +490,21 @@ def _erro_de_id(ctx, agendamento_id: int, db) -> str:
 
 @sdr_agent.tool
 @_instrumentada
+async def listar_agendamentos(ctx: RunContext[SDRDependencies]) -> str:
+    """Consultar os compromissos marcados desta pessoa, com o ID de cada um.
+
+    Use quando ela perguntar o que tem marcado ou quando for a visita, e antes
+    de confirmar ou cancelar se você não tiver certeza de qual é o ID. A
+    resposta vem do banco no momento da chamada.
+
+    A mesma lista abre as suas instruções, mas ali ela fica antes de toda a
+    conversa; chamando aqui você a recebe agora, depois dela.
+    """
+    return texto_dos_compromissos(ctx.deps.lead_id)
+
+
+@sdr_agent.tool
+@_instrumentada
 async def confirmar_agendamento(
     ctx: RunContext[SDRDependencies],
     agendamento_id: Annotated[int, Field(description=(
@@ -710,9 +704,7 @@ def montar_contexto_do_lead(lead) -> str:
 
     partes.append(f"Estágio no funil: {lead.status}.")
 
-    compromissos = _compromissos_do_lead(lead)
-    if compromissos:
-        partes.append(compromissos)
+    partes.append(texto_dos_compromissos(lead.id))
 
     return "\n\n".join(partes)
 
@@ -736,8 +728,12 @@ def compromissos_ativos(lead_id: int, db) -> list[tuple]:
     )
 
 
-def _compromissos_do_lead(lead) -> str:
-    """Agendamentos de pe do lead, com id, em texto para o system prompt.
+def texto_dos_compromissos(lead_id: int) -> str:
+    """Agendamentos de pe do lead, com id, em texto para o modelo ler.
+
+    Serve as instrucoes e a tool `listar_agendamentos`, que devolvem a mesma
+    verdade em posicoes diferentes da conversa: as instrucoes abrem a
+    requisicao, a tool responde no fim dela.
 
     Sem esta lista o modelo nao tem de onde tirar o `agendamento_id` de
     `confirmar_agendamento` e `cancelar_agendamento` — e, sem ferramenta nem
@@ -753,7 +749,7 @@ def _compromissos_do_lead(lead) -> str:
     do banco agora, e o que passou na conversa pode ter mudado desde entao.
     """
     with get_db() as db:
-        itens = compromissos_ativos(lead.id, db)
+        itens = compromissos_ativos(lead_id, db)
     if not itens:
         return (
             "Compromissos marcados: nenhum. Se a conversa mencionar algum, ele "
@@ -831,6 +827,36 @@ def _registrar_handover(
     )
 
 
+def _registrar_turno_bloqueado(
+    lead_id: int,
+    channel: str,
+    qual: str,
+    deps: SDRDependencies,
+    db,
+) -> None:
+    """Deixa no histórico o motivo de a pergunta ter ficado sem resposta.
+
+    Sem isto a conversa guarda a mensagem da pessoa e nada depois, e quem lê
+    depois — o corretor na ficha, ou nós investigando — vê um agente que
+    simplesmente parou de responder, em vez da trava de custo que agiu.
+
+    Vai como `system_notice` e não como resposta do agente: `role="system"`
+    fica fora do `build_message_history`, então o modelo não vai reproduzir o
+    aviso de indisponibilidade como se fosse fala sua no turno seguinte.
+    """
+    deps.lead_service.save_message(
+        lead_id=lead_id,
+        channel=channel,
+        role="system",
+        content=(
+            f"Turno bloqueado: orçamento {qual} de tokens do LLM esgotado. "
+            f"A pessoa recebeu o aviso de indisponibilidade."
+        ),
+        message_type="system_notice",
+        db=db,
+    )
+
+
 async def process_message(
     lead_id: int,
     user_text: str,
@@ -861,6 +887,7 @@ async def process_message(
                 "acao=turno_bloqueado",
                 lead_id, channel,
             )
+            _registrar_turno_bloqueado(lead_id, channel, "diário", deps, db)
             return UNAVAILABLE_MESSAGE
 
         if deps.llm_usage_service.is_monthly_budget_exceeded(db):
@@ -869,6 +896,7 @@ async def process_message(
                 "acao=turno_bloqueado",
                 lead_id, channel,
             )
+            _registrar_turno_bloqueado(lead_id, channel, "mensal", deps, db)
             return UNAVAILABLE_MESSAGE
 
         if deps.llm_usage_service.is_conversation_over_limit(lead_id, db):

@@ -63,6 +63,7 @@ def test_todas_as_tools_estao_expostas(llm_fake, lead_id, deps):
         "cancelar_agendamento",
         "confirmar_agendamento",
         "gerar_resumo_corretor",
+        "listar_agendamentos",
         "registrar_qualificacao",
     ]
 
@@ -371,6 +372,39 @@ def test_budget_diario_estourado_bloqueia_o_turno(llm_fake, lead_id, deps, monke
         LLMUsageService, "is_daily_budget_exceeded", lambda self, db: True
     )
     assert conversar("oi", lead_id, deps, llm_fake("nao deveria chegar aqui")) == UNAVAILABLE_MESSAGE
+
+
+def test_turno_bloqueado_deixa_o_motivo_no_historico(
+    llm_fake, lead_id, deps, monkeypatch, db
+):
+    """Sem isto a conversa guarda a pergunta e nada depois, como se o agente
+    tivesse simplesmente parado — foi assim que a trava de custo apareceu."""
+    monkeypatch.setattr(
+        LLMUsageService, "is_daily_budget_exceeded", lambda self, db: True
+    )
+
+    conversar("oi", lead_id, deps, llm_fake("nao deveria chegar aqui"))
+
+    aviso = db.query(Mensagem).filter(
+        Mensagem.lead_id == lead_id, Mensagem.message_type == "system_notice"
+    ).one()
+    assert "orçamento diário" in aviso.content
+
+
+def test_aviso_de_bloqueio_nao_entra_no_historico_do_modelo(
+    llm_fake, lead_id, deps, monkeypatch, db
+):
+    """`role='system'` fica de fora: senão o modelo repetiria o aviso de
+    indisponibilidade como se fosse fala sua."""
+    monkeypatch.setattr(
+        LLMUsageService, "is_daily_budget_exceeded", lambda self, db: True
+    )
+    conversar("oi", lead_id, deps, llm_fake("x"))
+
+    historico = build_message_history(LeadService().get_history(lead_id, 20, db))
+
+    textos = [str(p.content) for msg in historico for p in msg.parts]
+    assert not any("orçamento diário" in t for t in textos)
 
 
 def test_budget_mensal_estourado_bloqueia_o_turno(llm_fake, lead_id, deps, monkeypatch):
