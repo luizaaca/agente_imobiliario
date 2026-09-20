@@ -260,6 +260,33 @@ def test_falha_do_provider_nao_propaga(lead_id, deps):
     assert resposta == UNAVAILABLE_MESSAGE
 
 
+def test_falha_do_provider_vira_linha_no_livro_caixa(lead_id, deps, db):
+    """A falha precisa existir no banco, não só no log.
+
+    É o que sustenta a taxa de erro do dashboard: um erro que só aparece no
+    log deixa a tela afirmando que nunca houve falha nenhuma.
+    """
+    def explodir(messages, info):
+        raise RuntimeError("provider fora do ar")
+
+    from pydantic_ai.models.function import FunctionModel
+    conversar("oi", lead_id, deps, FunctionModel(explodir))
+
+    registros = db.query(LLMUsage).filter(LLMUsage.lead_id == lead_id).all()
+    assert len(registros) == 1
+    assert registros[0].status == "erro"
+    assert registros[0].error_type == "RuntimeError"
+    assert registros[0].latency_ms is not None
+
+
+def test_turno_bem_sucedido_guarda_a_latencia(llm_fake, lead_id, deps, db):
+    conversar("oi", lead_id, deps, llm_fake("olá"))
+
+    registro = db.query(LLMUsage).filter(LLMUsage.lead_id == lead_id).one()
+    assert registro.status == "ok"
+    assert registro.latency_ms is not None
+
+
 # --- Memória conversacional --------------------------------------------------
 
 

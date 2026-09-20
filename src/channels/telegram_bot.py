@@ -80,7 +80,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(response)
     except Exception as e:
-        logger.error(f"Erro ao processar mensagem do lead {lead_id}: {e}")
+        logger.exception(
+            "event=mensagem_nao_processada lead_id=%s channel=telegram "
+            "status=erro tipo_erro=%s",
+            lead_id, type(e).__name__,
+        )
         await update.message.reply_text(
             "Desculpe, tive um problema ao processar sua mensagem. "
             "Pode tentar novamente? 🙏"
@@ -108,5 +112,5 @@ def create_telegram_app() -> Application:
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    logger.info("Bot Telegram configurado com sucesso.")
+    logger.info("event=telegram_bot_configurado status=ok")
     return app

@@ -77,7 +77,9 @@ class FollowUpService:
                 ja_selecionados.add(lead.id)
                 eligible.append((lead, regua_name))
 
-        logger.info(f"Leads elegíveis para follow-up: {len(eligible)}")
+        logger.info(
+            "event=followup_leads_elegiveis quantidade=%s", len(eligible)
+        )
         return eligible
 
     def _leads_inativos(
@@ -180,8 +182,9 @@ class FollowUpService:
 
         db.refresh(attempt)
         logger.info(
-            f"Follow-up registrado: lead_id={lead_id}, regua={regua}, "
-            f"tentativa={attempt_number}, status={status}"
+            "event=followup_tentativa_registrada lead_id=%s regua=%s "
+            "tentativa=%s status=%s",
+            lead_id, regua, attempt_number, status,
         )
         return attempt
 

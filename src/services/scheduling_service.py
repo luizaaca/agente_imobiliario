@@ -45,8 +45,9 @@ class SchedulingService:
         db.commit()
         db.refresh(agendamento)
         logger.info(
-            f"Agendamento criado: lead_id={lead_id}, tipo={tipo}, "
-            f"data_hora={data_hora}, imovel_id={imovel_id}"
+            "event=agendamento_criado lead_id=%s agendamento_id=%s tipo=%s "
+            "data_hora=%s imovel_id=%s status=ok",
+            lead_id, agendamento.id, tipo, data_hora, imovel_id,
         )
         return agendamento
 
@@ -82,7 +83,9 @@ class SchedulingService:
             db.commit()
             db.refresh(agendamento)
             logger.info(
-                f"Agendamento {agendamento_id} atualizado para status={status}"
+                "event=agendamento_atualizado agendamento_id=%s lead_id=%s "
+                "novo_status=%s",
+                agendamento_id, agendamento.lead_id, status,
             )
         return agendamento
 

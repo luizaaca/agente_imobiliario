@@ -163,7 +163,7 @@ def _construir_modelo() -> OpenAIChatModel:
         provider_kwargs["base_url"] = base_url
 
     logger.info(
-        "LLM configurado: provider=%s model=%s base_url=%s",
+        "event=llm_configurado provider=%s model=%s base_url=%s",
         provider,
         settings.LLM_MODEL,
         base_url,

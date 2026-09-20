@@ -25,7 +25,7 @@ def create_scheduler(sender: Optional[Sender] = None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
 
     async def run_followup():
-        logger.info("Executando job de follow-up automático...")
+        logger.info("event=followup_ciclo_iniciado")
         await run_followup_cycle(sender=sender)
 
     scheduler.add_job(
@@ -41,7 +41,7 @@ def create_scheduler(sender: Optional[Sender] = None) -> AsyncIOScheduler:
     )
 
     logger.info(
-        "Scheduler de follow-up configurado: 1 ciclo a cada %s min.",
+        "event=followup_scheduler_configurado intervalo_min=%s status=ok",
         INTERVALO_MINUTOS,
     )
     return scheduler

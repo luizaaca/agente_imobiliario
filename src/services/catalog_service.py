@@ -133,15 +133,19 @@ class CatalogService:
             results = query.limit(limite).all()
 
             logger.info(
-                f"Busca de imóveis: {len(results)} resultados "
-                f"(intencao={intencao}, finalidade={finalidade}, bairro={bairro_interesse}, "
-                f"preco={orcamento_min}-{orcamento_max}, quartos={quartos})"
+                "event=busca_de_imoveis status=ok resultados=%s intencao=%s "
+                "finalidade=%s bairro=%s preco_min=%s preco_max=%s quartos=%s",
+                len(results), intencao, finalidade, bairro_interesse,
+                orcamento_min, orcamento_max, quartos,
             )
 
             return results
 
         except Exception as e:
-            logger.error(f"Erro na busca de imóveis: {e}", exc_info=True)
+            logger.error(
+                "event=busca_de_imoveis status=erro tipo_erro=%s erro=%s",
+                type(e).__name__, e, exc_info=True,
+            )
             return []
 
     # Ordem em que os filtros sao afrouxados quando a busca exata nao devolve

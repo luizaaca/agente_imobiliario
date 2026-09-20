@@ -209,7 +209,10 @@ class LeadService:
         lead.perfil_narrativo = novo_texto
         db.commit()
         db.refresh(lead)
-        logger.info(f"Perfil narrativo atualizado para lead {lead_id}")
+        logger.info(
+            "event=perfil_narrativo_atualizado lead_id=%s tamanho=%s",
+            lead_id, len(novo_texto or ""),
+        )
         return lead
 
     def calculate_score(self, lead_id: int, db: Session) -> Decimal:

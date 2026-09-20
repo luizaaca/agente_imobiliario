@@ -1,7 +1,10 @@
 """Agente SDR Imobiliário principal usando PydanticAI."""
 
+import functools
 import logging
-from dataclasses import dataclass
+import time
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Optional
 
@@ -31,6 +34,11 @@ class SDRDependencies:
     catalog_service: CatalogService
     scheduling_service: SchedulingService
     llm_usage_service: LLMUsageService
+    # Amarra as linhas de log de um mesmo turno: a chamada ao provider e as
+    # tools que ela disparou. Os canais constroem as dependências uma vez por
+    # mensagem, então um id por objeto é um id por turno. Quem quiser correlacionar
+    # com um id externo (um update do Telegram, por exemplo) passa o seu.
+    correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
 
 # Create the agent
@@ -45,8 +53,58 @@ sdr_agent = Agent(
 )
 
 
+def _decorrido_ms(comeco: float) -> int:
+    """Milissegundos desde `comeco`, medidos em relógio monotônico."""
+    return int((time.monotonic() - comeco) * 1000)
+
+
+def _instrumentada(funcao):
+    """Registra início, fim, duração e falha de uma tool.
+
+    O `§8` dos contratos das tools pede `lead_id`, `tool_name`, `status`,
+    duração, erro resumido e identificador de correlação em toda execução.
+    Como isso é idêntico nas cinco tools, fica aqui em vez de repetido dentro
+    de cada uma — e uma tool nova só precisa do decorador para ficar coberta.
+
+    A exceção é relançada: o pydantic-ai tem a própria política de retentativa
+    e é ele quem decide o que devolver ao modelo. Aqui só se observa.
+    """
+    nome = funcao.__name__
+
+    @functools.wraps(funcao)
+    async def wrapper(ctx: RunContext[SDRDependencies], *args, **kwargs):
+        comeco = time.monotonic()
+        logger.info(
+            "event=tool_iniciada tool_name=%s lead_id=%s channel=%s correlation_id=%s",
+            nome, ctx.deps.lead_id, ctx.deps.channel, ctx.deps.correlation_id,
+        )
+        try:
+            resultado = await funcao(ctx, *args, **kwargs)
+        except Exception as e:
+            logger.exception(
+                "event=tool_finalizada tool_name=%s lead_id=%s channel=%s "
+                "correlation_id=%s status=erro tipo_erro=%s duracao_ms=%s",
+                nome, ctx.deps.lead_id, ctx.deps.channel,
+                ctx.deps.correlation_id, type(e).__name__, _decorrido_ms(comeco),
+            )
+            raise
+        logger.info(
+            "event=tool_finalizada tool_name=%s lead_id=%s channel=%s "
+            "correlation_id=%s status=ok duracao_ms=%s",
+            nome, ctx.deps.lead_id, ctx.deps.channel,
+            ctx.deps.correlation_id, _decorrido_ms(comeco),
+        )
+        return resultado
+
+    return wrapper
+
+
 # Register tools using @sdr_agent.tool decorator
 # Each tool receives RunContext[SDRDependencies] as first arg
+#
+# `@_instrumentada` fica por dentro de `@sdr_agent.tool`: o pydantic-ai lê a
+# assinatura da função para montar o schema da tool, e `functools.wraps` deixa
+# `inspect.signature` enxergar a original através do wrapper.
 
 # Vai no fim do retorno da busca, e nao so no system prompt: o resultado da
 # tool e o texto mais recente antes da geracao, e e ali que a instrucao
@@ -74,6 +132,7 @@ def _formatar_imovel(imovel) -> str:
 
 
 @sdr_agent.tool
+@_instrumentada
 async def buscar_imoveis(
     ctx: RunContext[SDRDependencies],
     intencao: Optional[str] = None,
@@ -98,7 +157,6 @@ async def buscar_imoveis(
     Se nada casar com os filtros exatos, a busca é refeita automaticamente
     afrouxando um critério por vez, e a resposta diz o que foi afrouxado.
     """
-    logger.info(f"Tool buscar_imoveis chamada para lead {ctx.deps.lead_id}")
     with get_db() as db:
         resultado = ctx.deps.catalog_service.search_relaxando(
             db,
@@ -147,6 +205,7 @@ async def buscar_imoveis(
 
 
 @sdr_agent.tool
+@_instrumentada
 async def registrar_qualificacao(
     ctx: RunContext[SDRDependencies],
     intencao: Annotated[Optional[str], Field(
@@ -177,7 +236,6 @@ async def registrar_qualificacao(
     Use campos curtos e padronizados. Texto livre e narrativa do lead vão em
     `atualizar_perfil_lead`, não aqui.
     """
-    logger.info(f"Tool registrar_qualificacao chamada para lead {ctx.deps.lead_id}")
     data = {k: v for k, v in locals().items() if k != 'ctx' and v is not None}
     with get_db() as db:
         lead = ctx.deps.lead_service.update_qualification(ctx.deps.lead_id, data, db)
@@ -187,13 +245,13 @@ async def registrar_qualificacao(
 
 
 @sdr_agent.tool
+@_instrumentada
 async def atualizar_perfil_lead(
     ctx: RunContext[SDRDependencies],
     perfil_narrativo_atualizado: str,
     motivo_atualizacao: Optional[str] = None,
 ) -> str:
     """Atualizar o perfil narrativo textual do lead com novas informações."""
-    logger.info(f"Tool atualizar_perfil_lead chamada para lead {ctx.deps.lead_id}")
     with get_db() as db:
         ctx.deps.lead_service.update_perfil_narrativo(
             ctx.deps.lead_id, perfil_narrativo_atualizado, db
@@ -202,6 +260,7 @@ async def atualizar_perfil_lead(
 
 
 @sdr_agent.tool
+@_instrumentada
 async def agendar_reuniao(
     ctx: RunContext[SDRDependencies],
     tipo: Annotated[str, Field(description="Exatamente um de: visita, reuniao.")],
@@ -212,7 +271,6 @@ async def agendar_reuniao(
         "um imóvel específico. Não invente: use apenas IDs já apresentados."))] = None,
 ) -> str:
     """Registrar visita ou reunião para handover ao corretor."""
-    logger.info(f"Tool agendar_reuniao chamada para lead {ctx.deps.lead_id}")
     if tipo not in ("visita", "reuniao"):
         return "Tipo inválido. Use 'visita' ou 'reuniao'."
     try:
@@ -254,11 +312,11 @@ async def agendar_reuniao(
 
 
 @sdr_agent.tool
+@_instrumentada
 async def gerar_resumo_corretor(
     ctx: RunContext[SDRDependencies],
 ) -> str:
     """Gerar briefing executivo para o corretor."""
-    logger.info(f"Tool gerar_resumo_corretor chamada para lead {ctx.deps.lead_id}")
     with get_db() as db:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         if not lead:
@@ -426,7 +484,10 @@ def _registrar_handover(
         message_type="handover",
         db=db,
     )
-    logger.info(f"Handover registrado para o lead {lead_id}; resumo persistido.")
+    logger.info(
+        "event=handover_registrado lead_id=%s channel=%s status=ok",
+        lead_id, channel,
+    )
 
 
 async def process_message(
@@ -454,21 +515,34 @@ async def process_message(
 
         # Check limits
         if deps.llm_usage_service.is_daily_budget_exceeded(db):
-            logger.warning("Budget diário de LLM atingido!")
+            logger.warning(
+                "event=budget_diario_estourado lead_id=%s channel=%s "
+                "acao=turno_bloqueado",
+                lead_id, channel,
+            )
             return UNAVAILABLE_MESSAGE
 
         if deps.llm_usage_service.is_monthly_budget_exceeded(db):
-            logger.warning("Budget mensal de LLM atingido!")
+            logger.warning(
+                "event=budget_mensal_estourado lead_id=%s channel=%s "
+                "acao=turno_bloqueado",
+                lead_id, channel,
+            )
             return UNAVAILABLE_MESSAGE
 
         if deps.llm_usage_service.is_conversation_over_limit(lead_id, db):
-            logger.info(f"Lead {lead_id} atingiu limite de conversa. Fazendo handover.")
+            logger.info(
+                "event=limite_da_conversa_atingido lead_id=%s channel=%s "
+                "acao=handover",
+                lead_id, channel,
+            )
             _registrar_handover(lead_id, channel, deps, db)
             return HANDOVER_MESSAGE
 
     # Run agent
     # O tratamento de falha fica centralizado aqui para que os dois canais
     # (Streamlit e Telegram) degradem da mesma forma, sem vazar erro técnico.
+    comeco = time.monotonic()
     try:
         result = await sdr_agent.run(
             user_prompt=user_text,
@@ -477,18 +551,33 @@ async def process_message(
             model=build_model(),
         )
     except LLMConfigError as e:
+        # Configuração ausente não é falha do provider: nada foi chamado, então
+        # não entra na taxa de erro — entraria como ruído permanente enquanto a
+        # aplicação estivesse sem configurar.
         logger.error(
             "event=llm_config_error lead_id=%s channel=%s erro=%s",
             lead_id, channel, e,
         )
         return UNAVAILABLE_MESSAGE
     except Exception as e:
+        decorrido = _decorrido_ms(comeco)
         logger.exception(
-            "event=llm_call_failed lead_id=%s channel=%s tipo_erro=%s",
-            lead_id, channel, type(e).__name__,
+            "event=llm_call_failed lead_id=%s channel=%s tipo_erro=%s "
+            "duracao_ms=%s status=erro",
+            lead_id, channel, type(e).__name__, decorrido,
         )
+        with get_db() as db:
+            deps.llm_usage_service.record_failure(
+                lead_id=lead_id,
+                model=settings.LLM_MODEL,
+                operation="chat",
+                error_type=type(e).__name__,
+                latency_ms=decorrido,
+                db=db,
+            )
         return UNAVAILABLE_MESSAGE
 
+    latencia_ms = _decorrido_ms(comeco)
     response_text = result.output
 
     # Record usage and save response
@@ -515,6 +604,7 @@ async def process_message(
             tokens_out=tokens_out,
             operation="chat",
             turn=deps.llm_usage_service.get_conversation_turns(lead_id, db) + 1,
+            latency_ms=latencia_ms,
             db=db,
         )
 

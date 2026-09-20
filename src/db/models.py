@@ -209,6 +209,17 @@ class LLMUsage(Base):
     tokens_total: Mapped[int] = mapped_column(nullable=False)
     estimated_cost_usd: Mapped[Optional[float]] = mapped_column(Numeric(12, 6), nullable=True)
     operation: Mapped[str] = mapped_column(String(30), nullable=False)
+    # A tabela e o livro-caixa de toda chamada ao provider, inclusive as que
+    # falharam: uma chamada que estourou nao gasta token, mas conta para a taxa
+    # de erro. Sem a linha da falha, so o log saberia dela, e o dashboard
+    # mostraria um sistema sem erro nenhum.
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="ok"
+    )
+    error_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # Tempo da chamada ao provider, nao do turno inteiro: e o que se compara
+    # entre modelos e o que responde pela lentidao percebida no chat.
+    latency_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     lead: Mapped["Lead"] = relationship(back_populates="llm_usages")

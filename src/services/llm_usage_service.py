@@ -56,8 +56,9 @@ class LLMUsageService:
         operation: str,
         db: Session,
         turn: Optional[int] = None,
+        latency_ms: Optional[int] = None,
     ) -> LLMUsage:
-        """Registra uso de LLM no banco."""
+        """Registra uma chamada bem-sucedida ao provider."""
         usage = LLMUsage(
             lead_id=lead_id,
             conversation_turn=turn,
@@ -67,13 +68,53 @@ class LLMUsageService:
             tokens_total=tokens_in + tokens_out,
             estimated_cost_usd=self.estimate_cost(model, tokens_in, tokens_out),
             operation=operation,
+            status="ok",
+            latency_ms=latency_ms,
         )
         db.add(usage)
         db.commit()
         db.refresh(usage)
-        logger.debug(
-            f"LLM usage registrado: lead_id={lead_id}, model={model}, "
-            f"tokens={tokens_in + tokens_out}, operation={operation}"
+        logger.info(
+            "event=llm_usage_registrado lead_id=%s model=%s operation=%s "
+            "tokens=%s latency_ms=%s status=ok",
+            lead_id, model, operation, tokens_in + tokens_out, latency_ms,
+        )
+        return usage
+
+    def record_failure(
+        self,
+        lead_id: Optional[int],
+        model: str,
+        operation: str,
+        error_type: str,
+        db: Session,
+        latency_ms: Optional[int] = None,
+    ) -> LLMUsage:
+        """Registra uma chamada que falhou.
+
+        Sem token e sem custo — a chamada nao chegou a produzir resposta — mas
+        com linha no banco, porque uma falha que so existe no log nao entra na
+        taxa de erro do dashboard.
+        """
+        usage = LLMUsage(
+            lead_id=lead_id,
+            model=model,
+            tokens_input=0,
+            tokens_output=0,
+            tokens_total=0,
+            estimated_cost_usd=0,
+            operation=operation,
+            status="erro",
+            error_type=error_type,
+            latency_ms=latency_ms,
+        )
+        db.add(usage)
+        db.commit()
+        db.refresh(usage)
+        logger.warning(
+            "event=llm_usage_registrado lead_id=%s model=%s operation=%s "
+            "latency_ms=%s status=erro error_type=%s",
+            lead_id, model, operation, latency_ms, error_type,
         )
         return usage
 
@@ -86,12 +127,17 @@ class LLMUsageService:
         )
 
     def get_conversation_turns(self, lead_id: int, db: Session) -> int:
-        """Total de turnos de chat de uma conversa."""
+        """Total de turnos de chat de uma conversa.
+
+        Só as chamadas que deram certo: uma falha do provider não gastou turno
+        do lead, e contá-la anteciparia o handover por limite de conversa.
+        """
         return (
             db.query(func.count(LLMUsage.id))
             .filter(
                 LLMUsage.lead_id == lead_id,
                 LLMUsage.operation == "chat",
+                LLMUsage.status == "ok",
             )
             .scalar() or 0
         )
@@ -157,6 +203,38 @@ class LLMUsageService:
             .scalar() or 0.0
         )
 
+    def _do_dia(self, query):
+        """Restringe uma query ao dia corrente."""
+        return query.filter(func.date(LLMUsage.created_at) == datetime.now(UTC).date())
+
+    def get_daily_latency_ms(self, db: Session) -> Optional[int]:
+        """Tempo médio de resposta do provider hoje, em milissegundos.
+
+        Só as chamadas bem-sucedidas: a latência de uma falha mede o timeout,
+        não o tempo de resposta. `None` quando ainda não houve chamada — o
+        dashboard mostra isso como "—" em vez de fingir um zero.
+        """
+        media = self._do_dia(
+            db.query(func.avg(LLMUsage.latency_ms)).filter(
+                LLMUsage.status == "ok", LLMUsage.latency_ms.isnot(None)
+            )
+        ).scalar()
+        return int(media) if media is not None else None
+
+    def get_daily_error_rate(self, db: Session) -> Optional[float]:
+        """Fração das chamadas de hoje que falharam, de 0 a 1.
+
+        `None` quando não houve chamada nenhuma: sem denominador, 0% diria que
+        está tudo bem quando na verdade nada foi exercitado.
+        """
+        total = self._do_dia(db.query(func.count(LLMUsage.id))).scalar() or 0
+        if not total:
+            return None
+        erros = self._do_dia(
+            db.query(func.count(LLMUsage.id)).filter(LLMUsage.status == "erro")
+        ).scalar() or 0
+        return erros / total
+
     def get_dashboard_summary(self, db: Session) -> dict:
         """Dados consolidados para exibição no dashboard."""
         return {
@@ -166,4 +244,8 @@ class LLMUsageService:
             "monthly_budget": settings.LLM_MONTHLY_TOKEN_BUDGET,
             "daily_cost_usd": self.get_daily_cost(db),
             "monthly_cost_usd": self.get_monthly_cost(db),
+            "daily_latency_ms": self.get_daily_latency_ms(db),
+            "daily_error_rate": self.get_daily_error_rate(db),
+            "daily_budget_exceeded": self.is_daily_budget_exceeded(db),
+            "monthly_budget_exceeded": self.is_monthly_budget_exceeded(db),
         }
