@@ -1,3 +1,36 @@
+# Variaveis: por que `environment` e nao `env_file`.
+#
+# O Compose tem dois mecanismos diferentes, que se confundem com facilidade:
+#
+#   1. o arquivo `.env` ao lado deste compose e lido pelo PROPRIO Compose para
+#      interpolar `${VAR}` aqui embaixo. E automatico e nao precisa ser
+#      declarado em lugar nenhum;
+#   2. `env_file:` injeta um arquivo inteiro dentro do container.
+#
+# Aqui usamos o (1). Com isso:
+#   - `.env` continua funcionando local, sem nenhuma configuracao;
+#   - `OPENAI_API_KEY=sk-... docker compose up` tambem funciona, e a variavel
+#     de ambiente vence a do `.env`;
+#   - este arquivo documenta exatamente o que cada servico consome;
+#   - um clone recem-feito, sem `.env`, sobe assim mesmo: os defaults abaixo
+#     cobrem tudo. Sem chave de LLM a aplicacao avisa na tela que o chat nao
+#     vai responder.
+#
+# Nada de segredo entra na imagem: as variaveis so existem em tempo de execucao.
+
+x-ambiente-da-aplicacao: &ambiente-da-aplicacao
+  DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+  LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+  LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+  AUTH_COOKIE_KEY: ${AUTH_COOKIE_KEY:-dev_fallback_key}
+  LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-100000}
+  LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-3000000}
+  LLM_MAX_TURNS_PER_CONVERSATION: ${LLM_MAX_TURNS_PER_CONVERSATION:-30}
+  LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-50000}
+  LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,17 +51,12 @@ services:
 
   # Job de inicializacao: aplica as migrations e carrega o catalogo.
   # `app` e `telegram-bot` so sobem depois que este servico termina com sucesso.
+  # Nao precisa de chave de LLM: so fala com o banco.
   migrate:
     build:
       context: .
       dockerfile: Dockerfile
     command: sh -c "alembic upgrade head && python -m scripts.seed_imoveis"
-    env_file:
-      # required: false para o `up` nao morrer antes de construir nada em um
-      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
-      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
-      - path: .env
-        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:
@@ -43,34 +71,27 @@ services:
     command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
     ports:
       - "8501:8501"
-    env_file:
-      # required: false para o `up` nao morrer antes de construir nada em um
-      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
-      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
-      - path: .env
-        required: false
-    environment:
-      DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+    environment: *ambiente-da-aplicacao
     depends_on:
       migrate:
         condition: service_completed_successfully
 
   # Fora do conjunto padrao de proposito: sem TELEGRAM_BOT_TOKEN o bot sobe so
   # para falhar. Para levantar: `docker compose --profile telegram up`.
+  # O profile ADICIONA este servico aos demais; nao sobe o bot sozinho.
   telegram-bot:
     profiles: [telegram]
     build:
       context: .
       dockerfile: Dockerfile
     command: python run_telegram.py
-    env_file:
-      # required: false para o `up` nao morrer antes de construir nada em um
-      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
-      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
-      - path: .env
-        required: false
     environment:
-      DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+      <<: *ambiente-da-aplicacao
+      # Sem `:?` de proposito: a interpolacao roda no arquivo inteiro ANTES de
+      # filtrar profiles, entao exigir a variavel aqui quebraria tambem o
+      # `docker compose up` padrao, que nem sobe este servico. Quem avisa e o
+      # proprio run_telegram.py, que sai com erro explicito.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

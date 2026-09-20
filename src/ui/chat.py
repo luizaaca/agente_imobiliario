@@ -4,7 +4,9 @@ import uuid
 
 import streamlit as st
 
+from src.agent.provider import exige_chave_de_api
 from src.agent.sdr_agent import SDRDependencies, process_message
+from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
@@ -160,9 +162,28 @@ def _painel_da_conversa() -> None:
         st.rerun()
 
 
+def _aviso_de_llm_ausente() -> None:
+    """Diz na tela que falta chave, em vez de deixar o chat falhar calado.
+
+    A aplicação sobe de propósito sem chave de LLM — dá para navegar pelo
+    catálogo e pelo painel. Só o chat depende dela, e é aqui que o aviso serve.
+    """
+    if settings.OPENAI_API_KEY or not exige_chave_de_api():
+        return
+
+    st.warning(
+        "**Sem chave de LLM configurada** — o agente não vai responder.\n\n"
+        "Copie `.env.example` para `.env`, preencha `OPENAI_API_KEY` "
+        "(e `OPENAI_BASE_URL`, se não for a OpenAI) e suba de novo com "
+        "`docker compose up`. O dashboard e o catálogo funcionam sem isso.",
+        icon="🔑",
+    )
+
+
 def render_chat():
     st.header("💬 Chat com o Agente SDR")
     st.caption("Simule uma conversa como lead imobiliário")
+    _aviso_de_llm_ausente()
 
     if "lead_id" not in st.session_state:
         _retomar_ultima_conversa()

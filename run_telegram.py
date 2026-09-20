@@ -8,6 +8,7 @@ o prenderia a um loop que nunca roda.
 """
 
 import logging
+import sys
 
 from telegram.ext import Application
 
@@ -39,8 +40,14 @@ async def _stop_scheduler(app: Application) -> None:
 
 def main():
     if not settings.TELEGRAM_BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN não configurado no .env")
-        return
+        # Sai com erro, e não silenciosamente: no Compose um exit 0 aqui
+        # pareceria sucesso e o container sumiria sem explicação.
+        logger.error(
+            "TELEGRAM_BOT_TOKEN não configurado. Crie um bot com o @BotFather, "
+            "coloque o token no .env (veja .env.example) e suba de novo com "
+            "`docker compose --profile telegram up`."
+        )
+        sys.exit(1)
 
     logger.info("Iniciando Bot Telegram + Scheduler...")
     app = create_telegram_app()

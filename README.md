@@ -56,13 +56,39 @@ docker compose --profile telegram up --build
 
 #### Credenciais de acesso
 
-Toda a aplicação está atrás de login. O repositório já traz um usuário pronto em `config/credentials.yaml` (só o hash bcrypt, nunca a senha em texto):
+Toda a aplicação está atrás de login. O repositório já traz usuários prontos em `config/credentials.yaml` — só os hashes bcrypt, nunca a senha em texto:
 
-| Usuário | Senha |
-|---|---|
-| `admin` | `admin123` |
+| Usuário | Senha | Papel |
+|---|---|---|
+| `admin` | `admin123` | administrador |
+| `corretor1` | `corretor123` | corretor (João Silva) |
 
-Para criar outro usuário ou trocar a senha, gere o hash com `python -m scripts.generate_password_hash` e cole no `config/credentials.yaml`.
+> Este arquivo é versionado **de propósito, e só por ser uma POC de avaliação**: sem ele ninguém entra na aplicação depois de clonar. As senhas são públicas e não protegem nada. Em uso real, gere hashes novos e tire o arquivo do versionamento — a linha já está comentada no `.gitignore`.
+
+#### Adicionar um usuário de teste
+
+**1. Gere o hash da senha.** Se você subiu pelo Compose, não precisa de Python na máquina — rode dentro do container:
+
+```bash
+docker compose exec app python -m scripts.generate_password_hash
+```
+
+Localmente, com o ambiente virtual ativo, é `python -m scripts.generate_password_hash`. O script pede a senha sem ecoar na tela e imprime algo como `$2b$12$...`.
+
+**2. Acrescente o bloco em `config/credentials.yaml`**, dentro de `credentials.usernames`, no mesmo recuo dos outros:
+
+```yaml
+    avaliador:
+      name: Avaliador POC
+      email: avaliador@exemplo.local
+      password: "$2b$12$cole_o_hash_gerado_aqui"
+```
+
+**3. Aplique a mudança.** Em execução local, basta recarregar a página: o arquivo é lido a cada carga. No Docker, o `Dockerfile` copia o projeto para dentro da imagem, então é preciso reconstruir — rápido, porque só a última camada muda:
+
+```bash
+docker compose up -d --build app
+```
 
 #### Para o chat responder de verdade
 

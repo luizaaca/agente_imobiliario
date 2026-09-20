@@ -32,7 +32,17 @@ DEFAULT_BASE_URLS: dict[str, str | None] = {
 }
 
 # Providers locais não exigem chave de API.
-_PROVIDERS_SEM_CHAVE = {"ollama"}
+PROVIDERS_SEM_CHAVE = {"ollama"}
+
+
+def exige_chave_de_api() -> bool:
+    """Se o provider configurado precisa de uma chave para funcionar.
+
+    Publico porque a UI usa isto para avisar na tela, antes de o usuario
+    tentar conversar e receber apenas "atendimento indisponivel".
+    """
+    provider = (settings.LLM_PROVIDER or "openai").strip().lower()
+    return provider not in PROVIDERS_SEM_CHAVE
 
 
 class LLMConfigError(RuntimeError):
@@ -100,7 +110,7 @@ def _construir_modelo() -> OpenAIChatModel:
         )
 
     api_key = (settings.OPENAI_API_KEY or "").strip()
-    if not api_key and provider not in _PROVIDERS_SEM_CHAVE:
+    if not api_key and provider not in PROVIDERS_SEM_CHAVE:
         raise LLMConfigError(
             f"OPENAI_API_KEY não configurada — obrigatória para "
             f"LLM_PROVIDER='{provider}'. Preencha no .env."
