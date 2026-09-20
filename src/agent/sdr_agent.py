@@ -336,10 +336,46 @@ def _nada_encontrado(resultado) -> str:
     return "\n".join(linhas)
 
 
+# Telefone brasileiro: 10 digitos com fixo, 11 com celular, os dois com DDD.
+# O 55 na frente aparece quando a pessoa copia do proprio WhatsApp.
+_DDI_BR = "55"
+
+
+def _telefone_normalizado(bruto: str) -> str:
+    """Telefone em `(11) 98765-4321`, ou `ModelRetry` se não der para ler.
+
+    A pessoa escreve de todo jeito — com ponto, com +55, sem DDD. Guardar o
+    texto cru deixaria a ficha do corretor com meia dúzia de formatos e
+    números incompletos que só se descobre inválidos na hora de ligar.
+
+    Recusar com `ModelRetry` é melhor que gravar errado: o modelo volta e
+    pergunta o DDD, que é justamente o que falta na maioria dos casos.
+    """
+    digitos = "".join(c for c in bruto if c.isdigit())
+    if len(digitos) in (12, 13) and digitos.startswith(_DDI_BR):
+        digitos = digitos[2:]
+
+    if len(digitos) not in (10, 11):
+        raise ModelRetry(
+            f"'{bruto}' não é um telefone que dê para usar. Preciso de DDD "
+            f"mais o número, como (11) 98765-4321. Pergunte o DDD se ela não "
+            f"tiver dito."
+        )
+
+    ddd, resto = digitos[:2], digitos[2:]
+    return f"({ddd}) {resto[:-4]}-{resto[-4:]}"
+
+
 @sdr_agent.tool
 @_instrumentada
 async def registrar_qualificacao(
     ctx: RunContext[SDRDependencies],
+    nome: Annotated[Optional[str], Field(max_length=120, description=(
+        "Como a pessoa se chama, do jeito que ela disse. Só o nome — nada de "
+        "'Sr.' nem sobrenome inventado. Grave assim que souber."))] = None,
+    telefone: Annotated[Optional[str], Field(max_length=30, description=(
+        "Telefone com DDD, como ela escreveu. É por aqui que o corretor liga: "
+        "sem isso uma visita marcada não serve para nada."))] = None,
     intencao: Annotated[Optional[str], Field(
         description="Exatamente um de: compra, aluguel, investimento.")] = None,
     perfil: Annotated[Optional[str], Field(max_length=30, description=(
@@ -369,6 +405,8 @@ async def registrar_qualificacao(
     `atualizar_perfil_lead`, não aqui.
     """
     data = {k: v for k, v in locals().items() if k != 'ctx' and v is not None}
+    if telefone is not None:
+        data["telefone"] = _telefone_normalizado(telefone)
     with get_db() as db:
         lead = ctx.deps.lead_service.update_qualification(ctx.deps.lead_id, data, db)
         # Recalculate score
@@ -440,7 +478,33 @@ async def agendar_reuniao(
             f"Tipo: {tipo}\n"
             f"Data/Hora: {data_hora}{linha_imovel}\n"
             f"Status: pendente"
+            + _falta_para_o_corretor(ctx, db)
         )
+
+
+def _falta_para_o_corretor(ctx: RunContext[SDRDependencies], db) -> str:
+    """Cobra nome e telefone na hora em que eles passam a fazer falta.
+
+    Marcar visita é o momento em que o dado deixa de ser curiosidade e vira
+    necessidade: é um corretor de carne e osso que vai ligar. Pedir antes, sem
+    motivo, soa a cadastro; pedir aqui tem uma razão que a pessoa entende.
+
+    Vai no retorno da tool, e não só nas instruções, porque este texto é a
+    última coisa que o modelo lê antes de escrever — é onde a ordem pega.
+    """
+    lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
+    falta = [
+        rotulo
+        for rotulo, valor in (("o nome", lead.nome), ("o telefone", lead.telefone))
+        if not valor
+    ]
+    if not falta:
+        return ""
+    return (
+        f"\n---\nVocê ainda não tem {' nem '.join(falta)} desta pessoa, e um "
+        "corretor vai ligar para confirmar esta visita. Peça na mesma mensagem "
+        "em que confirma o agendamento, e grave com `registrar_qualificacao`."
+    )
 
 
 def _compromisso_do_lead(ctx, agendamento_id: int, db):

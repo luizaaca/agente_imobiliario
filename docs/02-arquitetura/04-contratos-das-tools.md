@@ -142,6 +142,8 @@ Persistir ou atualizar dados estruturados do lead.
 
 ### Input esperado
 Campos estruturados do lead, como:
+- `nome`
+- `telefone`
 - `intencao`
 - `perfil`
 - `orcamento_min`
@@ -153,6 +155,18 @@ Campos estruturados do lead, como:
 - `motivo_busca`
 - `forma_pagamento`
 - `amenidades_desejadas`
+
+### Nome e telefone
+O telefone e normalizado para `(11) 98765-4321`: aceita com ou sem DDI, com ou
+sem pontuacao, fixo de dez digitos ou celular de onze. Sem DDD a tool recusa com
+`ModelRetry` pedindo o DDD — gravar um numero incompleto so se descobre errado
+na hora em que o corretor liga.
+
+Quando pedir cada um e regra da persona, nao da tool: o nome cedo, na conversa;
+o telefone na hora de marcar a visita, que e quando ha um motivo que a pessoa
+entende. `agendar_reuniao` acrescenta ao proprio retorno a cobranca do que
+faltar, porque o retorno da tool e a ultima coisa que o modelo le antes de
+escrever.
 
 ### Output esperado
 - lead atualizado;
