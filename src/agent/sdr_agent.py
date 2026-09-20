@@ -45,7 +45,7 @@ class SDRDependencies:
 # Nem o modelo nem o system prompt são fixados aqui:
 # - o modelo vem de build_model() no momento do run, para que importar este
 #   módulo não exija credenciais de LLM (o dashboard roda sem elas);
-# - o system prompt é montado a cada run pelo @sdr_agent.system_prompt abaixo,
+# - as instruções são montadas a cada run pelo @sdr_agent.instructions abaixo,
 #   que injeta o contexto atual do lead no template.
 sdr_agent = Agent(
     deps_type=SDRDependencies,
@@ -614,18 +614,26 @@ def _compromissos_do_lead(lead) -> str:
             f"- ID {id_}: {tipo} em {quando:%d/%m/%Y às %H:%M}{onde} ({status})"
         )
 
-    plural = "s" if len(itens) > 1 else ""
+    qual = "estes IDs" if len(itens) > 1 else "este ID"
     return (
         f"Compromissos marcados ({len(itens)}) — esta é a lista completa e "
-        f"atual. Use estes ID{plural} para confirmar ou cancelar, e ignore "
+        f"atual. Use {qual} para confirmar ou cancelar, e ignore "
         f"qualquer ID citado antes na conversa:\n" + "\n".join(linhas)
     )
 
 
-# Dynamic system prompt
-@sdr_agent.system_prompt
-async def dynamic_system_prompt(ctx: RunContext[SDRDependencies]) -> str:
-    """Gera o system prompt dinâmico com contexto do lead."""
+# As instruções do agente, remontadas a cada turno com o contexto do lead.
+#
+# Precisa ser `@instructions`, e não `@system_prompt`: o pydantic-ai só insere
+# o system prompt quando o `message_history` está vazio (`_agent_graph.py`:
+# `if not messages: parts.extend(await self._sys_parts(...))`). Como aqui o
+# histórico é reidratado do banco a cada turno, com `system_prompt` o agente
+# rodava sem prompt nenhum a partir da segunda mensagem da conversa — sem
+# persona, sem regras e sem o contexto do lead. As instruções, ao contrário,
+# não moram no histórico: são reaplicadas em todo run.
+@sdr_agent.instructions
+async def instrucoes_do_agente(ctx: RunContext[SDRDependencies]) -> str:
+    """Monta as instruções do turno com o contexto atual do lead."""
     with get_db() as db:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         lead_context = montar_contexto_do_lead(lead)

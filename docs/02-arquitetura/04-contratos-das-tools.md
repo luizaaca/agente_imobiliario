@@ -195,9 +195,15 @@ Sendo o último compromisso de pé, o lead sai de `agendado`.
 - compromisso já cancelado ou realizado.
 
 ### Por que o id vem do contexto
-O system prompt lista os compromissos de pé com id, data **e imóvel**, do mais
-próximo ao mais distante, dizendo que aquela é a lista completa e que IDs
-citados antes na conversa devem ser ignorados.
+As instruções do agente listam os compromissos de pé com id, data **e imóvel**,
+do mais próximo ao mais distante, dizendo que aquela é a lista completa e que
+IDs citados antes na conversa devem ser ignorados.
+
+São `@agent.instructions`, e não `@agent.system_prompt`, por uma razão de
+mecânica: o pydantic-ai só insere o system prompt quando o `message_history`
+chega vazio. Como o histórico é reidratado do banco a cada turno, um system
+prompt valeria apenas na primeira mensagem da conversa — e desta seção
+dependem as duas tools de compromisso.
 
 Cada parte disso resolve uma falha observada:
 

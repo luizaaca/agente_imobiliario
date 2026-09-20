@@ -27,9 +27,9 @@ HISTORY_LIMIT = 20
 def build_message_history(mensagens: Iterable[Mensagem]) -> list[ModelMessage]:
     """Converte mensagens persistidas (em ordem cronológica) para o PydanticAI.
 
-    Apenas `user` e `assistant` entram: o system prompt é remontado a cada run
-    pelo prompt dinâmico, e mensagens de tool são reconstruídas pelo próprio
-    agente quando necessário.
+    Apenas `user` e `assistant` entram. As instruções do agente não vêm daqui:
+    o pydantic-ai as reaplica a cada run (por isso são `@instructions`, e não
+    `@system_prompt` — este último só entraria se o histórico chegasse vazio).
     """
     history: list[ModelMessage] = []
 
