@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Script de validação e consolidação dos batches de imóveis sintéticos.
 
-Consolida os arquivos seed/batches/batch_01.csv a batch_06.csv em seed/imoveis_catalogo.csv,
+Consolida os arquivos seed/batches/batch_01.csv a batch_06.csv em data/imoveis_catalogo.csv,
 executando validações estritas de schema, tipos, constraints e regras de negócio.
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 BATCHES_DIR = BASE_DIR / "batches"
-OUTPUT_FILE = BASE_DIR / "imoveis_catalogo.csv"
+OUTPUT_FILE = BASE_DIR.parent / "data" / "imoveis_catalogo.csv"
 
 EXPECTED_COLUMNS = [
     "id",

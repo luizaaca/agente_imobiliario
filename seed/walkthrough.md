@@ -1,5 +1,11 @@
 # Walkthrough: Geração de Catálogo Sintético de Imóveis (Residencial e Comercial)
 
+> **Nota de reprodutibilidade.** Os arquivos `seed/batches/batch_01.csv` a
+> `batch_06.csv` não foram versionados, então `consolidar_catalogo.py` não
+> reproduz o catálogo como está. O artefato final — os 300 imóveis — está
+> versionado em `data/imoveis_catalogo.csv`, que é o que o seed carrega. Este
+> documento fica como registro de **como** o catálogo foi gerado.
+
 Concluímos a produção da massa de dados sintética de imóveis para o projeto **Agente SDR Imobiliário com IA**. O dataset atende integralmente às especificações do modelo de dados (`docs/04-dados/01-modelagem-logica-do-banco.md`), ao planejamento de mercado elaborado e às solicitações de inclusão de imóveis comerciais variados.
 
 ---

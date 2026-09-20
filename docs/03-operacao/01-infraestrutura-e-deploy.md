@@ -337,12 +337,17 @@ logfire
 
 ## 8. Checklist de implementação
 
-- [ ] Instalar `psycopg[binary]` e `alembic` no `requirements.txt`.
-- [ ] Atualizar `src/db/session.py` para ler `DATABASE_URL` do ambiente.
-- [ ] Remover referências a SQLite e `PRAGMA WAL` do código.
-- [ ] Criar `Dockerfile`.
-- [ ] Criar `docker-compose.yml`.
-- [ ] Criar `.env.example` com todas as variáveis documentadas.
-- [ ] Testar `docker-compose up --build` localmente.
-- [ ] Configurar Alembic para migrations (opcional mas recomendado).
+- [x] Instalar `psycopg[binary]` e `alembic` no `requirements.txt`.
+- [x] Atualizar `src/db/session.py` para ler `DATABASE_URL` do ambiente.
+- [x] Remover referências a SQLite e `PRAGMA WAL` do código.
+- [x] Criar `Dockerfile`.
+- [x] Criar `docker-compose.yml`.
+- [x] Criar `.env.example` com todas as variáveis documentadas.
+- [x] Testar `docker-compose up --build` localmente.
+  > A imagem constrói e o container sobe, conecta no PostgreSQL da rede do
+  > Compose e serve a tela de login. Exigiu criar o `.dockerignore`: sem ele
+  > o contexto levava `.venv` e `.git`, e o build nem começava porque o
+  > Docker não consegue ler o `.pytest_cache` deste repositório.
+- [x] Configurar Alembic para migrations (opcional mas recomendado).
 - [ ] Testar com banco PostgreSQL remoto (Neon ou Supabase free tier).
+  > Não feito. O desenvolvimento rodou contra o PostgreSQL do Compose.

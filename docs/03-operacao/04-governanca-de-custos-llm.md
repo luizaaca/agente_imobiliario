@@ -284,13 +284,15 @@ LLM_MONTHLY_TOKEN_BUDGET=3000000
 
 ## 9. Checklist de implementação
 
-- [ ] Criar modelo `LLMUsage` em `src/db/models.py`.
-- [ ] Criar `src/services/llm_usage_service.py` com as funções de tracking e verificação.
-- [ ] Definir tabela de preços por modelo em `src/config.py`.
-- [ ] Integrar checagem de limites no loop do agente (antes de chamar LLM).
-- [ ] Integrar `record()` após cada chamada ao agente (usando `result.usage()`).
-- [ ] Aplicar mesma lógica no scheduler de follow-up.
-- [ ] Adicionar variáveis de ambiente ao `.env.example`.
-- [ ] Adicionar card de consumo no dashboard Streamlit.
-- [ ] Testar: conversa atinge 30 turnos → mensagem de handover.
-- [ ] Testar: budget diário esgotado → novas conversas recebem mensagem de indisponibilidade.
+- [x] Criar modelo `LLMUsage` em `src/db/models.py`.
+- [x] Criar `src/services/llm_usage_service.py` com as funções de tracking e verificação.
+- [x] Definir tabela de preços por modelo em `src/config.py`.
+  > Ficou em `LLMUsageService.PRICING`, junto de quem a usa, e não em `src/config.py`.
+- [x] Integrar checagem de limites no loop do agente (antes de chamar LLM).
+- [x] Integrar `record()` após cada chamada ao agente (usando `result.usage`).
+  > Em pydantic-ai 2.x `usage` é property, não método: `result.usage()` levanta `TypeError`.
+- [x] Aplicar mesma lógica no scheduler de follow-up.
+- [x] Adicionar variáveis de ambiente ao `.env.example`.
+- [x] Adicionar card de consumo no dashboard Streamlit.
+- [x] Testar: conversa atinge 30 turnos → mensagem de handover.
+- [x] Testar: budget diário esgotado → novas conversas recebem mensagem de indisponibilidade.

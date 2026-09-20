@@ -170,12 +170,13 @@ agente_imobiliario/
 
 ## 9. Checklist de implementação
 
-- [ ] Instalar `streamlit-authenticator` e `pyyaml` no `requirements.txt`.
-- [ ] Criar `config/credentials.yaml` com pelo menos um usuário admin.
-- [ ] Criar `scripts/generate_password_hash.py`.
-- [ ] Integrar autenticação no início de `app.py` com `st.stop()`.
-- [ ] Adicionar `AUTH_COOKIE_KEY` ao `.env.example`.
-- [ ] Adicionar `config/credentials.yaml` ao `.gitignore` (ou manter com hashes apenas).
-- [ ] Testar: abrir URL sem login → ver apenas tela de login.
-- [ ] Testar: login com credenciais corretas → acesso total.
-- [ ] Testar: refresh da página → sessão mantida pelo cookie.
+- [x] Instalar `streamlit-authenticator` e `pyyaml` no `requirements.txt`.
+- [x] Criar `config/credentials.yaml` com pelo menos um usuário admin.
+- [x] Criar `scripts/generate_password_hash.py`.
+- [x] Integrar autenticação no início de `app.py` com `st.stop()`.
+- [x] Adicionar `AUTH_COOKIE_KEY` ao `.env.example`.
+- [x] Adicionar `config/credentials.yaml` ao `.gitignore` (ou manter com hashes apenas).
+  > Mantido versionado, só com hashes bcrypt — é o que permite subir o projeto e logar sem passo extra.
+- [x] Testar: abrir URL sem login → ver apenas tela de login.
+- [x] Testar: login com credenciais corretas → acesso total.
+- [x] Testar: refresh da página → sessão mantida pelo cookie.

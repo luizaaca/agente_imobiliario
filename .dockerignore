@@ -1,0 +1,44 @@
+# Sem este arquivo o contexto do build leva .venv, .git e os caches inteiros —
+# e o build quebrava antes de comecar, porque o Docker nao consegue nem ler o
+# .pytest_cache deste repositorio (permissoes travadas).
+
+# Ambientes e caches
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Controle de versao e ferramentas
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+.claude/
+.gemini/
+
+# Segredos: as variaveis chegam por env_file no compose, nunca pela imagem
+.env
+.env.local
+.env.*.local
+
+# Nao servem para rodar a aplicacao
+docs/
+seed/
+tests/
+*.md
+*.pdf
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+Desktop.ini

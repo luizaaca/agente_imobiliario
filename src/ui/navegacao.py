@@ -42,8 +42,11 @@ def menu_do_usuario(nome: str, authenticator: Any) -> None:
     Fica fora da barra lateral porque la o espaco e da navegacao; o popover
     guarda o que e ocasional (nome completo, versao, sair).
     """
+    nome = nome or "Usuário"
     _, coluna = st.columns([5, 1], vertical_alignment="center")
-    with coluna, st.popover(nome.split()[0], icon=":material/account_circle:", width="stretch"):
+    with coluna, st.popover(
+        nome.split()[0], icon=":material/account_circle:", width="stretch"
+    ):
         st.markdown(f"**{nome}**")
         st.caption("Agente SDR Imobiliário v0.1")
         st.divider()

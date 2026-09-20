@@ -256,101 +256,112 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ## 11. Fases de Execução
 
+> **Estado em 20/09/2026.** Os itens marcados foram verificados no código e
+> em execução. Os desmarcados continuam desmarcados de propósito, com a
+> razão logo abaixo quando ela não for óbvia. O `README.md` traz a mesma
+> lista de limitações do ponto de vista de quem vai rodar o projeto.
+
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
-- [ ] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)).
-- [ ] Gerar catálogo sintético de imóveis e carregá-lo no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
-- [ ] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
-- [ ] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
-- [ ] Configurar autenticação do Streamlit (ver [03-autenticacao-da-ui.md](../03-operacao/03-autenticacao-da-ui.md)).
-- [ ] Implementar controle de custos LLM (ver [04-governanca-de-custos-llm.md](../03-operacao/04-governanca-de-custos-llm.md)).
-- [ ] Criar seed inicial e funções de leitura/escrita.
-- [ ] Implementar serviço de catálogo com filtros estruturados e ranking textual.
+- [x] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)).
+- [x] Gerar catálogo sintético de imóveis e carregá-lo no PostgreSQL via script de seed (`scripts/seed_imoveis.py`).
+- [x] Definir schemas Pydantic para `Lead`, `Mensagem`, `Agendamento`, `Imovel` e `LLMUsage`.
+- [x] Implementar camada de banco com PostgreSQL + SQLAlchemy + Alembic.
+- [x] Configurar autenticação do Streamlit (ver [03-autenticacao-da-ui.md](../03-operacao/03-autenticacao-da-ui.md)).
+- [x] Implementar controle de custos LLM (ver [04-governanca-de-custos-llm.md](../03-operacao/04-governanca-de-custos-llm.md)).
+- [x] Criar seed inicial e funções de leitura/escrita.
+- [x] Implementar serviço de catálogo com filtros estruturados e ranking textual.
 
 ### Fase 2: Agente SDR e Estado Conversacional
-- [ ] Criar persona e instruções do agente em `src/agent/prompts.py`.
-- [ ] Implementar agente principal com PydanticAI em `src/agent/sdr_agent.py`.
+- [x] Criar persona e instruções do agente em `src/agent/prompts.py`.
+- [x] Implementar agente principal com PydanticAI em `src/agent/sdr_agent.py`.
 - [ ] Definir output estruturado do agente para resposta + atualização de estado.
-- [ ] Implementar tools tipadas:
-  - [ ] `buscar_imoveis`
-  - [ ] `registrar_qualificacao`
-  - [ ] `atualizar_perfil_lead` — atualização incremental do perfil narrativo
-  - [ ] `agendar_reuniao`
-  - [ ] `gerar_resumo_corretor`
-- [ ] Injetar `perfil_narrativo` atual como contexto do agente a cada turno.
-- [ ] Persistir histórico e estado relevante do lead.
+  > Feito de outro jeito: a resposta é texto e a atualização de estado acontece pelas tools.
+- [x] Implementar tools tipadas:
+  - [x] `buscar_imoveis`
+  - [x] `registrar_qualificacao`
+  - [x] `atualizar_perfil_lead` — atualização incremental do perfil narrativo
+  - [x] `agendar_reuniao`
+  - [x] `gerar_resumo_corretor`
+- [x] Injetar `perfil_narrativo` atual como contexto do agente a cada turno.
+- [x] Persistir histórico e estado relevante do lead.
 
 ### Fase 3: Qualificação, Score e Perfil Narrativo
-- [ ] Definir critérios explícitos de score do lead:
+- [x] Definir critérios explícitos de score do lead:
   - Completude dos dados (quantos campos estruturados preenchidos)
   - Urgência declarada (alta/média/baixa)
   - Aderência com catálogo (existem imóveis compatíveis?)
   - Engajamento conversacional (turnos, perguntas feitas pelo lead)
   - Intenção de agendamento manifestada
-- [ ] Implementar score baseado nos critérios acima.
-- [ ] Atualizar status do lead conforme avanço no funil.
-- [ ] Garantir que o resumo do corretor explique o score de forma simples.
+- [x] Implementar score baseado nos critérios acima.
+- [x] Atualizar status do lead conforme avanço no funil.
+- [x] Garantir que o resumo do corretor explique o score de forma simples.
 - [ ] Registrar rejeições de imóveis como dado valioso no perfil narrativo.
+  > O prompt instrui e o modelo costuma fazer, mas não há nada em código que garanta.
 
 ### Fase 4: Follow-up Automático com Scheduler
-- [ ] Implementar `src/services/followup_service.py`:
+- [x] Implementar `src/services/followup_service.py`:
   - Consulta leads inativos por régua/etapa do funil.
   - Gera mensagem contextual via LLM com base no `perfil_narrativo` e histórico.
   - Respeita limite de tentativas (2-3 por régua).
-- [ ] Implementar `src/scheduler/followup_scheduler.py` com APScheduler:
+- [x] Implementar `src/scheduler/followup_scheduler.py` com APScheduler:
   - Job periódico (a cada 30 min) que varre leads inativos automaticamente.
   - Integrado ao processo do Telegram Bot (event loop asyncio compartilhado).
-- [ ] Réguas diferenciadas por estágio do funil:
+- [x] Réguas diferenciadas por estágio do funil:
   - **Lead novo sem resposta** (>2h): tom amigável, pergunta se é bom horário.
   - **Qualificação interrompida** (>6h): retoma de onde parou, referencia último tópico.
   - **Pós-envio de imóveis** (>24h): pergunta se viu as opções, qual agradou mais.
   - **Pós-agendamento** (<24h antes): confirmação/lembrete de visita ou ligação.
-- [ ] Registrar cada follow-up no histórico do lead.
+- [x] Registrar cada follow-up no histórico do lead.
 - [ ] Manter botão "Disparar Follow-up" no dashboard para ação manual sob demanda (mesma lógica, gatilho diferente).
+  > O botão foi removido por não fazer nada. O disparo manual existe como `python -m scripts.run_followup_once`.
 
 ### Fase 5: Canal Telegram
 - [ ] Criar bot via @BotFather e configurar `TELEGRAM_BOT_TOKEN` no `.env`.
-- [ ] Implementar `src/channels/telegram_bot.py`:
+- [x] Implementar `src/channels/telegram_bot.py`:
   - Handler `/start` com saudação e criação do lead no banco.
   - Handler de mensagens de texto com despacho para o agente SDR.
   - Mapeamento `telegram_chat_id` → `lead_id` no banco.
   - Indicador "digitando..." (`ChatAction.TYPING`) enquanto a LLM processa.
-- [ ] Implementar `run_telegram.py` (entry point do Processo 2):
+- [x] Implementar `run_telegram.py` (entry point do Processo 2):
   - Inicializa o bot com Long Polling.
   - Inicializa o scheduler de follow-up no mesmo event loop.
-- [ ] Implementar `run_all.py` (supervisor):
+- [x] Implementar `run_all.py` (supervisor):
   - Inicia `streamlit run app.py` e `python run_telegram.py` em paralelo.
   - Gerencia encerramento gracioso com Ctrl+C.
 - [ ] Exibir QR code do bot (`https://t.me/NomeDoBot`) no dashboard Streamlit.
 
 ### Fase 6: Interface Streamlit e Dashboard do Corretor
 - [ ] Desenvolver aba de chat simulador com histórico e streaming de resposta.
-- [ ] Desenvolver dashboard centrado no **goal principal: agendar ligação do corretor com o cliente**.
-- [ ] Implementar componentes do dashboard:
-  - [ ] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Ligações agendadas, Leads inativos.
-  - [ ] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
-  - [ ] **Filtros** (`st.selectbox`): Status (Novo, Em Qualificação, Qualificado, Agendado, Inativo) e Intenção (Compra, Aluguel, Investimento).
+  > Histórico funciona. Não há streaming: a resposta aparece inteira de uma vez.
+- [x] Desenvolver dashboard centrado no **goal principal: agendar ligação do corretor com o cliente**.
+- [x] Implementar componentes do dashboard:
+  - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Ligações agendadas, Leads inativos.
+  - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
+  - [x] **Filtros** (`st.selectbox`): Status (Novo, Em Qualificação, Qualificado, Agendado, Inativo) e Intenção (Compra, Aluguel, Investimento).
   - [ ] **Tabela de leads ordenável por score** (`st.dataframe`):
+    > A lista é ordenada por score decrescente e traz o indicador visual, mas em `st.expander`, não em `st.dataframe` — o expander comporta a conversa e o perfil narrativo, que não cabem numa célula. Os botões de ação por linha não existem.
     - Ordenação padrão: score decrescente (quem ligar primeiro no topo).
     - Colunas: Nome, Status, Intenção, Região/Bairro, Score (com indicador visual 🔴🟠🟡⚪).
     - Botão 📞 na coluna de ação para leads qualificados.
-  - [ ] **Expander por lead** (`st.expander`):
+  - [x] **Expander por lead** (`st.expander`):
     - Perfil narrativo completo (artefato principal).
     - Reuniões/ligações agendadas com datas e imóveis.
     - Resumo executivo com score e próximos passos.
     - Botões: [📞 Agendar Ligação] e [🔄 Disparar Follow-up].
 
 ### Fase 7: Observabilidade, Testes e Refino
-- [ ] Instrumentar logs do agente e tools.
-- [ ] Criar testes unitários para busca, score e follow-up.
-- [ ] Criar testes das tools principais.
-- [ ] Validar os 3 cenários obrigatórios ponta a ponta.
+- [x] Instrumentar logs do agente e tools.
+- [x] Criar testes unitários para busca, score e follow-up.
+- [x] Criar testes das tools principais.
+- [x] Validar os 3 cenários obrigatórios ponta a ponta.
 - [ ] Testar fluxo completo: Telegram → agente → banco → dashboard (sincronização entre processos).
+  > Depende de um bot real; nunca foi executado.
 
 > Critérios de qualidade, cenários mensuráveis e estratégia de testes: [02-qualidade-e-criterios.md](./02-qualidade-e-criterios.md) e [01-estrategia-de-testes.md](../05-engenharia/01-estrategia-de-testes.md)
 
 ### Fase 8: Documentação e Entrega
-- [ ] Elaborar `README.md` com visão do problema, arquitetura, stack e instruções de execução.
-- [ ] Documentar limitações da POC e próximos passos.
+- [x] Elaborar `README.md` com visão do problema, arquitetura, stack e instruções de execução.
+- [x] Documentar limitações da POC e próximos passos.
 - [ ] Preparar roteiro do pitch técnico e da demonstração em vídeo.
 - [ ] Preparar QR code do bot Telegram para demonstração ao vivo.
 
