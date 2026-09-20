@@ -83,9 +83,9 @@ class CatalogService:
                 elif intencao == "aluguel":
                     query = query.filter(Imovel.operacao == "aluguel")
 
-            # Residencial x comercial e filtro estruturado, nao busca textual:
-            # procurar "comercial" no texto trazia apartamento com a palavra na
-            # descricao e deixava de fora sala que nao a usava.
+            # Residencial x comercial e filtro estruturado, nao busca
+            # textual: procurar "comercial" no texto traz apartamento com a
+            # palavra na descricao e perde sala que nao a usa.
             if finalidade in ("residencial", "comercial"):
                 query = query.filter(Imovel.finalidade == finalidade)
 

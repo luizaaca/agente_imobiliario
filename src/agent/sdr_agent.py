@@ -48,9 +48,9 @@ sdr_agent = Agent(
 # Register tools using @sdr_agent.tool decorator
 # Each tool receives RunContext[SDRDependencies] as first arg
 
-# Vai no fim do retorno da busca, e nao so no system prompt, porque o resultado
-# da tool e o texto mais recente antes da geracao — e e justamente ali que o
-# modelo recaia em listar opcoes de proximo passo em vez de escolher uma.
+# Vai no fim do retorno da busca, e nao so no system prompt: o resultado da
+# tool e o texto mais recente antes da geracao, e e ali que a instrucao
+# segura o modelo de listar opcoes de proximo passo em vez de escolher uma.
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
     "Ao responder: no máximo três destes imóveis, uma linha de porquê para "
@@ -324,9 +324,9 @@ LACUNAS = (
 def montar_contexto_do_lead(lead) -> str:
     """Resume o que já se sabe do lead para dentro do system prompt.
 
-    Lista só o que existe. A versão anterior despejava todos os campos com
-    "Não informado" ao lado, o que entregava ao modelo um formulário em branco
-    para preencher — e era exatamente assim que ele conduzia a conversa.
+    Lista só o que existe. Enumerar todos os campos, com "Não informado" ao
+    lado dos vazios, entrega ao modelo um formulário em branco — e é assim que
+    ele passa a conduzir a conversa, pedindo campo por campo.
     """
     if lead is None:
         return "Primeira mensagem desta pessoa. Você ainda não sabe nada sobre ela."

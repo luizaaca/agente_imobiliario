@@ -148,9 +148,9 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 AUTH_COOKIE_KEY=a1b2c3d4e5f6...
 ```
 
-### Ausência da chave: comportamento implementado
+### Ausência da chave
 
-`AUTH_COOKIE_KEY` **não tem valor padrão**. Um default fixo no código seria público — está no repositório — e quem o conhece consegue forjar um cookie de sessão e entrar como administrador sem passar pelo login. Era exatamente o caso do antigo `dev_fallback_key`.
+`AUTH_COOKIE_KEY` **não tem valor padrão**: um default fixo no código seria público e permitiria forjar um cookie de sessão e entrar como administrador sem passar pelo login.
 
 Quando a variável não vem do ambiente, `src/config.py` (`_resolver_chave_do_cookie`) sorteia uma chave com `secrets.token_urlsafe(48)` na inicialização do processo e sinaliza isso em `settings.AUTH_COOKIE_KEY_GERADA`. O aviso sai por dois canais:
 

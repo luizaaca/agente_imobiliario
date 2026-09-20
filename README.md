@@ -182,7 +182,7 @@ Quando a mesma variável vem de mais de uma origem, **a do ambiente vence a do `
 
 Faltando qualquer uma delas, a aplicação **sobe do mesmo jeito**: o dashboard e o catálogo funcionam, e a aba do chat mostra quais variáveis estão ausentes e desativa o campo de mensagem. Não há falha silenciosa nem `compose up` abortado.
 
-> **Por que os nomes são genéricos.** A POC fala com todo provider pela API OpenAI-compatible ([ADR 0006](./docs/06-decisoes/adr/0006-provider-openai-compatible-configuravel.md)), mas chamar a credencial de `OPENAI_API_KEY` sugeria que ela só servia para a OpenAI — e ficava incoerente em `LLM_PROVIDER=gemini` com `OPENAI_API_KEY` preenchida. A credencial é *do provider que você escolher*.
+> Todas as variáveis usam o prefixo `LLM_` porque a POC fala com todo provider pela API OpenAI-compatible ([ADR 0006](./docs/06-decisoes/adr/0006-provider-openai-compatible-configuravel.md)). A credencial é *do provider que você escolher* em `LLM_PROVIDER`, não da OpenAI.
 
 ### O que `LLM_PROVIDER` faz — e o que não faz
 
@@ -198,13 +198,13 @@ Ele **não chega ao SDK**. Só `LLM_API_KEY` e a base URL resolvida chegam. O qu
 
 **`LLM_BASE_URL`, quando preenchida, vence sempre.** É por isso que um endpoint Azure funciona com qualquer valor de `LLM_PROVIDER`: o destino vem da base URL, não do nome do provider.
 
-**Para Azure AI Foundry, vLLM, LM Studio, OpenRouter e afins, use `custom`.** Não por causa do comportamento de hoje, que é idêntico, mas do dia em que a `LLM_BASE_URL` faltar:
+**Para Azure AI Foundry, vLLM, LM Studio, OpenRouter e afins, use `custom`.** O comportamento com a `LLM_BASE_URL` preenchida é idêntico ao de `openai`; a diferença aparece quando ela falta:
 
 | Com `LLM_PROVIDER=openai` | Com `LLM_PROVIDER=custom` |
 |---|---|
 | A aplicação sobe e manda sua chave do Azure para `api.openai.com` | Falha dizendo que `LLM_BASE_URL` está ausente |
 
-A base URL do `openai` é passada explicitamente ao SDK, e não deixada em branco, porque o SDK da OpenAI lê a variável `OPENAI_BASE_URL` do ambiente por conta própria quando não recebe `base_url` — uma variável solta redirecionaria as chamadas sem nada no código indicar isso.
+A base URL do `openai` é passada explicitamente ao SDK, e não deixada em branco: o SDK da OpenAI lê a variável `OPENAI_BASE_URL` do ambiente por conta própria quando não recebe `base_url`, e uma variável solta redirecionaria as chamadas sem nada no código indicar isso.
 
 ### Autenticação
 

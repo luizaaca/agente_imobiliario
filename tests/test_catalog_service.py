@@ -110,9 +110,8 @@ def test_get_by_id_inexistente(catalog, catalogo, db):
 
 # --- Busca textual (Full-Text Search) ----------------------------------------
 #
-# Ate a Fase 6 `search_vector` era uma coluna Text nunca preenchida e a busca
-# caia em ILIKE ordenado por preco. Agora e coluna gerada pelo PostgreSQL com
-# indice GIN, e a camada textual filtra por OU e ordena por ts_rank.
+# `search_vector` e coluna gerada pelo PostgreSQL com indice GIN. A camada
+# textual filtra por OU e ordena por ts_rank.
 
 
 def test_coluna_gerada_e_preenchida_pelo_banco(db):
@@ -163,8 +162,9 @@ def test_busca_textual_respeita_os_filtros_estruturados(catalog, catalogo, db):
 
 # --- Busca que se afrouxa sozinha --------------------------------------------
 #
-# Sem isso o agente devolvia o problema para o lead ("me diga uma faixa de
-# orcamento") ou, pior, afirmava ter ampliado a busca sem ter ampliado.
+# O alargamento acontece na tool, e nao no modelo: sem isso o agente devolve o
+# problema para o lead ("me diga uma faixa de orcamento") ou afirma ter
+# ampliado a busca sem ter ampliado.
 
 
 def test_busca_exata_nao_relaxa_nada(catalog, catalogo, db):

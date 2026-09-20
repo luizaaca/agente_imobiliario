@@ -256,10 +256,10 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ## 11. Fases de Execução
 
-> **Estado em 20/09/2026.** Os itens marcados foram verificados no código e
-> em execução. Os desmarcados continuam desmarcados de propósito, com a
-> razão logo abaixo quando ela não for óbvia. O `README.md` traz a mesma
-> lista de limitações do ponto de vista de quem vai rodar o projeto.
+> Os itens marcados foram verificados no código e em execução. Os
+> desmarcados não estão implementados, com a razão logo abaixo quando não
+> for óbvia. O `README.md` traz a mesma lista de limitações do ponto de
+> vista de quem vai rodar o projeto.
 
 ### Fase 1: Fundamentos de Dados, Infraestrutura e Catálogo
 - [x] Configurar Docker Compose com PostgreSQL + serviços da aplicação (ver [01-infraestrutura-e-deploy.md](../03-operacao/01-infraestrutura-e-deploy.md)).
@@ -313,7 +313,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   - **Pós-agendamento** (<24h antes): confirmação/lembrete de visita ou ligação.
 - [x] Registrar cada follow-up no histórico do lead.
 - [ ] Manter botão "Disparar Follow-up" no dashboard para ação manual sob demanda (mesma lógica, gatilho diferente).
-  > O botão foi removido por não fazer nada. O disparo manual existe como `python -m scripts.run_followup_once`.
+  > O disparo manual existe como `python -m scripts.run_followup_once`, fora da tela.
 
 ### Fase 5: Canal Telegram
 - [ ] Criar bot via @BotFather e configurar `TELEGRAM_BOT_TOKEN` no `.env`.
@@ -339,7 +339,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   - [x] **Busca livre** (`st.text_input`): filtra por nome, bairro, intenção ou conteúdo do perfil narrativo.
   - [x] **Filtros** (`st.selectbox`): Status (Novo, Em Qualificação, Qualificado, Agendado, Inativo) e Intenção (Compra, Aluguel, Investimento).
   - [ ] **Tabela de leads ordenável por score** (`st.dataframe`):
-    > A lista é ordenada por score decrescente e traz o indicador visual, mas em `st.expander`, não em `st.dataframe` — o expander comporta a conversa e o perfil narrativo, que não cabem numa célula. Os botões de ação por linha não existem.
+    > A lista é ordenada por score decrescente e traz o indicador visual, em `st.expander` e não em `st.dataframe`: o expander comporta a conversa e o perfil narrativo, que não cabem numa célula. Não há botões de ação por linha.
     - Ordenação padrão: score decrescente (quem ligar primeiro no topo).
     - Colunas: Nome, Status, Intenção, Região/Bairro, Score (com indicador visual 🔴🟠🟡⚪).
     - Botão 📞 na coluna de ação para leads qualificados.

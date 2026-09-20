@@ -284,9 +284,9 @@ LLM_MONTHLY_TOKEN_BUDGET=3000000
 
 ## 8.1 Configuração ausente
 
-`LLM_MODEL` e `LLM_API_KEY` não têm valor padrão, e `LLM_BASE_URL` é obrigatória no provider `custom`. A checagem vive em um lugar só, `provider.configuracao_ausente()`, usada tanto pela UI quanto por `_construir_modelo` — duas listas separadas divergiriam com o tempo.
+`LLM_MODEL` e `LLM_API_KEY` não têm valor padrão, e `LLM_BASE_URL` é obrigatória no provider `custom`. A checagem vive em um lugar só, `provider.configuracao_ausente()`, usada tanto pela UI quanto por `_construir_modelo`, para que as duas não divirjam.
 
-Faltando qualquer uma delas, a aplicação sobe normalmente: dashboard e catálogo funcionam, e a aba do chat nomeia as variáveis ausentes e **desabilita o campo de mensagem**. Deixá-lo ativo levaria o usuário a escrever e receber apenas "atendimento indisponível", sem entender a causa.
+Faltando qualquer uma delas, a aplicação sobe normalmente: dashboard e catálogo funcionam, e a aba do chat nomeia as variáveis ausentes e **desabilita o campo de mensagem**, em vez de deixar o usuário escrever para receber apenas "atendimento indisponível".
 
 A mensagem na tela cita só os nomes das variáveis, nunca `.env` ou `docker compose`: a forma de defini-las depende de onde a aplicação está rodando — arquivo, shell ou secrets de pipeline — e o "como" está centralizado na seção **Configuração** do README.
 
@@ -297,10 +297,10 @@ A mensagem na tela cita só os nomes das variáveis, nunca `.env` ou `docker com
 - [x] Criar modelo `LLMUsage` em `src/db/models.py`.
 - [x] Criar `src/services/llm_usage_service.py` com as funções de tracking e verificação.
 - [x] Definir tabela de preços por modelo em `src/config.py`.
-  > Ficou em `LLMUsageService.PRICING`, junto de quem a usa, e não em `src/config.py`.
+  > Fica em `LLMUsageService.PRICING`, junto de quem a usa.
 - [x] Integrar checagem de limites no loop do agente (antes de chamar LLM).
 - [x] Integrar `record()` após cada chamada ao agente (usando `result.usage`).
-  > Em pydantic-ai 2.x `usage` é property, não método: `result.usage()` levanta `TypeError`.
+  > Em pydantic-ai 2.x `usage` é property, não método.
 - [x] Aplicar mesma lógica no scheduler de follow-up.
 - [x] Adicionar variáveis de ambiente ao `.env.example`.
 - [x] Adicionar card de consumo no dashboard Streamlit.

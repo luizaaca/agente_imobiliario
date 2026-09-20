@@ -344,10 +344,9 @@ logfire
 - [x] Criar `docker-compose.yml`.
 - [x] Criar `.env.example` com todas as variáveis documentadas.
 - [x] Testar `docker-compose up --build` localmente.
-  > A imagem constrói e o container sobe, conecta no PostgreSQL da rede do
-  > Compose e serve a tela de login. Exigiu criar o `.dockerignore`: sem ele
-  > o contexto levava `.venv` e `.git`, e o build nem começava porque o
-  > Docker não consegue ler o `.pytest_cache` deste repositório.
+  > A imagem constrói, o container sobe, conecta no PostgreSQL da rede do
+  > Compose e serve a tela de login. O `.dockerignore` mantém `.venv`,
+  > `.git` e os caches fora do contexto de build.
 - [x] Configurar Alembic para migrations (opcional mas recomendado).
 - [ ] Testar com banco PostgreSQL remoto (Neon ou Supabase free tier).
-  > Não feito. O desenvolvimento rodou contra o PostgreSQL do Compose.
+  > O desenvolvimento roda contra o PostgreSQL do Compose.

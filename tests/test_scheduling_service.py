@@ -75,8 +75,8 @@ def test_conta_pendentes(scheduling, lead_id, amanha, db):
 
 # --- Vinculo com o imovel ----------------------------------------------------
 #
-# Ate a Fase 6 a tool `agendar_reuniao` recebia `imovel_id` do modelo e o
-# descartava em silencio: a coluna nao existia.
+# A tool `agendar_reuniao` recebe `imovel_id` do modelo e o persiste; sem a
+# coluna o dado seria descartado em silencio.
 
 
 def test_agendamento_guarda_o_imovel(scheduling, lead_id, amanha, catalogo, db):

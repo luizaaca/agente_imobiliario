@@ -84,8 +84,8 @@ def _opcoes_de_conversa(lead_aberto: int | None) -> list[tuple[int | None, str]]
     """(lead_id, rotulo) de cada conversa, da mais recente para a mais antiga.
 
     A lista vem de `list_conversations`, que nao filtra por canal nem por
-    usuario: antes o seletor so enxergava as conversas iniciadas por este
-    usuario no Streamlit e aparecia visivelmente incompleto.
+    usuario: o seletor precisa alcancar qualquer conversa, inclusive as que
+    vieram do Telegram ou de outro corretor.
     """
     with get_db() as db:
         servico = LeadService()
@@ -136,8 +136,8 @@ def _painel_da_conversa() -> None:
         # A chave carrega o lead aberto de proposito. Um selectbox mantem o
         # valor escolhido enquanto a chave nao muda — inclusive sem `key`
         # explicita, que o Streamlit gera internamente — e esse valor vence o
-        # `index`. Com chave fixa, abrir uma conversa pelo painel virava um
-        # widget desatualizado que devolvia o lead anterior no rerun seguinte.
+        # `index`. Com chave fixa, abrir uma conversa pelo painel devolveria o
+        # lead anterior no rerun seguinte.
         escolhido = st.selectbox(
             "Conversa",
             ids,

@@ -1,9 +1,9 @@
 """Contexto do lead injetado no system prompt.
 
-A versao anterior listava todos os campos com "Nao informado" ao lado, o que
-entregava ao modelo um formulario em branco — e ele conduzia a conversa
-exatamente assim, pedindo os campos em sequencia. Estes testes fixam o que
-entra e, principalmente, o que nao entra.
+Listar todos os campos, com "Nao informado" ao lado dos vazios, entrega ao
+modelo um formulario em branco — e ele passa a conduzir a conversa assim,
+pedindo os campos em sequencia. Estes testes fixam o que entra no contexto e,
+principalmente, o que nao entra.
 """
 
 from decimal import Decimal
