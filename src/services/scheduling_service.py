@@ -81,9 +81,36 @@ class SchedulingService:
         db: Session = None,
         imovel_id: Optional[int] = None,
     ) -> Agendamento:
-        """Cria um novo agendamento e atualiza o status do lead."""
+        """Cria um agendamento, ou devolve o que ja existe igual a este.
+
+        Idempotente de proposito. Sem isso, pedir duas vezes o mesmo
+        compromisso — o que o agente faz quando nao tem a ferramenta certa a
+        mao, e o que um duplo clique faz na tela — cria duas linhas para a
+        mesma visita, e o painel passa a contar dois compromissos onde ha um.
+
+        "Igual" e mesmo lead, mesma data e hora, mesmo imovel e ainda de pe.
+        Um compromisso cancelado nao impede remarcar para o mesmo horario.
+        """
         if tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"Tipo de agendamento inválido: {tipo}")
+
+        ja_existe = (
+            db.query(Agendamento)
+            .filter(
+                Agendamento.lead_id == lead_id,
+                Agendamento.data_hora == data_hora,
+                Agendamento.imovel_id == imovel_id,
+                Agendamento.status.in_(self.STATUS_ATIVOS),
+            )
+            .first()
+        )
+        if ja_existe is not None:
+            logger.info(
+                "event=agendamento_ja_existia lead_id=%s agendamento_id=%s "
+                "data_hora=%s imovel_id=%s acao=reaproveitado",
+                lead_id, ja_existe.id, data_hora, imovel_id,
+            )
+            return ja_existe
 
         agendamento = Agendamento(
             lead_id=lead_id,

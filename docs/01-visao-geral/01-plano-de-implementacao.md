@@ -282,6 +282,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   - [x] `atualizar_perfil_lead` — atualização incremental do perfil narrativo
   - [x] `agendar_reuniao`
   - [x] `gerar_resumo_corretor`
+  - [x] `confirmar_agendamento` e `cancelar_agendamento` — o lead confirma ou desmarca pela conversa
 - [x] Injetar `perfil_narrativo` atual como contexto do agente a cada turno.
 - [x] Persistir histórico e estado relevante do lead.
 

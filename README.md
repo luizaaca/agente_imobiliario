@@ -4,7 +4,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 209 testes automatizados. O canal Telegram está implementado mas **nunca foi exercitado com um bot real** — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 250 testes automatizados. O canal Telegram está implementado mas **nunca foi exercitado com um bot real** — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -19,6 +19,7 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Score do lead em 5 dimensões e avanço no funil | funcionando |
 | Perfil narrativo incremental | funcionando |
 | Agendamento de visita/reunião, com vínculo ao imóvel | funcionando |
+| Confirmar ou desmarcar a visita pela conversa | funcionando |
 | Resumo executivo para o corretor | funcionando |
 | Follow-up automático com 4 réguas e limite de tentativas | funcionando; envio ativo só no Telegram |
 | Dashboard: KPIs, distribuição da carteira, tabela ordenável, custo de LLM | funcionando |
@@ -294,7 +295,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 pytest
 ```
 
-209 testes, ~15 segundos. Cobrem services, contrato das cinco tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+250 testes, ~17 segundos. Cobrem services, contrato das sete tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -353,7 +354,7 @@ agente_imobiliario/
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 209 testes
+├── tests/                  # 250 testes
 └── docs/                   # especificação funcional e técnica
 ```
 

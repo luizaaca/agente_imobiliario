@@ -149,12 +149,55 @@ Criação de registro de agendamento e possível atualização do status do lead
 ### Regras
 - não criar agendamento sem dados mínimos;
 - validar formato de data/hora;
-- registrar observações relevantes para o corretor.
+- registrar observações relevantes para o corretor;
+- **idempotente**: mesmo lead, mesma data e hora, mesmo imóvel e ainda de pé
+  devolve o compromisso existente em vez de criar outro. Sem isso, pedir duas
+  vezes a mesma visita — o que acontece quando o modelo não acha a ferramenta
+  certa, e quando alguém clica duas vezes na tela — põe dois compromissos na
+  agenda do corretor para o mesmo horário.
 
 ### Erros tratáveis
 - lead inexistente;
 - data inválida;
 - falha de persistência.
+
+---
+
+## 5.1 `confirmar_agendamento` e `cancelar_agendamento`
+
+### Objetivo
+Mover um compromisso existente para `confirmado` ou `cancelado`, a partir do
+que a pessoa disse na conversa.
+
+### Input esperado
+- `agendamento_id` — de um compromisso listado no contexto do lead
+- `motivo` (só no cancelamento) — o que a pessoa deu como razão, até 120 caracteres
+
+### Output esperado
+- confirmação do novo estado, com tipo e data do compromisso;
+- recusa explicativa quando o id não existe, não é deste lead, ou o
+  compromisso já está no estado pedido.
+
+### Efeitos colaterais
+Mudança de status do agendamento. O cancelamento grava também uma mensagem
+`system_notice` com o motivo, para o corretor ver por que a visita caiu.
+Sendo o último compromisso de pé, o lead sai de `agendado`.
+
+### Regras
+- só agir sobre decisão explícita: hesitação (*"acho que consigo"*, *"vou
+  ver"*) não confirma nem cancela;
+- nunca usar `agendar_reuniao` para confirmar — isso cria um segundo
+  compromisso em vez de mudar o primeiro;
+- remarcar é cancelar o antigo e marcar o novo.
+
+### Erros tratáveis
+- `agendamento_id` inexistente ou de outro lead;
+- compromisso já cancelado ou realizado.
+
+### Por que o id vem do contexto
+O system prompt lista os compromissos de pé com seus ids. Sem essa lista o
+modelo não tem de onde tirar o argumento, e o que ele faz é inventar um número
+ou chamar `agendar_reuniao` de novo.
 
 ---
 

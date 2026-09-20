@@ -311,6 +311,102 @@ async def agendar_reuniao(
         )
 
 
+def _compromisso_do_lead(ctx, agendamento_id: int, db):
+    """Busca o agendamento garantindo que ele e deste lead.
+
+    Sem a checagem de dono, um id vindo do modelo poderia alcancar o
+    compromisso de outra pessoa — o mesmo cuidado que `agendar_reuniao` toma
+    com `imovel_id`. O erro volta como texto para o modelo se corrigir.
+    """
+    agendamento = ctx.deps.scheduling_service.get(agendamento_id, db)
+    if agendamento is None or agendamento.lead_id != ctx.deps.lead_id:
+        logger.warning(
+            "event=agendamento_inexistente_para_o_lead lead_id=%s "
+            "agendamento_id=%s",
+            ctx.deps.lead_id, agendamento_id,
+        )
+        return None
+    return agendamento
+
+
+@sdr_agent.tool
+@_instrumentada
+async def confirmar_agendamento(
+    ctx: RunContext[SDRDependencies],
+    agendamento_id: Annotated[int, Field(description=(
+        "ID de um compromisso listado no contexto do lead. Não invente e não "
+        "use IDs de imóvel."))],
+) -> str:
+    """Marcar como confirmado um compromisso que a pessoa disse que vai cumprir.
+
+    Só quando ela confirmar de forma clara. Diante de hesitação ou de resposta
+    vaga, não chame esta ferramenta: pergunte.
+    """
+    with get_db() as db:
+        agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
+        if agendamento is None:
+            return (
+                f"Não há compromisso {agendamento_id} para esta pessoa. Use um "
+                f"dos IDs listados no contexto."
+            )
+        if agendamento.status == "confirmado":
+            return f"O compromisso {agendamento_id} já estava confirmado."
+        if agendamento.status not in SchedulingService.STATUS_ATIVOS:
+            return (
+                f"O compromisso {agendamento_id} está {agendamento.status} e "
+                f"não pode ser confirmado. Marque um novo se for o caso."
+            )
+
+        atual = ctx.deps.scheduling_service.update_status(
+            agendamento_id, "confirmado", db
+        )
+        return (
+            f"Compromisso {agendamento_id} confirmado: {atual.tipo} em "
+            f"{atual.data_hora:%d/%m/%Y às %H:%M}."
+        )
+
+
+@sdr_agent.tool
+@_instrumentada
+async def cancelar_agendamento(
+    ctx: RunContext[SDRDependencies],
+    agendamento_id: Annotated[int, Field(description=(
+        "ID de um compromisso listado no contexto do lead."))],
+    motivo: Annotated[str, Field(max_length=120, description=(
+        "O que a pessoa disse, em poucas palavras. Ex.: viajou na data."))],
+) -> str:
+    """Cancelar um compromisso que a pessoa disse que não vai cumprir.
+
+    Só com uma decisão explícita dela. "Acho que não consigo" ou "vou ver" não
+    é cancelamento — é dúvida, e o caminho é perguntar ou oferecer remarcar.
+    Cancelar tira um compromisso da agenda do corretor.
+    """
+    with get_db() as db:
+        agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
+        if agendamento is None:
+            return (
+                f"Não há compromisso {agendamento_id} para esta pessoa. Use um "
+                f"dos IDs listados no contexto."
+            )
+        if agendamento.status == "cancelado":
+            return f"O compromisso {agendamento_id} já estava cancelado."
+
+        tipo, quando = agendamento.tipo, agendamento.data_hora
+        ctx.deps.scheduling_service.update_status(agendamento_id, "cancelado", db)
+        ctx.deps.lead_service.save_message(
+            lead_id=ctx.deps.lead_id,
+            channel=ctx.deps.channel,
+            role="system",
+            content=f"Cancelamento pedido pelo lead: {motivo}",
+            message_type="system_notice",
+            db=db,
+        )
+        return (
+            f"Compromisso {agendamento_id} cancelado: {tipo} em "
+            f"{quando:%d/%m/%Y às %H:%M}. O corretor verá o motivo registrado."
+        )
+
+
 @sdr_agent.tool
 @_instrumentada
 async def gerar_resumo_corretor(
@@ -439,7 +535,36 @@ def montar_contexto_do_lead(lead) -> str:
         )
 
     partes.append(f"Estágio no funil: {lead.status}.")
+
+    compromissos = _compromissos_do_lead(lead)
+    if compromissos:
+        partes.append(compromissos)
+
     return "\n\n".join(partes)
+
+
+def _compromissos_do_lead(lead) -> str:
+    """Agendamentos de pe do lead, com id, em texto para o system prompt.
+
+    Sem esta lista o modelo nao tem de onde tirar o `agendamento_id` de
+    `confirmar_agendamento` e `cancelar_agendamento` — e, sem ferramenta nem
+    id, o que ele faz e chamar `agendar_reuniao` de novo, criando compromisso
+    duplicado e anunciando uma confirmacao que nunca houve.
+    """
+    with get_db() as db:
+        itens = [
+            (a.id, a.tipo, a.data_hora, a.status)
+            for a in SchedulingService().list_by_lead(lead.id, db)
+            if a.status in SchedulingService.STATUS_ATIVOS
+        ]
+    if not itens:
+        return ""
+
+    linhas = [
+        f"- ID {id_}: {tipo} em {quando:%d/%m/%Y às %H:%M} ({status})"
+        for id_, tipo, quando, status in itens
+    ]
+    return "Compromissos marcados:\n" + "\n".join(linhas)
 
 
 # Dynamic system prompt

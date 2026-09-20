@@ -182,7 +182,7 @@ Ele volta ao funil sozinho se responder.
     (
         "Como um agendamento muda de status?",
         """
-Pela ficha do lead, na aba **Agendamentos** — não há nada automático.
+Pela ficha do lead, na aba **Agendamentos**, ou pela própria conversa.
 
 | Status | O que significa |
 |---|---|
@@ -192,9 +192,18 @@ Pela ficha do lead, na aba **Agendamentos** — não há nada automático.
 | `cancelado` | não vai acontecer, mas o registro fica |
 
 Quem cria é o agente, pela tool `agendar_reuniao` durante a conversa, ou você,
-pelo botão **Novo agendamento**. Nos dois casos nasce `pendente`. Daí em
-diante quem move é você, escolhendo o status no formulário de edição: o
-sistema não sabe se o lead confirmou nem se a visita aconteceu.
+pelo botão **Novo agendamento**. Nos dois casos nasce `pendente`.
+
+Daí em diante:
+
+- **o lead confirma ou desmarca falando com o agente** — ele move para
+  `confirmado` ou `cancelado`, e no cancelamento grava o motivo na conversa
+  para você ver;
+- **`realizado` é sempre seu**, pelo formulário de edição: o sistema não tem
+  como saber se a visita aconteceu.
+
+O agente só age sobre decisão explícita. *"Acho que consigo"* ou *"vou ver"*
+não confirmam nem cancelam nada — ele pergunta.
 
 `confirmado` mantém o lead em `agendado`. `cancelado` e `realizado` não:
 sendo o último compromisso de pé, o lead volta para o estágio que os dados
