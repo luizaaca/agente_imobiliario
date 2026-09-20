@@ -151,9 +151,13 @@ def _kpis(db) -> None:
     leads_inativos = (
         db.query(func.count(Lead.id)).filter(Lead.status == "inativo").scalar() or 0
     )
-    # So as tentativas que sairam de fato: uma mensagem gerada sem canal ativo
-    # aparece no painel, mas nao foi disparada para ninguem.
-    followups = (
+    # Toda tentativa que produziu mensagem, e nao so as despachadas. Contando
+    # apenas `sent`, quem dispara follow-up pela tela via zero para sempre: a
+    # UI nao tem canal de saida, entao a mensagem nasce `generated` e so o
+    # processo do Telegram a faria virar `sent`. O numero dizia "nao aconteceu
+    # nada" sobre um trabalho que aconteceu.
+    followups = db.query(func.count(FollowUpAttempt.id)).scalar() or 0
+    followups_enviados = (
         db.query(func.count(FollowUpAttempt.id))
         .filter(FollowUpAttempt.status == "sent")
         .scalar() or 0
@@ -170,14 +174,20 @@ def _kpis(db) -> None:
         border=True,
     )
     col3.metric("Agendamentos", agendamentos, icon=":material/event:", border=True)
-    # Rotulo curto: "Follow-ups enviados" nao cabe em um quinto da largura e o
-    # Streamlit o corta no meio da palavra. O que ele conta fica no `help`.
+    # Rotulo curto: "Follow-ups disparados" nao cabe em um quinto da largura e
+    # o Streamlit o corta no meio da palavra. A distincao fica no `help`.
     col4.metric(
         "Follow-ups",
         followups,
         icon=":material/send:",
         border=True,
-        help="Tentativas efetivamente despachadas por um canal com envio ativo.",
+        help=(
+            "Mensagens de follow-up geradas, pelo robô ou pela tela. Destas, "
+            f"**{followups_enviados}** saíram por um canal com envio ativo — "
+            "as demais ficam registradas na conversa do lead, visíveis para "
+            "o corretor. Só o Telegram despacha, e só com o processo do bot "
+            "no ar."
+        ),
     )
     col5.metric("Inativos", leads_inativos, icon=":material/bedtime:", border=True)
 

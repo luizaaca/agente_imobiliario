@@ -180,6 +180,47 @@ Ele volta ao funil sozinho se responder.
 """,
     ),
     (
+        "Como um agendamento muda de status?",
+        """
+Pela ficha do lead, na aba **Agendamentos** — não há nada automático.
+
+| Status | O que significa |
+|---|---|
+| `pendente` | recém-criado; é assim que todo agendamento nasce |
+| `confirmado` | o lead confirmou que vai |
+| `realizado` | a visita ou reunião aconteceu |
+| `cancelado` | não vai acontecer, mas o registro fica |
+
+Quem cria é o agente, pela tool `agendar_reuniao` durante a conversa, ou você,
+pelo botão **Novo agendamento**. Nos dois casos nasce `pendente`. Daí em
+diante quem move é você, escolhendo o status no formulário de edição: o
+sistema não sabe se o lead confirmou nem se a visita aconteceu.
+
+`confirmado` mantém o lead em `agendado`. `cancelado` e `realizado` não:
+sendo o último compromisso de pé, o lead volta para o estágio que os dados
+dele indicam.
+""",
+    ),
+    (
+        "Quando um lead vira *inativo*?",
+        """
+Quando ele **para de responder** e o follow-up esgota as tentativas de uma
+régua de silêncio.
+
+São três as réguas de silêncio — lead novo sem resposta, qualificação
+interrompida e pós-envio de imóveis. Esgotadas as tentativas de qualquer uma
+delas (3, 3 e 2 respectivamente), o lead sai do funil ativo.
+
+A régua de **pós-agendamento** não inativa ninguém: ela é um lembrete de visita,
+não um resgate de quem sumiu.
+
+**A volta é automática:** basta o lead responder qualquer mensagem que ele
+retorna para `em_qualificacao`. Nada mais tira um lead de `inativo` — nem o
+disparo manual de follow-up, que aliás não funciona para ele, porque `inativo`
+é o único estágio sem régua.
+""",
+    ),
+    (
         "Disparei o follow-up e a mensagem não chegou no lead.",
         """
 A mensagem foi **gerada e registrada** na conversa, mas não despachada. Duas
