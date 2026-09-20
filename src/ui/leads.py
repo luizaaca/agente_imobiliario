@@ -26,6 +26,7 @@ from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
 from src.ui.tabela import (
+    AJUDA_DA_BUSCA,
     PLACEHOLDER_DA_BUSCA,
     Acao,
     Coluna,
@@ -33,7 +34,9 @@ from src.ui.tabela import (
     filtro_de_busca,
     rotulo_do_lead,
     seletor_de_ordem,
+    selo_de_score,
     tabela_de_leads,
+    temperatura,
     texto,
 )
 from src.ui.texto import markdown_seguro
@@ -85,7 +88,6 @@ COR_DO_STATUS = {
     "agendado": "green",
     "inativo": "gray",
 }
-FAIXAS_DE_SCORE = ((7.0, "red", "quente"), (4.0, "orange", "morno"))
 ROTULO_DO_TIPO = {
     "followup": ":material/autorenew: follow-up automático",
     "handover": ":material/handshake: handover ao corretor",
@@ -126,14 +128,6 @@ def faixa_de_orcamento(lead: Lead) -> str:
     return f"{_dinheiro(lead.orcamento_min)} a {_dinheiro(lead.orcamento_max)}"
 
 
-def temperatura(score: float) -> tuple[str, str]:
-    """(cor, palavra) da faixa de score — quente, morno ou frio."""
-    for piso, cor, palavra in FAIXAS_DE_SCORE:
-        if score >= piso:
-            return cor, palavra
-    return "gray", "frio"
-
-
 def selos_do_lead(lead: Lead, score: float) -> str:
     """Status, temperatura, intenção e região como selos coloridos."""
     rotulo_status = lead.status.replace("_", " ")
@@ -158,7 +152,10 @@ def _filtros(db):
     col_busca, col_status, col_intencao, col_ordem = st.columns([3, 2, 2, 3])
     with col_busca:
         busca = st.text_input(
-            "Buscar", placeholder=PLACEHOLDER_DA_BUSCA, type="search"
+            "Buscar",
+            placeholder=PLACEHOLDER_DA_BUSCA,
+            help=AJUDA_DA_BUSCA,
+            type="search",
         )
     with col_status:
         status_filtro = st.selectbox("Status", ["Todos", *STATUS])
@@ -177,15 +174,6 @@ def _filtros(db):
     return aplicar_ordem(query, campo, decrescente).limit(200).all()
 
 
-def _selo_de_score(lead: Lead) -> str:
-    """Score com o selo de temperatura, que traduz o numero em uma palavra."""
-    if lead.score is None:
-        return "—"
-    score = float(lead.score)
-    cor, palavra = temperatura(score)
-    return f"**{score:.1f}** :{cor}-badge[{palavra}]"
-
-
 COLUNAS_DA_LISTA = (
     # O numero do lead ganha coluna propria: e o identificador que existe no
     # banco, o que a busca encontra e o que sobra quando nao ha nome.
@@ -202,7 +190,7 @@ COLUNAS_DA_LISTA = (
     Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
     Coluna("Orçamento", 4, lambda lead: texto(faixa_de_orcamento(lead))),
     Coluna("Telefone", 2, lambda lead: texto(lead.telefone)),
-    Coluna("Score", 2, _selo_de_score),
+    Coluna("Score", 2, selo_de_score),
 )
 
 

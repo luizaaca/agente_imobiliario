@@ -13,13 +13,14 @@ from sqlalchemy import func
 from src.db.models import Agendamento, FollowUpAttempt, Lead
 from src.db.session import get_db
 from src.services.llm_usage_service import LLMUsageService
-from src.ui.leads import COR_DO_STATUS, abrir_ficha, temperatura
+from src.ui.leads import COR_DO_STATUS, abrir_ficha
 from src.ui.papeis import e_admin, papeis_da_sessao
 from src.ui.tabela import (
     Acao,
     Coluna,
     aplicar_ordem,
     seletor_de_ordem,
+    selo_de_score,
     tabela_de_leads,
     texto,
 )
@@ -258,15 +259,6 @@ def _distribuicao(db) -> None:
         )
 
 
-def _selo_de_score(lead: Lead) -> str:
-    """Score com o selo de temperatura, que traduz o numero em uma palavra."""
-    if lead.score is None:
-        return "—"
-    score = float(lead.score)
-    cor, palavra = temperatura(score)
-    return f"**{score:.1f}** :{cor}-badge[{palavra}]"
-
-
 COLUNAS_DA_CARTEIRA = (
     Coluna("#", 1, lambda lead: f"`{lead.id}`"),
     Coluna(
@@ -284,7 +276,7 @@ COLUNAS_DA_CARTEIRA = (
         "Região", 3,
         lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse),
     ),
-    Coluna("Score", 3, _selo_de_score),
+    Coluna("Score", 3, selo_de_score),
 )
 
 ACOES_DA_CARTEIRA = (

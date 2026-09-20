@@ -105,10 +105,44 @@ CAMPOS_DA_BUSCA = (
     Lead.perfil_narrativo,
 )
 
-# O que o campo de busca promete. Fica junto da lista acima para as duas nao
-# se separarem com o tempo — foi assim que `intencao` ficou de fora da busca
-# enquanto o placeholder dizia que estava dentro.
-PLACEHOLDER_DA_BUSCA = "Número, nome, status, intenção, região, telefone, perfil..."
+PLACEHOLDER_DA_BUSCA = "Digite para buscar..."
+
+# A lista de campos vive no tooltip, e nao no placeholder: enumerada dentro do
+# campo ela era longa demais para caber e terminava cortada no meio de uma
+# palavra. Fica junto de `CAMPOS_DA_BUSCA` para as duas nao se separarem com o
+# tempo — foi assim que `intencao` ficou de fora da busca enquanto o texto
+# dizia que estava dentro.
+AJUDA_DA_BUSCA = (
+    "Procura em número, nome, status, intenção, bairro, região, telefone e "
+    "perfil narrativo. O perfil é o único que não aparece na tabela: um lead "
+    "pode casar por ele sem que a linha mostre por quê."
+)
+
+
+def selo_de_score(lead: Lead) -> str:
+    """Score colorido pela temperatura.
+
+    So o numero: `5.5 morno` repetia em palavra o que a cor ja diz, e a linha
+    ja carrega o selo de status ao lado. A palavra continua na ficha do lead,
+    onde ha espaco para ela.
+    """
+    if lead.score is None:
+        return "—"
+    score = float(lead.score)
+    return f":{temperatura(score)[0]}[**{score:.1f}**]"
+
+
+# Faixas de temperatura do lead, da mais quente para a mais fria. O numero
+# sozinho nao diz se 5,5 e bom; a cor diz.
+FAIXAS_DE_SCORE = ((7.0, "red", "quente"), (4.0, "orange", "morno"))
+
+
+def temperatura(score: float) -> tuple[str, str]:
+    """(cor, palavra) da faixa de score — quente, morno ou frio."""
+    for piso, cor, palavra in FAIXAS_DE_SCORE:
+        if score >= piso:
+            return cor, palavra
+    return "gray", "frio"
 
 
 def filtro_de_busca(termo: str):
