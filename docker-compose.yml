@@ -23,7 +23,12 @@ services:
       context: .
       dockerfile: Dockerfile
     command: sh -c "alembic upgrade head && python -m scripts.seed_imoveis"
-    env_file: .env
+    env_file:
+      # required: false para o `up` nao morrer antes de construir nada em um
+      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
+      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:
@@ -38,19 +43,32 @@ services:
     command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
     ports:
       - "8501:8501"
-    env_file: .env
+    env_file:
+      # required: false para o `up` nao morrer antes de construir nada em um
+      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
+      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:
       migrate:
         condition: service_completed_successfully
 
+  # Fora do conjunto padrao de proposito: sem TELEGRAM_BOT_TOKEN o bot sobe so
+  # para falhar. Para levantar: `docker compose --profile telegram up`.
   telegram-bot:
+    profiles: [telegram]
     build:
       context: .
       dockerfile: Dockerfile
     command: python run_telegram.py
-    env_file: .env
+    env_file:
+      # required: false para o `up` nao morrer antes de construir nada em um
+      # clone recem-feito, que por definicao ainda nao tem .env. Sem chave de
+      # LLM a aplicacao sobe e o chat responde que esta indisponivel.
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
     depends_on:

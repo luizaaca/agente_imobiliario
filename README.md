@@ -34,18 +34,58 @@ O **`perfil_narrativo`** é o artefato central: um texto incremental mantido ao 
 ## Como executar
 
 ### Pré-requisitos
-- Python 3.11+ (desenvolvido em 3.13)
-- Docker e Docker Compose, ou um PostgreSQL 16 acessível
-- Uma chave de um provider OpenAI-compatible (OpenAI, Azure AI Foundry, Groq, Gemini, Ollama local)
+- Docker e Docker Compose — é só disso que a Opção 1 precisa
+- Python 3.11+ (desenvolvido em 3.13), apenas para a Opção 2
+- Uma chave de um provider OpenAI-compatible, apenas para o chat responder
 
-### Opção 1 — Docker Compose
+### Opção 1 — Docker Compose (caminho recomendado)
+
+Um comando, a partir do repositório recém-clonado:
 
 ```bash
-cp .env.example .env    # preencha as chaves de LLM
 docker compose up --build
 ```
 
-O serviço `migrate` aplica as migrations e carrega o catálogo antes de subir a aplicação. O Streamlit fica em `http://localhost:8501`.
+Sobem três serviços, nesta ordem: `postgres`, depois `migrate` (que aplica as migrations e **carrega os 300 imóveis do catálogo**, versionado em `data/imoveis_catalogo.csv`) e por fim `app`. A primeira build leva alguns minutos. O Streamlit fica em **http://localhost:8501**.
+
+O canal Telegram fica fora do conjunto padrão de propósito — sem token ele subiria só para falhar. Para incluí-lo:
+
+```bash
+docker compose --profile telegram up --build
+```
+
+#### Credenciais de acesso
+
+Toda a aplicação está atrás de login. O repositório já traz um usuário pronto em `config/credentials.yaml` (só o hash bcrypt, nunca a senha em texto):
+
+| Usuário | Senha |
+|---|---|
+| `admin` | `admin123` |
+
+Para criar outro usuário ou trocar a senha, gere o hash com `python -m scripts.generate_password_hash` e cole no `config/credentials.yaml`.
+
+#### Para o chat responder de verdade
+
+Sem chave de LLM a aplicação sobe normalmente e você pode navegar pelo dashboard e pelo catálogo, mas o chat responde apenas que o atendimento está indisponível. Para conversar com o agente:
+
+```bash
+cp .env.example .env
+```
+
+Preencha `OPENAI_API_KEY` e `LLM_MODEL` (e `OPENAI_BASE_URL`, se não for a OpenAI), depois suba de novo. Qualquer provider OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local.
+
+> O `.env` é opcional para o Compose (`required: false`), mas o `DATABASE_URL` que estiver nele é ignorado dentro dos containers: o Compose aponta para `postgres:5432`, porque `127.0.0.1` dentro do container seria o próprio container.
+
+#### Se algo der errado
+
+| Sintoma | Causa |
+|---|---|
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` | já há um PostgreSQL na 5432. Pare o outro, ou mapeie outra porta em um `docker-compose.override.yml` |
+| `Bind for 0.0.0.0:8501 failed` | já há um Streamlit rodando na 8501 |
+| O chat responde só "atendimento temporariamente indisponível" | falta `OPENAI_API_KEY` no `.env` — ver o passo acima |
+| `checking context: can't stat ... .pytest_cache` | diretório de cache com permissões travadas na cópia local; apague-o e rode de novo |
+
+Para encerrar: `docker compose down`. **Não use `-v`** a menos que queira apagar o banco junto.
 
 ### Opção 2 — Local
 
@@ -83,13 +123,7 @@ streamlit run app.py
 
 > **Use `127.0.0.1`, não `localhost`, na `DATABASE_URL`.** Em Windows `localhost` resolve para `::1` primeiro e a conexão fica pendurada até o timeout, porque o container só escuta em IPv4.
 
-### Login
-
-As credenciais ficam em `config/credentials.yaml`, com hash bcrypt. Para criar ou trocar uma senha:
-
-```bash
-python -m scripts.generate_password_hash
-```
+O login é o mesmo das [credenciais de acesso](#credenciais-de-acesso) acima.
 
 ### Telegram (opcional)
 
