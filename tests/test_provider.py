@@ -146,21 +146,46 @@ def test_ollama_nao_exige_chave(monkeypatch):
     assert provider_mod.exige_chave_de_api() is False
 
 
-def test_ui_avisa_quando_falta_chave(monkeypatch):
-    """Sem esse aviso o usuario so descobre conversando e recebendo 'indisponivel'."""
-    from src.ui import chat as chat_mod
+def test_configuracao_completa_nao_acusa_nada(monkeypatch):
+    assert provider_mod.configuracao_ausente() == []
 
-    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "openai")
+
+def test_acusa_a_chave_ausente(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    assert chat_mod.falta_chave_de_llm() is True
-
-    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-existe")
-    assert chat_mod.falta_chave_de_llm() is False
+    assert provider_mod.configuracao_ausente() == ["OPENAI_API_KEY"]
 
 
-def test_ui_nao_avisa_no_ollama_sem_chave(monkeypatch):
-    from src.ui import chat as chat_mod
+def test_acusa_varias_de_uma_vez(monkeypatch):
+    """A tela precisa listar tudo o que falta, nao so o primeiro problema."""
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "custom")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "")
+    monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "")
 
+    assert provider_mod.configuracao_ausente() == [
+        "OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL",
+    ]
+
+
+def test_provider_desconhecido_acusa_so_o_provider(monkeypatch):
+    """Sem saber qual e o provider, nao da para dizer o que mais ele exige."""
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "inventado")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    assert provider_mod.configuracao_ausente() == ["LLM_PROVIDER"]
+
+
+def test_ollama_sem_chave_esta_completo(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "ollama")
     monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
-    assert chat_mod.falta_chave_de_llm() is False
+    assert provider_mod.configuracao_ausente() == []
+
+
+def test_chat_desabilita_quando_falta_configuracao(monkeypatch):
+    """O campo de mensagem so fica ativo com o LLM configurado."""
+    from src.ui import chat as chat_mod
+
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "")
+    assert chat_mod.configuracao_ausente() == ["OPENAI_API_KEY"]
+
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_API_KEY", "sk-existe")
+    assert chat_mod.configuracao_ausente() == []

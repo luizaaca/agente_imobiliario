@@ -4,9 +4,8 @@ import uuid
 
 import streamlit as st
 
-from src.agent.provider import exige_chave_de_api
+from src.agent.provider import configuracao_ausente
 from src.agent.sdr_agent import SDRDependencies, process_message
-from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
@@ -162,37 +161,33 @@ def _painel_da_conversa() -> None:
         st.rerun()
 
 
-def falta_chave_de_llm() -> bool:
-    """Se o chat vai falhar por falta de credencial do provider.
+def _aviso_de_configuracao() -> list[str]:
+    """Avisa na tela o que falta configurar e devolve a lista.
 
-    Separado do render para poder ser testado: é a condição que decide se a
-    aplicação avisa na tela ou deixa o usuário descobrir conversando.
+    A aplicação sobe de propósito sem configuração de LLM — dá para navegar
+    pelo catálogo e pelo painel. Só o chat depende dela, e quem chega aqui
+    precisa saber disso antes de tentar conversar, não depois.
     """
-    return not settings.OPENAI_API_KEY and exige_chave_de_api()
+    faltando = configuracao_ausente()
+    if not faltando:
+        return faltando
 
-
-def _aviso_de_llm_ausente() -> None:
-    """Diz na tela que falta chave, em vez de deixar o chat falhar calado.
-
-    A aplicação sobe de propósito sem chave de LLM — dá para navegar pelo
-    catálogo e pelo painel. Só o chat depende dela, e é aqui que o aviso serve.
-    """
-    if not falta_chave_de_llm():
-        return
-
+    variaveis = ", ".join(f"`{nome}`" for nome in faltando)
+    plural = "as variáveis" if len(faltando) > 1 else "a variável"
     st.warning(
-        "**Sem chave de LLM configurada** — o agente não vai responder.\n\n"
-        "Copie `.env.example` para `.env`, preencha `OPENAI_API_KEY` "
-        "(e `OPENAI_BASE_URL`, se não for a OpenAI) e suba de novo com "
-        "`docker compose up`. O dashboard e o catálogo funcionam sem isso.",
-        icon="🔑",
+        f"**Configuração de LLM incompleta** — o chat está desativado.\n\n"
+        f"Falta preencher {plural} {variaveis}. Copie `.env.example` para "
+        f"`.env`, preencha e suba de novo com `docker compose up`.\n\n"
+        f"O dashboard e o catálogo de imóveis funcionam normalmente sem isso.",
+        icon="⚙️",
     )
+    return faltando
 
 
 def render_chat():
     st.header("💬 Chat com o Agente SDR")
     st.caption("Simule uma conversa como lead imobiliário")
-    _aviso_de_llm_ausente()
+    faltando = _aviso_de_configuracao()
 
     if "lead_id" not in st.session_state:
         _retomar_ultima_conversa()
@@ -209,7 +204,13 @@ def render_chat():
         with st.chat_message(msg["role"]):
             st.markdown(markdown_seguro(msg["content"]))
 
-    if prompt := st.chat_input("Digite sua mensagem..."):
+    # Desabilitado quando falta configuração: deixar o campo ativo só levaria
+    # o usuário a mandar uma mensagem e receber "atendimento indisponível".
+    entrada = st.chat_input(
+        "Configure o LLM para conversar" if faltando else "Digite sua mensagem...",
+        disabled=bool(faltando),
+    )
+    if prompt := entrada:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(markdown_seguro(prompt))

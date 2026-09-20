@@ -36,13 +36,33 @@ PROVIDERS_SEM_CHAVE = {"ollama"}
 
 
 def exige_chave_de_api() -> bool:
-    """Se o provider configurado precisa de uma chave para funcionar.
-
-    Publico porque a UI usa isto para avisar na tela, antes de o usuario
-    tentar conversar e receber apenas "atendimento indisponivel".
-    """
+    """Se o provider configurado precisa de uma chave para funcionar."""
     provider = (settings.LLM_PROVIDER or "openai").strip().lower()
     return provider not in PROVIDERS_SEM_CHAVE
+
+
+def configuracao_ausente() -> list[str]:
+    """Variáveis que faltam ou estão inválidas para o LLM funcionar.
+
+    Lista vazia significa configuração completa. É a fonte única: daqui a UI
+    decide se avisa e desabilita o chat, e daqui `_construir_modelo` decide se
+    pode construir o modelo. Duas listas separadas divergiriam.
+    """
+    provider = (settings.LLM_PROVIDER or "openai").strip().lower()
+
+    if provider not in DEFAULT_BASE_URLS:
+        # Nada mais faz sentido checar: não sabemos o que esse provider exige.
+        return ["LLM_PROVIDER"]
+
+    faltando: list[str] = []
+    if not (settings.OPENAI_API_KEY or "").strip() and exige_chave_de_api():
+        faltando.append("OPENAI_API_KEY")
+    if provider == "custom" and not (settings.OPENAI_BASE_URL or "").strip():
+        faltando.append("OPENAI_BASE_URL")
+    if not (settings.LLM_MODEL or "").strip():
+        faltando.append("LLM_MODEL")
+
+    return faltando
 
 
 class LLMConfigError(RuntimeError):
@@ -109,12 +129,14 @@ def _construir_modelo() -> OpenAIChatModel:
             f"Valores aceitos: {suportados}."
         )
 
-    api_key = (settings.OPENAI_API_KEY or "").strip()
-    if not api_key and provider not in PROVIDERS_SEM_CHAVE:
+    faltando = configuracao_ausente()
+    if faltando:
         raise LLMConfigError(
-            f"OPENAI_API_KEY não configurada — obrigatória para "
-            f"LLM_PROVIDER='{provider}'. Preencha no .env."
+            f"Configuração de LLM incompleta para LLM_PROVIDER='{provider}': "
+            f"{', '.join(faltando)}. Preencha no .env (veja .env.example)."
         )
+
+    api_key = (settings.OPENAI_API_KEY or "").strip()
 
     base_url = _resolve_base_url(provider)
 
