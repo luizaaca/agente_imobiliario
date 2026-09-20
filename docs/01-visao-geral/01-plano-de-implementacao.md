@@ -369,7 +369,7 @@ cada lead.
     > O lead sem nome aparece pelo número, e não por um `Lead 29` montado na hora: um rótulo inventado não existe em coluna nenhuma, então não se acha pela busca nem se ordena por ele.
   - [x] **Ficha editável**: qualificação, contato e perfil narrativo. Um campo apagado é gravado como nulo, para o corretor conseguir limpar o que o agente entendeu errado; o status que ele escolher não é recalculado por cima.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
-  - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up.
+  - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up. Vincula-se uma vez só; depois os campos travam, porque o identificador é a identidade da pessoa no canal e reapontá-lo mandaria a conversa dela para outra pessoa.
   - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável.
   - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação. O status do lead e a agenda ficam sincronizados nos dois sentidos: aparecendo compromisso o lead vai para `agendado`, sumindo o último ele volta para onde os dados o colocam. `agendado` não é julgamento, é fato verificável — por isso a sincronização vale inclusive por cima do status escolhido à mão na ficha. `inativo` fica de fora: quem parou de responder continua parado mesmo com uma visita antiga no calendário.
   - [x] **Ações**: disparar follow-up e excluir lead.

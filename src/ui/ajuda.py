@@ -222,9 +222,14 @@ Um lead que chegou conversando já vem vinculado; um cadastrado à mão, não. S
 vínculo, o follow-up é gerado e fica registrado na conversa, mas não tem para
 onde ser despachado.
 
-Vincular de novo corrige um identificador digitado errado ou troca qual canal é
-o preferencial. O identificador **não é validado** na hora de gravar: um valor
-inventado só falha quando o envio acontece.
+**Vincula-se uma vez só.** Feito o vínculo, os campos travam: o identificador
+não é um dado do lead que se corrige, é a identidade da pessoa no canal —
+trocá-lo apontaria a conversa, o histórico e os follow-ups para outra pessoa,
+sem nada na tela denunciando a troca.
+
+Por isso vale conferir antes de gravar: o identificador **não é validado** na
+hora, e um valor errado só falha quando o envio acontece. Para desfazer um
+vínculo equivocado hoje é preciso mexer no banco.
 """,
     ),
     (

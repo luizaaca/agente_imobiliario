@@ -416,6 +416,9 @@ def _canal_do_lead(lead: Lead) -> None:
     É o que torna um lead criado à mão alcançável pelo follow-up: sem
     identidade de canal o runner não tem para onde despachar, e a mensagem
     fica apenas registrada aqui no painel.
+
+    Vincula-se uma vez só. Depois disso os três campos ficam travados — ver o
+    comentário abaixo sobre por que reapontar o vínculo é perigoso.
     """
     with get_db() as db:
         identidade = LeadService().get_primary_identity(lead.id, db)
@@ -429,28 +432,43 @@ def _canal_do_lead(lead: Lead) -> None:
         "daqui e chegar na pessoa."
     )
 
-    if canal_atual is None:
+    # Uma vez gravado, o vinculo trava. Ele nao e uma preferencia: e a
+    # identidade da pessoa no canal, e trocar o identificador nao corrige um
+    # dado deste lead — aponta a conversa dele para outra pessoa, que passaria
+    # a receber o follow-up e o historico sem ninguem perceber.
+    vinculado = canal_atual is not None
+
+    if vinculado:
+        st.success(
+            f"Vinculado a **{canal_atual}**. O vínculo não é editável: "
+            "trocá-lo apontaria esta conversa para outra pessoa.",
+            icon=":material/link:",
+        )
+    else:
         st.warning(
             "Este lead não está ligado a nenhum canal. O follow-up é gerado e "
             "fica registrado na conversa, mas não é despachado para ninguém.",
             icon=":material/link_off:",
         )
-    else:
-        st.caption(
-            f"Vinculado a **{canal_atual}**. Vincular de novo corrige o "
-            "identificador ou troca o canal preferencial."
-        )
+
+    # A chave carrega o estado de trava de proposito. Um widget guarda o valor
+    # escolhido enquanto a chave nao muda, e esse valor vence o `value` — ao
+    # travar, o campo continuaria mostrando o que havia antes de gravar, que e
+    # vazio no caso comum de acabar de vincular.
+    sufixo = f"{lead.id}_{'travado' if vinculado else 'livre'}"
 
     col_canal, col_id, col_botao = st.columns([2, 3, 2], vertical_alignment="bottom")
     canal = col_canal.selectbox(
         "Canal", CANAIS,
         index=CANAIS.index(canal_atual) if canal_atual in CANAIS else 0,
-        key=f"canal_{lead.id}",
+        key=f"canal_{sufixo}",
+        disabled=vinculado,
     )
     externo = col_id.text_input(
         "Identificador no canal",
         value=id_atual or "",
-        key=f"canal_id_{lead.id}",
+        key=f"canal_id_{sufixo}",
+        disabled=vinculado,
         help=(
             "No Telegram é o `chat_id` numérico que o bot enxerga. Um valor "
             "inventado faz o envio falhar no canal, não aqui."
@@ -458,7 +476,13 @@ def _canal_do_lead(lead: Lead) -> None:
     )
     if col_botao.button(
         "Vincular", icon=":material/link:", width="stretch",
-        key=f"vincular_{lead.id}",
+        key=f"vincular_{sufixo}",
+        disabled=vinculado,
+        help=(
+            "Já vinculado — o endereço no canal não muda pela tela."
+            if vinculado
+            else "Grava por onde o follow-up alcança este lead."
+        ),
     ):
         if not externo.strip():
             st.error("Informe o identificador do lead no canal.")
