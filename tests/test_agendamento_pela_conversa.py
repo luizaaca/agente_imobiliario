@@ -109,12 +109,26 @@ def test_confirmar_compromisso_cancelado_e_recusado(agendamento, lead_id, deps, 
 
 
 def test_id_inventado_volta_como_erro_em_vez_de_derrubar_o_turno(
-    lead_id, deps, db
+    agendamento, lead_id, deps, db
 ):
+    """A recusa traz os IDs válidos, para o modelo se corrigir na retentativa.
+
+    Só dizer "não existe" fez o agente desistir e contar isso à pessoa, depois
+    de pegar no histórico o ID de um compromisso já apagado.
+    """
     retorno = _chamar(
         "confirmar_agendamento", {"agendamento_id": 999999}, lead_id, deps, db)
 
-    assert "Não há compromisso 999999" in retorno
+    assert "Não existe compromisso 999999" in retorno
+    assert f"ID {agendamento.id}" in retorno
+
+
+def test_id_errado_sem_nenhum_compromisso_manda_agendar(lead_id, deps, db):
+    retorno = _chamar(
+        "confirmar_agendamento", {"agendamento_id": 999999}, lead_id, deps, db)
+
+    assert "não tem nenhum marcado" in retorno
+    assert "agendar_reuniao" in retorno
 
 
 def test_compromisso_de_outro_lead_nao_e_alcancavel(lead_id, deps, amanha, db):
@@ -129,7 +143,7 @@ def test_compromisso_de_outro_lead_nao_e_alcancavel(lead_id, deps, amanha, db):
     retorno = _chamar(
         "confirmar_agendamento", {"agendamento_id": alheio.id}, lead_id, deps, db)
 
-    assert "Não há compromisso" in retorno
+    assert "Não existe compromisso" in retorno
     assert SchedulingService().get(alheio.id, db).status == "pendente"
 
 
@@ -210,8 +224,51 @@ def test_contexto_lista_os_compromissos_com_id(agendamento, lead_id, db):
     """Sem os IDs no contexto o modelo não tem de onde tirar o argumento."""
     contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
 
-    assert "Compromissos marcados:" in contexto
+    assert "Compromissos marcados (1)" in contexto
     assert f"ID {agendamento.id}" in contexto
+
+
+def test_contexto_traz_o_imovel_de_cada_compromisso(lead_id, catalogo, amanha, db):
+    """A pessoa diz "aquele da Mooca", não "o das 10h".
+
+    Sem o imóvel aqui, o modelo procura a ligação no histórico da conversa —
+    onde acha IDs de compromissos que já foram apagados.
+    """
+    SchedulingService().create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, imovel_id=3, db=db
+    )
+
+    contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
+
+    assert "Cobertura Moema Alto Padrao" in contexto
+
+
+def test_contexto_manda_ignorar_ids_antigos_da_conversa(agendamento, lead_id, db):
+    contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
+
+    assert "ignore qualquer ID citado antes na conversa" in contexto
+
+
+def test_contexto_ordena_do_compromisso_mais_proximo(lead_id, amanha, db):
+    """"A próxima visita" é a leitura comum, e ela vai no topo."""
+    servico = SchedulingService()
+    distante = servico.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha + timedelta(days=5), db=db
+    )
+    proximo = servico.create(
+        lead_id=lead_id, tipo="reuniao", data_hora=amanha, db=db
+    )
+
+    contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
+
+    assert contexto.index(f"ID {proximo.id}") < contexto.index(f"ID {distante.id}")
+
+
+def test_sem_compromisso_o_contexto_diz_isso_explicitamente(lead_id, db):
+    """O silêncio deixaria o modelo acreditar no que a conversa disse antes."""
+    contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
+
+    assert "Compromissos marcados: nenhum" in contexto
 
 
 def test_compromisso_cancelado_sai_do_contexto(agendamento, lead_id, db):
@@ -219,4 +276,5 @@ def test_compromisso_cancelado_sai_do_contexto(agendamento, lead_id, db):
 
     contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
 
-    assert "Compromissos marcados:" not in contexto
+    assert f"ID {agendamento.id}" not in contexto
+    assert "Compromissos marcados: nenhum" in contexto

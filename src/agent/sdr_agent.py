@@ -329,6 +329,33 @@ def _compromisso_do_lead(ctx, agendamento_id: int, db):
     return agendamento
 
 
+def _erro_de_id(ctx, agendamento_id: int, db) -> str:
+    """Recusa que ja traz os IDs validos, para o modelo se corrigir sozinho.
+
+    So dizer "nao existe" faz o modelo desistir e contar isso a pessoa — foi o
+    que aconteceu quando ele pegou um ID antigo no historico e respondeu que
+    nao conseguia confirmar. Com a lista na propria recusa, ele tem como
+    acertar na retentativa, sem passar o problema adiante.
+    """
+    itens = compromissos_ativos(ctx.deps.lead_id, db)
+    if not itens:
+        return (
+            f"Não existe compromisso {agendamento_id}, e esta pessoa não tem "
+            f"nenhum marcado. Para criar um, use `agendar_reuniao`."
+        )
+
+    disponiveis = "; ".join(
+        f"ID {id_}: {tipo} em {quando:%d/%m às %H:%M}"
+        + (f", {imovel}" if imovel else "")
+        for id_, tipo, quando, _, imovel in itens
+    )
+    return (
+        f"Não existe compromisso {agendamento_id} para esta pessoa. Os que "
+        f"existem agora são: {disponiveis}. Chame a ferramenta de novo com um "
+        f"destes IDs."
+    )
+
+
 @sdr_agent.tool
 @_instrumentada
 async def confirmar_agendamento(
@@ -345,10 +372,7 @@ async def confirmar_agendamento(
     with get_db() as db:
         agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
         if agendamento is None:
-            return (
-                f"Não há compromisso {agendamento_id} para esta pessoa. Use um "
-                f"dos IDs listados no contexto."
-            )
+            return _erro_de_id(ctx, agendamento_id, db)
         if agendamento.status == "confirmado":
             return f"O compromisso {agendamento_id} já estava confirmado."
         if agendamento.status not in SchedulingService.STATUS_ATIVOS:
@@ -384,10 +408,7 @@ async def cancelar_agendamento(
     with get_db() as db:
         agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
         if agendamento is None:
-            return (
-                f"Não há compromisso {agendamento_id} para esta pessoa. Use um "
-                f"dos IDs listados no contexto."
-            )
+            return _erro_de_id(ctx, agendamento_id, db)
         if agendamento.status == "cancelado":
             return f"O compromisso {agendamento_id} já estava cancelado."
 
@@ -543,6 +564,25 @@ def montar_contexto_do_lead(lead) -> str:
     return "\n\n".join(partes)
 
 
+def compromissos_ativos(lead_id: int, db) -> list[tuple]:
+    """(id, tipo, data_hora, status, titulo do imovel) dos compromissos de pe.
+
+    Ordenados do mais proximo para o mais distante: "a proxima visita" e a
+    leitura mais comum, e ela precisa estar no topo.
+    """
+    return sorted(
+        (
+            (
+                a.id, a.tipo, a.data_hora, a.status,
+                a.imovel.titulo if a.imovel else None,
+            )
+            for a in SchedulingService().list_by_lead(lead_id, db)
+            if a.status in SchedulingService.STATUS_ATIVOS
+        ),
+        key=lambda item: item[2],
+    )
+
+
 def _compromissos_do_lead(lead) -> str:
     """Agendamentos de pe do lead, com id, em texto para o system prompt.
 
@@ -550,21 +590,36 @@ def _compromissos_do_lead(lead) -> str:
     `confirmar_agendamento` e `cancelar_agendamento` — e, sem ferramenta nem
     id, o que ele faz e chamar `agendar_reuniao` de novo, criando compromisso
     duplicado e anunciando uma confirmacao que nunca houve.
+
+    Traz o imovel de cada um porque e assim que a pessoa se refere a eles —
+    "aquele da Mooca", e nao "o das 10h". Sem o titulo aqui, o modelo vai
+    procurar a ligacao no historico da conversa, onde encontra IDs de
+    compromissos que ja foram apagados.
+
+    O aviso sobre o historico existe pelo mesmo motivo: esta lista e a verdade
+    do banco agora, e o que passou na conversa pode ter mudado desde entao.
     """
     with get_db() as db:
-        itens = [
-            (a.id, a.tipo, a.data_hora, a.status)
-            for a in SchedulingService().list_by_lead(lead.id, db)
-            if a.status in SchedulingService.STATUS_ATIVOS
-        ]
+        itens = compromissos_ativos(lead.id, db)
     if not itens:
-        return ""
+        return (
+            "Compromissos marcados: nenhum. Se a conversa mencionar algum, ele "
+            "foi cancelado ou já aconteceu."
+        )
 
-    linhas = [
-        f"- ID {id_}: {tipo} em {quando:%d/%m/%Y às %H:%M} ({status})"
-        for id_, tipo, quando, status in itens
-    ]
-    return "Compromissos marcados:\n" + "\n".join(linhas)
+    linhas = []
+    for id_, tipo, quando, status, imovel in itens:
+        onde = f", {imovel}" if imovel else ""
+        linhas.append(
+            f"- ID {id_}: {tipo} em {quando:%d/%m/%Y às %H:%M}{onde} ({status})"
+        )
+
+    plural = "s" if len(itens) > 1 else ""
+    return (
+        f"Compromissos marcados ({len(itens)}) — esta é a lista completa e "
+        f"atual. Use estes ID{plural} para confirmar ou cancelar, e ignore "
+        f"qualquer ID citado antes na conversa:\n" + "\n".join(linhas)
+    )
 
 
 # Dynamic system prompt

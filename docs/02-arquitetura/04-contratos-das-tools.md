@@ -195,9 +195,22 @@ Sendo o último compromisso de pé, o lead sai de `agendado`.
 - compromisso já cancelado ou realizado.
 
 ### Por que o id vem do contexto
-O system prompt lista os compromissos de pé com seus ids. Sem essa lista o
-modelo não tem de onde tirar o argumento, e o que ele faz é inventar um número
-ou chamar `agendar_reuniao` de novo.
+O system prompt lista os compromissos de pé com id, data **e imóvel**, do mais
+próximo ao mais distante, dizendo que aquela é a lista completa e que IDs
+citados antes na conversa devem ser ignorados.
+
+Cada parte disso resolve uma falha observada:
+
+| Sem isso | O que acontece |
+|---|---|
+| a lista | o modelo inventa um número ou chama `agendar_reuniao` de novo |
+| o imóvel | *"confirma aquele da Mooca"* não tem como virar um id, e o modelo vai procurar a ligação no histórico — onde encontra compromissos já apagados |
+| o aviso sobre a conversa | o histórico compete com o contexto, e o modelo às vezes acredita nele |
+| a linha "nenhum" quando a agenda está vazia | o silêncio deixa valer o que a conversa disse antes |
+
+A recusa das duas tools também lista os IDs válidos. Só dizer "não existe" faz
+o modelo desistir e repassar o problema à pessoa; com as opções na própria
+recusa, ele pode acertar na retentativa.
 
 ---
 
