@@ -5,6 +5,8 @@ import streamlit as st
 # Largura do rail e tamanho do alvo de clique de cada icone.
 _RAIL = 68
 _ALVO = 44
+# Lado do botao de icone das tabelas.
+_ICONE = 36
 
 # O Streamlit recolhe a barra lateral tirando-a da tela: `width: 0` mais um
 # `translateX(-300px)`. O rail desfaz esses dois e devolve 68px de barra, onde
@@ -150,26 +152,53 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
   display: none !important;
 }}
 
-/* O nome do lead na lista e um botao `tertiary` — sem borda nem fundo — que
-   precisa se ler como titulo clicavel, e nao como um link perdido no cartao.
-   O Streamlit publica a `key` do widget como classe `st-key-<key>`, entao o
-   alvo aqui e exatamente a chave escolhida em `leads._cartao_da_lista`, e nao
-   "todo botao tertiary da aplicacao". */
-[class*="st-key-nome_do_lead_"] button {{
-  font-size: 1.45rem !important;
-  font-weight: 600 !important;
-  line-height: 1.35 !important;
-  padding: 0 !important;
-  text-align: left !important;
+/* A divisoria do cabecalho da tabela de leads usa o espacamento generoso que
+   o Streamlit da a um separador de secao; entre cabecalho e primeira linha
+   isso abre um vao que solta um do outro. */
+.st-key-tabela_de_leads hr {{
+  margin-top: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
 }}
-/* O hover de um botao `tertiary` muda a cor para a primaria, que no tema
-   padrao e vermelha — num nome de lead isso le como alerta. O sublinhado ja
-   diz que e clicavel. */
-[class*="st-key-nome_do_lead_"] button:hover,
-[class*="st-key-nome_do_lead_"] button:focus,
-[class*="st-key-nome_do_lead_"] button:active {{
+/* Linhas mais juntas, para a tabela se varrer de cima a baixo. */
+.st-key-tabela_de_leads [data-testid="stHorizontalBlock"] {{
+  margin-bottom: -0.35rem !important;
+}}
+
+/* Botoes de icone das tabelas de lead e da lista de agendamentos. O Streamlit
+   publica a `key` do widget como classe `st-key-<key>`, entao o alvo aqui sao
+   exatamente as chaves escolhidas em `tabela.Acao` e em `leads`, e nao "todo
+   botao tertiary da aplicacao".
+
+   Um `tertiary` sem rotulo sai como um icone solto, sem area de clique
+   visivel. Aqui ele vira um quadrado de 36px com cantos arredondados e fundo
+   no hover: alvo previsivel, e discreto o bastante para caber repetido em
+   toda linha da tabela. */
+[class*="st-key-acao_abrir_"] button,
+[class*="st-key-acao_editar_"] button,
+[class*="st-key-acao_excluir_"] button,
+[class*="st-key-editar_ag_"] button,
+[class*="st-key-excluir_ag_"] button {{
+  width: {_ICONE}px !important;
+  min-width: {_ICONE}px !important;
+  height: {_ICONE}px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  color: color-mix(in srgb, currentColor 62%, transparent) !important;
+  transition: background 120ms ease, color 120ms ease !important;
+}}
+[class*="st-key-acao_abrir_"] button:hover,
+[class*="st-key-acao_editar_"] button:hover,
+[class*="st-key-editar_ag_"] button:hover {{
   color: inherit !important;
-  text-decoration: underline !important;
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+}}
+/* Excluir e a unica acao sem desfazer: o vermelho so aparece no hover, para
+   nao gritar em toda linha da tabela, mas aparece antes do clique. */
+[class*="st-key-acao_excluir_"] button:hover,
+[class*="st-key-excluir_ag_"] button:hover {{
+  color: #DC2626 !important;
+  background: rgba(220, 38, 38, 0.10) !important;
 }}
 </style>
 """

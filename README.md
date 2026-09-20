@@ -23,7 +23,7 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Follow-up automático com 4 réguas e limite de tentativas | funcionando; envio ativo só no Telegram |
 | Dashboard: KPIs, distribuição da carteira, tabela ordenável, custo de LLM | funcionando |
 | Menu de leads: ficha editável, criação manual, vínculo de canal, conversa, exclusão | funcionando |
-| Agendamento pela tela: criar e editar, com seletor de data e hora | funcionando |
+| Agendamento pela tela: criar, editar e excluir, com seletor de data e hora | funcionando |
 | Disparo manual de follow-up pela tela | funcionando |
 | Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
 | Página de ajuda com estado da instalação e FAQ | funcionando |

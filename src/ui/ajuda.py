@@ -86,7 +86,9 @@ def _como_trabalhar_um_lead() -> None:
 3. **Aba Conversa** para ler o que já foi dito, e **Ficha** para o perfil
    narrativo — o texto que o agente mantém com preferências, objeções e
    rejeições. É o que vale ler antes de ligar.
-4. **Aba Agendamentos** para marcar ou remarcar uma visita, com data e hora.
+4. **Aba Agendamentos** para marcar, remarcar ou excluir uma visita. Para
+   registrar que uma visita não aconteceu, o caminho é o status **cancelado** —
+   excluir é para o compromisso que nunca deveria ter sido criado.
 5. **Disparar follow-up** quando quiser reengajar sem esperar o robô.
 6. **Salvar ficha** depois de corrigir o que o agente entendeu errado. Um campo
    apagado fica vazio de verdade, e o status que você escolher não é

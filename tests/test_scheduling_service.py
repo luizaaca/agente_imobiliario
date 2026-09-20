@@ -182,3 +182,29 @@ def test_editar_agendamento_inexistente_devolve_none(scheduling, amanha, db):
     assert scheduling.editar(
         999999, db, tipo="visita", data_hora=amanha, status="pendente"
     ) is None
+
+
+def test_excluir_apaga_o_agendamento(scheduling, lead_id, amanha, db):
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    assert scheduling.excluir(agendamento.id, db) is True
+    assert scheduling.get(agendamento.id, db) is None
+    assert scheduling.list_by_lead(lead_id, db) == []
+
+
+def test_excluir_nao_devolve_o_lead_ao_funil(scheduling, lead_id, amanha, db):
+    """O lead pode ter outros compromissos, e regredir no funil é decisão de
+    quem está atendendo — não efeito colateral de apagar uma linha."""
+    agendamento = scheduling.create(
+        lead_id=lead_id, tipo="visita", data_hora=amanha, db=db
+    )
+
+    scheduling.excluir(agendamento.id, db)
+
+    assert db.query(Lead).filter(Lead.id == lead_id).one().status == "agendado"
+
+
+def test_excluir_agendamento_inexistente_devolve_false(scheduling, db):
+    assert scheduling.excluir(999999, db) is False

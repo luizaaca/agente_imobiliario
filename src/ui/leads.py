@@ -25,6 +25,14 @@ from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
+from src.ui.tabela import (
+    Acao,
+    Coluna,
+    aplicar_ordem,
+    seletor_de_ordem,
+    tabela_de_leads,
+    texto,
+)
 from src.ui.texto import markdown_seguro
 
 # Lead cuja ficha esta aberta. Zero significa "ficha em branco", porque nenhum
@@ -37,6 +45,9 @@ CHAVE_EXCLUSAO = "lead_a_excluir"
 CHAVE_AVISO_FOLLOWUP = "aviso_followup"
 # Formulario de agendamento aberto: (lead_id, agendamento_id ou None p/ novo).
 CHAVE_AGENDAMENTO = "agendamento_em_edicao"
+# Agendamento cujo botao de excluir foi clicado, para o segundo clique ser
+# deliberado. Excluir e definitivo e nao tem desfazer.
+CHAVE_EXCLUSAO_DE_AGENDAMENTO = "agendamento_a_excluir"
 
 FICHA_EM_BRANCO = 0
 
@@ -139,8 +150,9 @@ def selos_do_lead(lead: Lead, score: float) -> str:
 # --- Lista -------------------------------------------------------------------
 
 
-def _filtros(db) -> list[Lead]:
-    col_busca, col_status, col_intencao = st.columns(3)
+def _filtros(db):
+    """Filtros e ordenacao da carteira. Devolve a query ja restringida."""
+    col_busca, col_status, col_intencao, col_ordem = st.columns([3, 2, 2, 3])
     with col_busca:
         busca = st.text_input(
             "Buscar", placeholder="Nome, bairro, intenção...", type="search"
@@ -149,8 +161,10 @@ def _filtros(db) -> list[Lead]:
         status_filtro = st.selectbox("Status", ["Todos", *STATUS])
     with col_intencao:
         intencao_filtro = st.selectbox("Intenção", ["Todas", *INTENCOES])
+    with col_ordem:
+        campo, decrescente = seletor_de_ordem("ordem_da_lista_de_leads")
 
-    query = db.query(Lead).order_by(Lead.score.desc().nullslast())
+    query = db.query(Lead)
     if status_filtro != "Todos":
         query = query.filter(Lead.status == status_filtro)
     if intencao_filtro != "Todas":
@@ -162,48 +176,72 @@ def _filtros(db) -> list[Lead]:
             | Lead.bairro_interesse.ilike(termo)
             | Lead.perfil_narrativo.ilike(termo)
         )
-    return query.limit(200).all()
+    return aplicar_ordem(query, campo, decrescente).limit(200).all()
 
 
-def _resumo_de_contato(lead: Lead) -> str:
-    """Orçamento e telefone, o que sobra de útil na terceira coluna.
+def _selo_de_score(lead: Lead) -> str:
+    """Score com o selo de temperatura, que traduz o numero em uma palavra."""
+    if lead.score is None:
+        return "—"
+    score = float(lead.score)
+    cor, palavra = temperatura(score)
+    return f"**{score:.1f}** :{cor}-badge[{palavra}]"
 
-    Passa por `markdown_seguro` porque dois `R$` na mesma linha — uma faixa
-    fechada de orçamento — viram uma fórmula LaTeX para o Streamlit, que come
-    os cifrões e embaralha o que está entre eles.
+
+COLUNAS_DA_LISTA = (
+    Coluna("Lead", 3, lambda lead: f"**{markdown_seguro(lead.nome or f'Lead {lead.id}')}**"),
+    Coluna(
+        "Status", 2,
+        lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
+                     f"[{lead.status.replace('_', ' ')}]",
+    ),
+    Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
+    Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
+    Coluna("Orçamento", 3, lambda lead: texto(faixa_de_orcamento(lead))),
+    Coluna("Telefone", 2, lambda lead: texto(lead.telefone)),
+    Coluna("Score", 2, _selo_de_score),
+)
+
+
+def _pedir_exclusao(lead: Lead) -> None:
+    st.session_state[CHAVE_EXCLUSAO] = lead.id
+    st.rerun()
+
+
+def _confirmacao_na_lista(lead: Lead) -> None:
+    """Confirmacao de exclusao logo abaixo da linha, na largura toda.
+
+    Na coluna dos botoes ela nao caberia: o aviso quebraria em varias linhas e
+    os botoes ficariam menores que o alvo confortavel de clique.
     """
-    partes = [faixa_de_orcamento(lead)]
-    if lead.telefone:
-        partes.append(lead.telefone)
-    return markdown_seguro(" · ".join(partes))
+    if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
+        return
 
-
-def _cartao_da_lista(lead: Lead) -> None:
-    """Uma linha da lista: o que se lê de relance. O nome abre a ficha."""
-    score = float(lead.score or 0)
     nome = lead.nome or f"Lead {lead.id}"
+    st.warning(
+        f"Excluir **{markdown_seguro(nome)}** e todas as suas mensagens?",
+        icon=":material/warning:",
+    )
+    col_sim, col_nao, _ = st.columns([2, 2, 8])
+    if col_sim.button(
+        "Confirmar", key=f"confirma_lista_{lead.id}", type="primary", width="stretch"
+    ):
+        with get_db() as db:
+            LeadService().delete_lead(lead.id, db)
+        st.session_state.pop(CHAVE_EXCLUSAO, None)
+        st.toast("Lead excluído.", icon=":material/delete:")
+        st.rerun()
+    if col_nao.button("Cancelar", key=f"cancela_lista_{lead.id}", width="stretch"):
+        st.session_state.pop(CHAVE_EXCLUSAO, None)
+        st.rerun()
+    st.divider()
 
-    with st.container(border=True):
-        col_lead, col_score, col_acao = st.columns(
-            [6, 2, 3], vertical_alignment="center"
-        )
-        with col_lead:
-            # O proprio nome e o link para a ficha. `type="tertiary"` tira
-            # borda e fundo, e o CSS de `estilo.py` devolve o tamanho de
-            # titulo: um botao repetido em cada linha e ruido, e o nome e o
-            # que a pessoa ja quer clicar.
-            if st.button(
-                nome,
-                key=f"nome_do_lead_{lead.id}",
-                type="tertiary",
-                help="Abrir a ficha deste lead",
-            ):
-                abrir_ficha(lead.id)
-            st.markdown(selos_do_lead(lead, score))
-        with col_score:
-            st.metric("Score", f"{score:.1f}" if lead.score is not None else "—")
-        with col_acao:
-            st.caption(_resumo_de_contato(lead))
+
+ACOES_DA_LISTA = (
+    Acao(":material/edit:", "Abrir a ficha deste lead", "acao_editar",
+         lambda lead: abrir_ficha(lead.id)),
+    Acao(":material/delete:", "Excluir este lead", "acao_excluir", _pedir_exclusao),
+)
 
 
 def _lista(db) -> None:
@@ -220,8 +258,10 @@ def _lista(db) -> None:
         st.info("Nenhum lead encontrado com os filtros selecionados.")
         return
 
-    for lead in leads:
-        _cartao_da_lista(lead)
+    tabela_de_leads(
+        leads, COLUNAS_DA_LISTA, ACOES_DA_LISTA,
+        depois_da_linha=_confirmacao_na_lista,
+    )
 
 
 # --- Ficha -------------------------------------------------------------------
@@ -554,6 +594,40 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
         st.rerun()
 
 
+def _confirmar_exclusao_de_agendamento(
+    agendamento_id: int, tipo: str, data_hora: datetime
+) -> None:
+    """Segundo clique da exclusao, logo abaixo do agendamento.
+
+    Excluir apaga o registro de vez. Quando a visita existiu e nao aconteceu, o
+    caminho e marcar `cancelado` na edicao — isso aqui e para o compromisso que
+    nunca deveria ter sido criado.
+    """
+    if st.session_state.get(CHAVE_EXCLUSAO_DE_AGENDAMENTO) != agendamento_id:
+        return
+
+    st.warning(
+        f"Excluir a {tipo} de {data_hora:%d/%m/%Y às %H:%M}? "
+        "Para registrar que ela não aconteceu, use o status **cancelado**.",
+        icon=":material/warning:",
+    )
+    col_sim, col_nao, _ = st.columns([2, 2, 6])
+    if col_sim.button(
+        "Confirmar", key=f"confirma_ag_{agendamento_id}", type="primary",
+        width="stretch",
+    ):
+        with get_db() as db:
+            SchedulingService().excluir(agendamento_id, db)
+        st.session_state.pop(CHAVE_EXCLUSAO_DE_AGENDAMENTO, None)
+        st.toast("Agendamento excluído.", icon=":material/delete:")
+        st.rerun()
+    if col_nao.button(
+        "Cancelar", key=f"cancela_ag_{agendamento_id}", width="stretch"
+    ):
+        st.session_state.pop(CHAVE_EXCLUSAO_DE_AGENDAMENTO, None)
+        st.rerun()
+
+
 def _agendamentos(lead: Lead) -> None:
     aberto = st.session_state.get(CHAVE_AGENDAMENTO)
     if aberto is not None and aberto[0] == lead.id:
@@ -583,8 +657,8 @@ def _agendamentos(lead: Lead) -> None:
 
     for id_, tipo, data_hora, status, titulo, imovel_id, observacoes in itens:
         with st.container(border=True):
-            col_quando, col_status, col_editar = st.columns(
-                [6, 3, 2], vertical_alignment="center"
+            col_quando, col_status, col_acoes = st.columns(
+                [7, 3, 2], vertical_alignment="center"
             )
             with col_quando:
                 st.markdown(f"**{tipo.capitalize()}** · {data_hora:%d/%m/%Y às %H:%M}")
@@ -595,13 +669,22 @@ def _agendamentos(lead: Lead) -> None:
             with col_status:
                 cor = COR_DO_STATUS_DE_AGENDAMENTO.get(status, "gray")
                 st.markdown(f":{cor}-badge[{status}]")
-            with col_editar:
-                if st.button(
-                    "Editar", icon=":material/edit:", key=f"editar_ag_{id_}",
-                    width="stretch",
+            with col_acoes:
+                col_editar, col_excluir = st.columns(2)
+                if col_editar.button(
+                    "", icon=":material/edit:", key=f"editar_ag_{id_}",
+                    help="Editar este agendamento", type="tertiary",
                 ):
                     st.session_state[CHAVE_AGENDAMENTO] = (lead.id, id_)
                     st.rerun()
+                if col_excluir.button(
+                    "", icon=":material/delete:", key=f"excluir_ag_{id_}",
+                    help="Excluir este agendamento", type="tertiary",
+                ):
+                    st.session_state[CHAVE_EXCLUSAO_DE_AGENDAMENTO] = id_
+                    st.rerun()
+
+            _confirmar_exclusao_de_agendamento(id_, tipo, data_hora)
 
 
 def _disparar_followup(lead: Lead) -> None:

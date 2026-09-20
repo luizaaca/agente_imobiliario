@@ -13,8 +13,17 @@ from sqlalchemy import func
 from src.db.models import Agendamento, FollowUpAttempt, Lead
 from src.db.session import get_db
 from src.services.llm_usage_service import LLMUsageService
-from src.ui.leads import abrir_ficha, temperatura
+from src.ui.leads import COR_DO_STATUS, abrir_ficha, temperatura
 from src.ui.papeis import e_admin, papeis_da_sessao
+from src.ui.tabela import (
+    Acao,
+    Coluna,
+    aplicar_ordem,
+    seletor_de_ordem,
+    tabela_de_leads,
+    texto,
+)
+from src.ui.texto import markdown_seguro
 
 # Ordem do funil, para o grafico nao sair em ordem alfabetica — a leitura util
 # e a do caminho que o lead percorre.
@@ -249,66 +258,63 @@ def _distribuicao(db) -> None:
         )
 
 
-COLUNA_DA_LUPA = "🔍"
+def _selo_de_score(lead: Lead) -> str:
+    """Score com o selo de temperatura, que traduz o numero em uma palavra."""
+    if lead.score is None:
+        return "—"
+    score = float(lead.score)
+    cor, palavra = temperatura(score)
+    return f"**{score:.1f}** :{cor}-badge[{palavra}]"
+
+
+COLUNAS_DA_CARTEIRA = (
+    Coluna(
+        "Lead", 3,
+        lambda lead: f"**{markdown_seguro(lead.nome or f'Lead {lead.id}')}**",
+    ),
+    Coluna(
+        "Status", 3,
+        lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
+                     f"[{lead.status.replace('_', ' ')}]",
+    ),
+    Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
+    Coluna(
+        "Região", 3,
+        lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse),
+    ),
+    Coluna("Score", 3, _selo_de_score),
+)
+
+ACOES_DA_CARTEIRA = (
+    Acao(
+        ":material/search:", "Abrir a ficha deste lead", "acao_abrir",
+        lambda lead: abrir_ficha(lead.id),
+    ),
+)
 
 
 def _tabela_de_leads(db) -> None:
-    """Carteira ordenavel. A lupa de cada linha abre a ficha no menu Leads.
+    """Carteira do corretor, com a lupa levando a ficha no menu Leads.
 
-    Selecao por celula, e nao por linha: `single-row` acrescenta uma coluna de
-    caixas de marcar, que promete escolher varios para uma acao em lote — e
-    acao em lote nao existe aqui. Com `single-cell` a tabela nao ganha coluna
-    nenhuma, e so o clique na lupa navega; clicar em outra celula apenas a
-    destaca, como se espera de uma tabela que tambem se le.
+    Mesmas linhas e mesmos selos da listagem de Leads, so que sem as acoes de
+    escrita: aqui e tela de leitura. Montada com colunas, e nao com
+    `st.dataframe`, porque a celula do dataframe e desenhada em canvas e nao
+    comporta um botao — a lupa como link de celula chegou a ser tentada e nao
+    registrava o clique.
     """
-    leads = db.query(Lead).order_by(Lead.score.desc().nullslast()).limit(200).all()
+    st.subheader("Carteira")
+
+    col_ordem, _ = st.columns([2, 4])
+    with col_ordem:
+        campo, decrescente = seletor_de_ordem("ordem_da_carteira")
+
+    leads = aplicar_ordem(db.query(Lead), campo, decrescente).limit(200).all()
     if not leads:
         st.info("Nenhum lead registrado ainda.")
         return
 
-    tabela = pd.DataFrame(
-        [
-            {
-                # Emoji, e nao icone do Material: a celula da tabela e desenhada
-                # em canvas e nao carrega a fonte de icones.
-                COLUNA_DA_LUPA: "🔍",
-                "id": lead.id,
-                "Lead": lead.nome or f"Lead {lead.id}",
-                "Status": lead.status.replace("_", " "),
-                "Temperatura": temperatura(float(lead.score or 0))[1],
-                "Intenção": lead.intencao or "—",
-                "Região": lead.regiao_interesse or lead.bairro_interesse or "—",
-                "Score": float(lead.score) if lead.score is not None else None,
-            }
-            for lead in leads
-        ]
-    )
-
-    st.subheader("Carteira")
-    st.caption("Ordene clicando no cabeçalho da coluna. A lupa abre a ficha do lead.")
-    selecao = st.dataframe(
-        tabela,
-        width="stretch",
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-cell",
-        column_order=(
-            COLUNA_DA_LUPA, "Lead", "Status", "Temperatura", "Intenção",
-            "Região", "Score",
-        ),
-        column_config={
-            COLUNA_DA_LUPA: st.column_config.TextColumn(
-                "", width="small", help="Abrir a ficha deste lead"
-            ),
-            "Score": st.column_config.ProgressColumn(
-                "Score", min_value=0, max_value=10, format="%.1f"
-            ),
-        },
-    )
-
-    for linha, coluna in selecao["selection"]["cells"]:
-        if coluna == COLUNA_DA_LUPA:
-            abrir_ficha(int(tabela.iloc[linha]["id"]))
+    st.caption("A lupa abre a ficha do lead no menu Leads.")
+    tabela_de_leads(leads, COLUNAS_DA_CARTEIRA, ACOES_DA_CARTEIRA, peso_das_acoes=1)
 
 
 def render_dashboard():

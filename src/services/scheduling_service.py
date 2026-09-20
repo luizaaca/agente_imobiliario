@@ -119,6 +119,29 @@ class SchedulingService:
         )
         return agendamento
 
+    def excluir(self, agendamento_id: int, db: Session) -> bool:
+        """Apaga o agendamento de vez.
+
+        Diferente de marcar `cancelado`, que continua sendo o caminho quando a
+        visita existiu e nao aconteceu: excluir e para o compromisso que nunca
+        deveria ter sido criado — a data errada, o lead errado, o teste.
+
+        O status do lead nao volta atras. Ele pode ter outros agendamentos, e
+        decidir se a oportunidade regrediu no funil e de quem esta atendendo.
+        """
+        agendamento = self.get(agendamento_id, db)
+        if not agendamento:
+            return False
+
+        lead_id = agendamento.lead_id
+        db.delete(agendamento)
+        db.commit()
+        logger.info(
+            "event=agendamento_excluido agendamento_id=%s lead_id=%s",
+            agendamento_id, lead_id,
+        )
+        return True
+
     def update_status(
         self,
         agendamento_id: int,
