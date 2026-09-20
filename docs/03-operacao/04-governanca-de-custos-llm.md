@@ -49,13 +49,27 @@ Evita que o custo total saia do controle.
 
 | Limite | Valor Padrão | Variável de Ambiente | Comportamento ao atingir |
 |---|---|---|---|
-| Budget diário (tokens) | 100.000 | `LLM_DAILY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno, inclusive nas conversas já em andamento |
+| Budget diário (tokens) | 500.000 | `LLM_DAILY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno, inclusive nas conversas já em andamento |
 | Budget mensal (tokens) | 3.000.000 | `LLM_MONTHLY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno |
 
 O teto vale para todo turno, e não só para conversas novas: um limite que só
 barra quem chega deixa o custo depender de quantas conversas estavam abertas
 no momento em que ele estourou. O ciclo de follow-up checa o mesmo teto antes
 de começar a gerar mensagens.
+
+O dashboard avisa a partir de 80% do teto, em tokens e em turnos de conversa
+restantes. O degrau existe porque o bloqueio é abrupto: quem está conversando
+recebe o aviso de indisponibilidade no meio do atendimento, sem que ninguém
+tenha visto o limite chegar. Quando ele age, a conversa guarda um
+`system_notice` com o motivo — senão o histórico fica com a pergunta da pessoa
+e nada depois, o que se lê como um agente que parou de funcionar.
+
+### Quanto custa um turno
+Medido nas conversas reais: a base reenviada em toda requisição (instruções,
+schemas das tools e histórico) dá cerca de 5.100 tokens, e um turno em que o
+agente busca imóveis são três requisições — pedido, resultado da tool, resposta
+—, cada uma carregando a base inteira. Na prática, 10 a 15 mil tokens por turno
+com busca, e cerca de 5 mil num turno de conversa simples.
 
 **Mensagem de indisponibilidade:**
 > "Nosso atendimento digital está temporariamente indisponível. Um corretor entrará em contato em breve pelo número cadastrado."
@@ -280,7 +294,7 @@ LLM_MAX_TURNS_PER_CONVERSATION=30
 LLM_MAX_TOKENS_PER_CONVERSATION=50000
 
 # Limites globais
-LLM_DAILY_TOKEN_BUDGET=100000
+LLM_DAILY_TOKEN_BUDGET=500000
 LLM_MONTHLY_TOKEN_BUDGET=3000000
 ```
 

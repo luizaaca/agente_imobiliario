@@ -5,6 +5,8 @@ canal, disparar follow-up, excluir — mora no menu **Leads**; aqui a carteira
 existe para ordenar e escolher, e a lupa de cada linha abre a ficha la.
 """
 
+from typing import Optional
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -56,26 +58,79 @@ CORES_DA_INTENCAO = {
 }
 
 
+# A partir de quanto do orçamento o aviso aparece. O bloqueio é abrupto — a
+# conversa em andamento simplesmente para —, então o corretor precisa de um
+# degrau antes do estouro, e não da notícia depois dele.
+LIMIAR_DE_AVISO = 0.8
+
+# Tokens de um turno com busca, medidos nas conversas reais (10 a 14,5 mil).
+# Serve só para traduzir o saldo em "quantos turnos ainda dá", que é a
+# pergunta que o corretor de fato faz diante de um número de tokens.
+TOKENS_POR_TURNO = 12_000
+
+
+def aviso_de_budget(resumo: dict) -> Optional[tuple[str, str, str]]:
+    """`(nível, texto, ícone)` do alerta de orçamento, ou `None` se está folgado.
+
+    Separada da renderização para poder ser testada sem subir o Streamlit: é
+    aqui que mora a decisão, e `_alerta_de_budget` só desenha o que ela disser.
+
+    A ordem importa. O estouro mensal vem primeiro porque é o mais grave e o
+    que não passa à meia-noite; o aviso de aproximação vem por último, porque
+    só faz sentido enquanto ainda dá para gastar.
+    """
+    if resumo["monthly_budget_exceeded"]:
+        return (
+            "error",
+            "**Orçamento mensal de LLM esgotado.** Conversas novas recebem "
+            "mensagem de indisponibilidade até a virada do mês ou até "
+            "`LLM_MONTHLY_TOKEN_BUDGET` subir.",
+            ":material/credit_card_off:",
+        )
+
+    if resumo["daily_budget_exceeded"]:
+        return (
+            "warning",
+            "**Orçamento diário de LLM esgotado.** O chat e o follow-up ficam "
+            "bloqueados até amanhã, ou até `LLM_DAILY_TOKEN_BUDGET` subir.",
+            ":material/schedule:",
+        )
+
+    def fracao(periodo: str) -> float:
+        teto = resumo[f"{periodo}_budget"]
+        return resumo[f"{periodo}_tokens"] / teto if teto else 0.0
+
+    # O mais apertado dos dois manda: adianta pouco sobrar mês se o dia acabou.
+    qual, periodo = max(
+        (("diário", "daily"), ("mensal", "monthly")), key=lambda p: fracao(p[1])
+    )
+    usado = fracao(periodo)
+    if usado < LIMIAR_DE_AVISO:
+        return None
+
+    restam = resumo[f"{periodo}_budget"] - resumo[f"{periodo}_tokens"]
+    turnos = max(restam // TOKENS_POR_TURNO, 0)
+    return (
+        "info",
+        f"**Orçamento {qual} de LLM em {usado:.0%}.** Restam "
+        + f"{restam:,}".replace(",", ".")
+        + f" tokens, cerca de {turnos} turnos de conversa. Ao esgotar, o chat "
+        "para no meio do atendimento.",
+        ":material/hourglass_top:",
+    )
+
+
 def _alerta_de_budget(resumo: dict) -> None:
-    """Avisa, fora do painel recolhido, quando o teto de tokens estourou.
+    """Avisa, fora do painel recolhido, quando o teto de tokens aperta.
 
     Dentro de um expander fechado o aviso nao existe na pratica: quem abre o
     dashboard com o orcamento estourado veria uma tela normal e so descobriria
     o bloqueio quando o chat parasse de responder.
     """
-    if resumo["monthly_budget_exceeded"]:
-        st.error(
-            "**Orçamento mensal de LLM esgotado.** Conversas novas recebem "
-            "mensagem de indisponibilidade até a virada do mês ou até "
-            "`LLM_MONTHLY_TOKEN_BUDGET` subir.",
-            icon=":material/credit_card_off:",
-        )
-    elif resumo["daily_budget_exceeded"]:
-        st.warning(
-            "**Orçamento diário de LLM esgotado.** O chat e o follow-up ficam "
-            "bloqueados até amanhã, ou até `LLM_DAILY_TOKEN_BUDGET` subir.",
-            icon=":material/schedule:",
-        )
+    if (aviso := aviso_de_budget(resumo)) is None:
+        return
+    nivel, texto, icone = aviso
+    getattr(st, nivel)(texto, icon=icone)
 
 
 def _saude_do_agente(resumo: dict) -> None:

@@ -29,7 +29,7 @@ x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   # Sem default: um valor fixo aqui seria publico e daria para forjar cookie
   # de admin. Vazia, a aplicacao sorteia uma chave por processo e avisa.
   AUTH_COOKIE_KEY: ${AUTH_COOKIE_KEY:-}
-  LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-100000}
+  LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-500000}
   LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-3000000}
   LLM_MAX_TURNS_PER_CONVERSATION: ${LLM_MAX_TURNS_PER_CONVERSATION:-30}
   LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-50000}
