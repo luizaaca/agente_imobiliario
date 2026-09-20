@@ -21,7 +21,9 @@
 x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
   LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-  LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+  # Sem default: o nome do modelo e especifico do deployment de quem roda.
+  # Vazia, a aplicacao lista LLM_MODEL entre as variaveis ausentes.
+  LLM_MODEL: ${LLM_MODEL:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
   # Sem default: um valor fixo aqui seria publico e daria para forjar cookie

@@ -55,12 +55,21 @@ def configuracao_ausente() -> list[str]:
         return ["LLM_PROVIDER"]
 
     faltando: list[str] = []
+
+    # A chave não é exigida de todo provider: `ollama` roda local e dispensa.
     if not (settings.OPENAI_API_KEY or "").strip() and exige_chave_de_api():
         faltando.append("OPENAI_API_KEY")
-    if provider == "custom" and not (settings.OPENAI_BASE_URL or "").strip():
-        faltando.append("OPENAI_BASE_URL")
+
+    # `LLM_MODEL` não tem valor padrão de propósito. Chutar `gpt-4o-mini` daria
+    # um erro 404 do provider em vez de uma mensagem dizendo o que configurar —
+    # e o nome do modelo é específico do deployment de quem está rodando.
     if not (settings.LLM_MODEL or "").strip():
         faltando.append("LLM_MODEL")
+
+    # Só o `custom` exige endpoint: os demais têm base URL conhecida, e para
+    # eles uma `OPENAI_BASE_URL` vazia é o caso normal, não uma falta.
+    if provider == "custom" and not (settings.OPENAI_BASE_URL or "").strip():
+        faltando.append("OPENAI_BASE_URL")
 
     return faltando
 

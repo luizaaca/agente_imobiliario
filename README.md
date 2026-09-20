@@ -161,21 +161,58 @@ Precisa de `TELEGRAM_BOT_TOKEN` no `.env`, obtido com o @BotFather. Este caminho
 
 ---
 
-## Variáveis de ambiente
+## Configuração
+
+Tudo se configura por **variável de ambiente**. Como elas chegam ao processo é escolha de quem executa — a aplicação não distingue:
+
+- um arquivo `.env` na raiz (o Compose o lê sozinho; `cp .env.example .env`);
+- variáveis do shell: `OPENAI_API_KEY=sk-... docker compose up`;
+- secrets do pipeline de CD, injetados como `env` do passo.
+
+Quando a mesma variável vem de mais de uma origem, **a do ambiente vence a do `.env`**. Nenhum segredo entra na imagem: as variáveis só existem em tempo de execução.
+
+### Obrigatórias para o chat funcionar
 
 | Variável | Para quê |
 |---|---|
-| `DATABASE_URL` | PostgreSQL. `postgresql://` é normalizado para `postgresql+psycopg://` |
-| `LLM_PROVIDER` | `openai`, `groq`, `gemini`, `ollama` ou `custom` |
-| `LLM_MODEL` | nome do modelo/deployment |
-| `OPENAI_API_KEY` | chave do provider (dispensável só no `ollama`) |
-| `OPENAI_BASE_URL` | endpoint, quando não for a OpenAI. Vence o padrão do provider |
-| `AUTH_COOKIE_KEY` | assinatura do cookie de sessão do Streamlit |
-| `TELEGRAM_BOT_TOKEN` | só para o canal Telegram |
-| `LLM_DAILY_TOKEN_BUDGET`, `LLM_MONTHLY_TOKEN_BUDGET` | tetos de consumo |
-| `LLM_MAX_TOKENS_PER_CONVERSATION`, `LLM_MAX_TURNS_PER_CONVERSATION` | quando fazer handover ao corretor |
+| `LLM_PROVIDER` | `openai`, `groq`, `gemini`, `ollama` ou `custom`. Padrão: `openai` |
+| `LLM_MODEL` | nome do modelo ou do *deployment*. **Sem padrão** — no Azure é o nome do deployment, e chutar um nome daria um 404 do provider em vez de uma mensagem dizendo o que falta |
+| `OPENAI_API_KEY` | chave do provider. Dispensável só no `ollama`, que roda local |
+| `OPENAI_BASE_URL` | endpoint OpenAI-compatible. Obrigatória apenas no `custom`; nos demais, vazia significa usar o endpoint padrão do provider |
 
-O exemplo completo está em `.env.example`.
+Faltando qualquer uma delas, a aplicação **sobe do mesmo jeito**: o dashboard e o catálogo funcionam, e a aba do chat mostra quais variáveis estão ausentes e desativa o campo de mensagem. Não há falha silenciosa nem `compose up` abortado.
+
+### Autenticação
+
+| Variável | Para quê |
+|---|---|
+| `AUTH_COOKIE_KEY` | assina o cookie de sessão do Streamlit |
+
+**Se estiver ausente, a aplicação gera uma chave aleatória na inicialização**, registra alerta no log e mostra um balão dispensável na tela. Dá para operar assim, com duas limitações:
+
+- **a sessão cai a cada reinício** da aplicação, porque a chave é sorteada de novo e os cookies anteriores deixam de ser válidos;
+- **não funciona com mais de uma réplica**: cada processo assinaria com uma chave diferente e o usuário seria deslogado ao cair numa réplica distinta daquela em que entrou.
+
+Para fixar, defina a variável com um valor aleatório e duradouro:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Não existe valor padrão de propósito. Um default no código seria público — e quem o conhece consegue **forjar um cookie e entrar como administrador sem passar pelo login**.
+
+### Demais variáveis
+
+| Variável | Para quê |
+|---|---|
+| `DATABASE_URL` | PostgreSQL. `postgresql://` é normalizado para `postgresql+psycopg://`. No Compose é sobrescrita para apontar ao serviço `postgres` |
+| `DB_PASSWORD` | senha do PostgreSQL do Compose. Padrão: `sdr_dev_pass` |
+| `TELEGRAM_BOT_TOKEN` | só para o canal Telegram. Sem ela, `run_telegram.py` sai com erro explícito |
+| `LLM_DAILY_TOKEN_BUDGET`, `LLM_MONTHLY_TOKEN_BUDGET` | tetos de consumo. Atingidos, o agente responde que está indisponível |
+| `LLM_MAX_TOKENS_PER_CONVERSATION`, `LLM_MAX_TURNS_PER_CONVERSATION` | quando encerrar a conversa e fazer handover ao corretor |
+| `LOGFIRE_TOKEN` | observabilidade, opcional |
+
+O exemplo completo, com comentários, está em `.env.example`.
 
 ---
 

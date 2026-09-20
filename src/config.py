@@ -47,7 +47,11 @@ class Settings:
 
     # LLM
     LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "openai")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    # Sem valor padrão de propósito: o nome do modelo é específico do
+    # deployment de quem roda (no Azure é o nome do deployment, não o do
+    # modelo). Um chute produziria um 404 do provider em vez de uma mensagem
+    # dizendo o que falta configurar. Ver `provider.configuracao_ausente`.
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "")
 

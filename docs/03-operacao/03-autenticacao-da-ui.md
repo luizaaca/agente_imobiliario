@@ -143,9 +143,29 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 ## 6. Variáveis de ambiente
 
 ```env
-# Chave secreta para assinar o cookie de sessão (gerar com: python -c "import secrets; print(secrets.token_hex(32))")
+# Chave secreta que assina o cookie de sessão
+# Gerar com: python -c "import secrets; print(secrets.token_urlsafe(48))"
 AUTH_COOKIE_KEY=a1b2c3d4e5f6...
 ```
+
+### Ausência da chave: comportamento implementado
+
+`AUTH_COOKIE_KEY` **não tem valor padrão**. Um default fixo no código seria público — está no repositório — e quem o conhece consegue forjar um cookie de sessão e entrar como administrador sem passar pelo login. Era exatamente o caso do antigo `dev_fallback_key`.
+
+Quando a variável não vem do ambiente, `src/config.py` (`_resolver_chave_do_cookie`) sorteia uma chave com `secrets.token_urlsafe(48)` na inicialização do processo e sinaliza isso em `settings.AUTH_COOKIE_KEY_GERADA`. O aviso sai por dois canais:
+
+1. **log**, para quem opera:
+   `event=auth_cookie_key_gerada impacto=sessoes_caem_a_cada_restart_e_nao_funcionam_com_replicas`
+2. **balão dispensável na UI**, uma vez por sessão (`src/ui/navegacao.py`), para quem está na tela entender por que pode ser deslogado sem motivo aparente.
+
+A aplicação **funciona normalmente** assim. As duas limitações são:
+
+| Limitação | Por quê |
+|---|---|
+| A sessão cai a cada reinício | A chave é sorteada de novo e os cookies emitidos antes deixam de validar |
+| Não funciona com múltiplas réplicas | Cada processo assina com uma chave diferente; o usuário é deslogado ao cair numa réplica distinta da que autenticou |
+
+Ou seja: aceitável para desenvolvimento e para a demonstração da POC, inadequado para qualquer deploy com mais de uma instância ou que precise de sessão estável.
 
 ---
 
@@ -165,7 +185,7 @@ agente_imobiliario/
 ## 8. Considerações de segurança
 
 - **Nunca commitar senhas em texto plano.** O arquivo `credentials.yaml` contém apenas hashes bcrypt.
-- **`AUTH_COOKIE_KEY` deve ser única por ambiente.** Gerar com `secrets.token_hex(32)`.
+- **`AUTH_COOKIE_KEY` deve ser única por ambiente.** Gerar com `secrets.token_urlsafe(48)`. Sem ela a aplicação sorteia uma por processo e avisa — ver seção 6.
 - **HTTPS obrigatório em produção.** O cookie de sessão trafega pelo navegador — sem HTTPS, está vulnerável a interceptação. Railway, Render e Fly.io fornecem HTTPS automático.
 - **`.env` no `.gitignore`.** Nunca versionar o arquivo com chaves reais.
 

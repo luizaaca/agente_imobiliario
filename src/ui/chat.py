@@ -174,14 +174,15 @@ def _aviso_de_configuracao() -> list[str]:
 
     # Só o nome das variáveis: como elas são definidas — .env, secrets do
     # pipeline, ambiente do host — depende de onde isto está rodando, e a tela
-    # não tem como saber.
+    # não tem como saber. O "como" fica no README, num lugar só.
     variaveis = ", ".join(f"`{nome}`" for nome in faltando)
     plural = "Variáveis de ambiente ausentes" if len(faltando) > 1 else (
         "Variável de ambiente ausente"
     )
     st.warning(
         f"**Configuração de LLM incompleta** — o chat está desativado.\n\n"
-        f"{plural}: {variaveis}",
+        f"{plural}: {variaveis}\n\n"
+        f"Consulte a seção **Configuração** do README.",
         icon="⚙️",
     )
     return faltando

@@ -164,7 +164,7 @@ def test_acusa_varias_de_uma_vez(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "")
 
     assert provider_mod.configuracao_ausente() == [
-        "OPENAI_API_KEY", "OPENAI_BASE_URL", "LLM_MODEL",
+        "OPENAI_API_KEY", "LLM_MODEL", "OPENAI_BASE_URL",
     ]
 
 
@@ -225,3 +225,16 @@ def test_chaves_sorteadas_nao_se_repetem(monkeypatch):
     segunda, _ = config_mod._resolver_chave_do_cookie()
 
     assert primeira != segunda
+
+
+def test_modelo_ausente_e_acusado(monkeypatch):
+    """LLM_MODEL nao tem padrao: chutar um nome daria 404 do provider."""
+    monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "")
+    assert provider_mod.configuracao_ausente() == ["LLM_MODEL"]
+
+
+def test_base_url_vazia_e_normal_fora_do_custom(monkeypatch):
+    """Nos providers conhecidos, base URL vazia significa usar a padrao."""
+    monkeypatch.setattr(provider_mod.settings, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(provider_mod.settings, "OPENAI_BASE_URL", "")
+    assert provider_mod.configuracao_ausente() == []

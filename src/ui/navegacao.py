@@ -48,6 +48,9 @@ def aviso_de_chave_de_cookie_gerada() -> None:
     Aparece uma vez por sessão: o log registra o alerta para quem opera, e este
     balão existe para quem está usando a tela entender por que pode ser
     deslogado sem motivo aparente depois de um restart.
+
+    O texto diz explicitamente que dá para seguir assim — não é um erro, é uma
+    escolha com um custo conhecido. Os detalhes ficam no README, não aqui.
     """
     if not settings.AUTH_COOKIE_KEY_GERADA:
         return
@@ -56,8 +59,10 @@ def aviso_de_chave_de_cookie_gerada() -> None:
 
     st.session_state[CHAVE_AVISO_COOKIE] = True
     st.toast(
-        "`AUTH_COOKIE_KEY` ausente — uma chave temporária foi gerada. "
-        "Sua sessão cai a cada reinício da aplicação.",
+        "Variável de ambiente `AUTH_COOKIE_KEY` ausente — uma chave temporária "
+        "foi gerada. **Pode usar assim**, com uma limitação: a sessão cai a "
+        "cada reinício da aplicação. Para fixá-la, veja a seção "
+        "**Configuração** do README.",
         icon=":material/key_off:",
     )
 
