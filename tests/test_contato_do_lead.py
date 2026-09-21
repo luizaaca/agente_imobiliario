@@ -156,12 +156,46 @@ def test_agendar_com_contato_completo_nao_cobra_nada(lead_id, deps, db):
 
 
 # --- O que o prompt manda ----------------------------------------------------
+#
+# Estes testes olham a INTENCAO do prompt, nao a redacao dele. A primeira
+# versao prendia frases inteiras ("Pergunte o nome cedo") e quebrou na primeira
+# reescrita, sem que nada de fato tivesse se perdido — falso alarme e teste que
+# atrapalha em vez de proteger. O prompt e a parte que mais se reescreve; o que
+# nao pode sumir dele e a ordem de coletar contato, gravar e amarrar o telefone
+# ao agendamento.
 
 
-def test_o_prompt_manda_perguntar_o_nome_cedo():
-    assert "Pergunte o nome cedo" in SYSTEM_PROMPT
+def _trechos(texto: str) -> list[str]:
+    """O prompt quebrado em trechos curtos, minusculos, para ver co-ocorrencia.
+
+    Duas palavras no mesmo trecho dizem que a instrucao liga uma coisa a outra;
+    espalhadas pelo texto inteiro nao dizem nada.
+    """
+    partes = [texto]
+    for separador in ("\n", ". ", "; "):
+        partes = [p for parte in partes for p in parte.split(separador)]
+    return [p.lower() for p in partes if p.strip()]
 
 
-def test_o_prompt_segura_o_telefone_para_o_agendamento():
-    """Pedir telefone na primeira mensagem transforma conversa em cadastro."""
-    assert "peça telefone logo no começo" in SYSTEM_PROMPT
+def _algum_trecho_com(texto: str, *palavras: str) -> bool:
+    return any(all(p in trecho for p in palavras) for trecho in _trechos(texto))
+
+
+def test_o_prompt_manda_coletar_nome_e_telefone():
+    """Sem isto o agente conversa bem e não deixa como o corretor ligar."""
+    assert _algum_trecho_com(SYSTEM_PROMPT, "nome")
+    assert _algum_trecho_com(SYSTEM_PROMPT, "telefone")
+
+
+def test_o_prompt_liga_o_telefone_ao_agendamento():
+    """Telefone pedido no começo vira cadastro; pedido na visita tem motivo.
+
+    Não importa como está escrito, desde que as duas coisas apareçam juntas na
+    mesma instrução.
+    """
+    assert _algum_trecho_com(SYSTEM_PROMPT, "telefone", "agend")
+
+
+def test_o_prompt_diz_onde_gravar_o_contato():
+    """Ouvir o dado e não gravar deixa a ficha do corretor vazia do mesmo jeito."""
+    assert _algum_trecho_com(SYSTEM_PROMPT, "registrar_qualificacao", "nome")
