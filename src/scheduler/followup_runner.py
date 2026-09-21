@@ -26,6 +26,7 @@ from src.services.followup_service import REGUAS, FollowUpService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+from src.tempo import formatar
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def _montar_contexto(lead, regua: str, db) -> dict[str, object]:
         )
         if proximo:
             contexto["agendamento"] = (
-                f"{proximo.tipo} em {proximo.data_hora:%d/%m/%Y às %H:%M} "
+                f"{proximo.tipo} em {formatar(proximo.data_hora)} "
                 f"(status: {proximo.status})"
             )
 

@@ -115,11 +115,11 @@ def test_telefone_invalido_nao_derruba_o_resto_da_qualificacao(lead_id, deps, db
 # --- Pedir na hora certa -----------------------------------------------------
 
 
-def test_agendar_sem_contato_cobra_os_dois(lead_id, deps, db):
+def test_agendar_sem_contato_cobra_os_dois(catalogo, lead_id, deps, db):
     """É aqui que o dado deixa de ser curiosidade: um corretor vai ligar."""
     retorno = _chamar(
         "agendar_reuniao",
-        {"tipo": "visita", "data_hora": "2027-05-10 15:00"},
+        {"tipo": "visita", "data_hora": "2027-05-10 15:00", "imovel_id": 1},
         lead_id, deps, db,
     )
 
@@ -127,12 +127,12 @@ def test_agendar_sem_contato_cobra_os_dois(lead_id, deps, db):
     assert "registrar_qualificacao" in retorno
 
 
-def test_agendar_so_cobra_o_que_falta(lead_id, deps, db):
+def test_agendar_so_cobra_o_que_falta(catalogo, lead_id, deps, db):
     LeadService().update_qualification(lead_id, {"nome": "Ana"}, db)
 
     retorno = _chamar(
         "agendar_reuniao",
-        {"tipo": "visita", "data_hora": "2027-05-10 15:00"},
+        {"tipo": "visita", "data_hora": "2027-05-10 15:00", "imovel_id": 1},
         lead_id, deps, db,
     )
 
@@ -140,14 +140,14 @@ def test_agendar_so_cobra_o_que_falta(lead_id, deps, db):
     assert "o nome nem" not in retorno
 
 
-def test_agendar_com_contato_completo_nao_cobra_nada(lead_id, deps, db):
+def test_agendar_com_contato_completo_nao_cobra_nada(catalogo, lead_id, deps, db):
     LeadService().update_qualification(
         lead_id, {"nome": "Ana", "telefone": "(11) 98765-4321"}, db
     )
 
     retorno = _chamar(
         "agendar_reuniao",
-        {"tipo": "visita", "data_hora": "2027-05-10 15:00"},
+        {"tipo": "visita", "data_hora": "2027-05-10 15:00", "imovel_id": 1},
         lead_id, deps, db,
     )
 

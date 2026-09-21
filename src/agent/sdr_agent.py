@@ -7,7 +7,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Optional
-from zoneinfo import ZoneInfo
 
 from pydantic import Field
 from pydantic_ai import Agent, ModelRetry, RunContext
@@ -34,6 +33,7 @@ from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 from src.services.summary_service import SummaryService
+from src.tempo import formatar, momento_atual, para_guardar
 
 logger = logging.getLogger(__name__)
 
@@ -171,40 +171,6 @@ def _operacao_do_lead(ctx: RunContext[SDRDependencies]) -> Optional[str]:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         intencao = lead.intencao if lead else None
     return OPERACAO_POR_INTENCAO.get(intencao or "")
-
-
-# O container roda em UTC, e o lead está em São Paulo. Sem converter, às 21h de
-# um sábado o agente acharia que já é domingo — e "sábado que vem" sairia uma
-# semana errado.
-FUSO_DO_LEAD = ZoneInfo("America/Sao_Paulo")
-
-DIAS_DA_SEMANA = (
-    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
-    "sexta-feira", "sábado", "domingo",
-)
-
-
-def agora_no_fuso_do_lead() -> datetime:
-    """O instante atual no relógio de quem está conversando."""
-    return datetime.now(FUSO_DO_LEAD)
-
-
-def momento_atual() -> str:
-    """Data, hora e dia da semana para as instruções do turno.
-
-    Sem isto o modelo não tem como resolver "sábado que vem", "amanhã" ou
-    "semana que vem" — e `agendar_reuniao` exige `YYYY-MM-DD`, então até o ano
-    seria chute. Numa conversa real ele propôs "sábado, 26/09" sem saber que
-    dia era hoje; acertou o dia da semana por sorte, uma chance em sete.
-
-    O dia da semana vem escrito porque é assim que a pessoa marca visita —
-    ninguém diz "dia 26", diz "sábado".
-    """
-    agora = agora_no_fuso_do_lead()
-    return (
-        f"{DIAS_DA_SEMANA[agora.weekday()]}, {agora:%d/%m/%Y}, {agora:%H:%M} "
-        f"(horário de Brasília)"
-    )
 
 
 # Aviso para quando a busca sai sem operação definida. A ordenação por preço
@@ -473,14 +439,32 @@ async def agendar_reuniao(
     data_hora: Annotated[str, Field(description="Data e hora no formato YYYY-MM-DD HH:MM.")],
     observacoes: Optional[str] = None,
     imovel_id: Annotated[Optional[int], Field(description=(
-        "ID de um imóvel devolvido por `buscar_imoveis`, quando a visita for a "
-        "um imóvel específico. Não invente: use apenas IDs já apresentados."))] = None,
+        "ID de um imóvel devolvido por `buscar_imoveis`. OBRIGATÓRIO quando "
+        "tipo='visita' — não se visita coisa nenhuma. Não invente: use apenas "
+        "IDs já apresentados."))] = None,
 ) -> str:
     """Registrar visita ou reunião para handover ao corretor."""
     if tipo not in ("visita", "reuniao"):
         return "Tipo inválido. Use 'visita' ou 'reuniao'."
+
+    # Visita sem imóvel chega ao corretor como um horário e nada mais: ele não
+    # sabe aonde ir. Aconteceu de verdade — o agente marcou "sábado às 10h na
+    # Bela Vista" e o agendamento ficou sem vínculo com o imóvel, porque o id
+    # só existe no retorno da busca e ele não o tinha guardado.
+    if tipo == "visita" and imovel_id is None:
+        logger.info(
+            "event=visita_sem_imovel lead_id=%s acao=recusada", ctx.deps.lead_id
+        )
+        raise ModelRetry(
+            "Uma visita é sempre a um imóvel, e este agendamento veio sem "
+            "`imovel_id` — o corretor receberia um horário sem saber aonde ir. "
+            "Chame de novo com o ID do imóvel que a pessoa escolheu; se você "
+            "não o tiver, use `buscar_imoveis` para recuperá-lo. Se o encontro "
+            "não for num imóvel do catálogo, use tipo='reuniao'."
+        )
+
     try:
-        dt = datetime.strptime(data_hora, "%Y-%m-%d %H:%M")
+        dt = para_guardar(datetime.strptime(data_hora, "%Y-%m-%d %H:%M"))
     except ValueError:
         return "Formato de data inválido. Use YYYY-MM-DD HH:MM."
 
@@ -577,7 +561,7 @@ def _erro_de_id(ctx, agendamento_id: int, db) -> str:
         )
 
     disponiveis = "; ".join(
-        f"ID {id_}: {tipo} em {quando:%d/%m às %H:%M}"
+        f"ID {id_}: {tipo} em {formatar(quando)}"
         + (f", {imovel}" if imovel else "")
         for id_, tipo, quando, _, imovel in itens
     )
@@ -633,7 +617,7 @@ async def confirmar_agendamento(
         )
         return (
             f"Compromisso {agendamento_id} confirmado: {atual.tipo} em "
-            f"{atual.data_hora:%d/%m/%Y às %H:%M}."
+            f"{formatar(atual.data_hora)}."
         )
 
 
@@ -671,7 +655,7 @@ async def cancelar_agendamento(
         )
         return (
             f"Compromisso {agendamento_id} cancelado: {tipo} em "
-            f"{quando:%d/%m/%Y às %H:%M}. O corretor verá o motivo registrado."
+            f"{formatar(quando)}. O corretor verá o motivo registrado."
         )
 
 
@@ -860,7 +844,7 @@ def texto_dos_compromissos(lead_id: int) -> str:
     for id_, tipo, quando, status, imovel in itens:
         onde = f", {imovel}" if imovel else ""
         linhas.append(
-            f"- ID {id_}: {tipo} em {quando:%d/%m/%Y às %H:%M}{onde} ({status})"
+            f"- ID {id_}: {tipo} em {formatar(quando)}{onde} ({status})"
         )
 
     qual = "estes IDs" if len(itens) > 1 else "este ID"

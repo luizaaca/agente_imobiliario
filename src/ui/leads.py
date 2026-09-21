@@ -13,17 +13,19 @@ O dashboard manda para ca: a lupa da carteira abre a ficha daquele lead.
 """
 
 import asyncio
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 import streamlit as st
 
-from src.db.models import Imovel, Lead
+from src.db.models import Agendamento, Imovel, Lead
 from src.db.session import get_db
 from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
+from src.tempo import agora, formatar, para_exibir, para_guardar
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
 from src.ui.tabela import (
     AJUDA_DA_BUSCA,
@@ -181,11 +183,7 @@ COLUNAS_DA_LISTA = (
     Coluna("Nome", 3, lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—"),
     # `em qualificacao` e a faixa fechada de orcamento sao os textos mais
     # longos da tabela: sem folga, um trunca e o outro quebra em duas linhas.
-    Coluna(
-        "Status", 3,
-        lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
-                     f"[{lead.status.replace('_', ' ')}]",
-    ),
+    Coluna("Status", 3, lambda lead: _selo_de_status(lead)),
     Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
     Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
     Coluna("Orçamento", 4, lambda lead: texto(faixa_de_orcamento(lead))),
@@ -194,17 +192,66 @@ COLUNAS_DA_LISTA = (
 )
 
 
+# Cor de cada situacao do compromisso, ao lado do selo de status do lead.
+# `agendado` sozinho nao diz o que importa para quem vai trabalhar a carteira:
+# uma visita que a pessoa ja confirmou e um caso; uma que continua pendente,
+# esperando retorno, e outro bem diferente.
+COR_DO_AGENDAMENTO = {"confirmado": "green", "pendente": "orange"}
+
+# Preenchido a cada desenho da lista, antes da tabela. Evita uma consulta por
+# linha: sao os compromissos de pe de todos os leads da pagina de uma vez.
+_situacao_por_lead: dict[int, str] = {}
+
+
+def _situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
+    """Situação do compromisso mais próximo de cada lead, numa consulta só."""
+    ids = [lead.id for lead in leads if lead.status == "agendado"]
+    if not ids:
+        return {}
+
+    linhas = (
+        db.query(Agendamento.lead_id, Agendamento.status, Agendamento.data_hora)
+        .filter(
+            Agendamento.lead_id.in_(ids),
+            Agendamento.status.in_(SchedulingService.STATUS_ATIVOS),
+        )
+        .order_by(Agendamento.data_hora.asc())
+        .all()
+    )
+    situacoes: dict[int, str] = {}
+    for lead_id, status, _ in linhas:
+        situacoes.setdefault(lead_id, status)  # o mais próximo manda
+    return situacoes
+
+
+def _selo_de_status(lead: Lead) -> str:
+    """O estágio do lead e, quando agendado, a situação da visita."""
+    selo = (
+        f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
+        f"[{lead.status.replace('_', ' ')}]"
+    )
+    situacao = _situacao_por_lead.get(lead.id)
+    if not situacao:
+        return selo
+    return f"{selo} :{COR_DO_AGENDAMENTO.get(situacao, 'gray')}-badge[{situacao}]"
+
+
 def _pedir_exclusao(lead: Lead) -> None:
     st.session_state[CHAVE_EXCLUSAO] = lead.id
     st.rerun()
 
 
 def _confirmacao_na_lista(lead: Lead) -> None:
-    """Confirmacao de exclusao logo abaixo da linha, na largura toda.
+    """Desfecho do follow-up e confirmacao de exclusao, abaixo da linha.
 
-    Na coluna dos botoes ela nao caberia: o aviso quebraria em varias linhas e
-    os botoes ficariam menores que o alvo confortavel de clique.
+    Na coluna dos botoes nao caberiam: o aviso quebraria em varias linhas e os
+    botoes ficariam menores que o alvo confortavel de clique.
     """
+    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
+    if aviso and aviso[0] == lead.id:
+        mostrar = st.success if aviso[1] == "ok" else st.info
+        mostrar(aviso[2], icon=":material/send:")
+
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return
 
@@ -231,6 +278,8 @@ def _confirmacao_na_lista(lead: Lead) -> None:
 ACOES_DA_LISTA = (
     Acao(":material/edit:", "Abrir a ficha deste lead", "acao_editar",
          lambda lead: abrir_ficha(lead.id)),
+    Acao(":material/send:", "Disparar follow-up para este lead", "acao_followup",
+         lambda lead: _disparar_followup(lead)),
     Acao(":material/delete:", "Excluir este lead", "acao_excluir", _pedir_exclusao),
 )
 
@@ -254,6 +303,11 @@ def _lista(db) -> None:
     if not leads:
         st.info("Nenhum lead encontrado com os filtros selecionados.")
         return
+
+    # Uma consulta só para a página inteira, antes de desenhar: o selo de
+    # status lê daqui em vez de ir ao banco linha a linha.
+    global _situacao_por_lead
+    _situacao_por_lead = _situacoes_de_agendamento(leads, db)
 
     tabela_de_leads(
         leads, COLUNAS_DA_LISTA, ACOES_DA_LISTA,
@@ -555,7 +609,10 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
             return
         inicial = {
             "tipo": atual.tipo if atual else "visita",
-            "quando": atual.data_hora if atual else datetime.now() + timedelta(days=1),
+            "quando": (
+                para_exibir(atual.data_hora) if atual
+                else agora() + timedelta(days=1)
+            ),
             "status": atual.status if atual else "pendente",
             "observacoes": (atual.observacoes if atual else "") or "",
             "imovel_id": atual.imovel_id if atual else None,
@@ -609,7 +666,8 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
         st.rerun()
 
     if salvou:
-        quando = datetime.combine(data, hora)
+        # O formulário devolve hora de São Paulo; o banco guarda em UTC.
+        quando = para_guardar(datetime.combine(data, hora))
         servico = SchedulingService()
         with get_db() as db:
             if editando:
@@ -645,7 +703,7 @@ def _confirmar_exclusao_de_agendamento(
         return
 
     st.warning(
-        f"Excluir a {tipo} de {data_hora:%d/%m/%Y às %H:%M}? "
+        f"Excluir a {tipo} de {formatar(data_hora)}? "
         "Para registrar que ela não aconteceu, use o status **cancelado**.",
         icon=":material/warning:",
     )
@@ -699,7 +757,7 @@ def _agendamentos(lead: Lead) -> None:
                 [7, 3, 2], vertical_alignment="center"
             )
             with col_quando:
-                st.markdown(f"**{tipo.capitalize()}** · {data_hora:%d/%m/%Y às %H:%M}")
+                st.markdown(f"**{tipo.capitalize()}** · {formatar(data_hora)}")
                 if titulo:
                     st.caption(f":material/home: #{imovel_id} · {titulo}")
                 if observacoes:

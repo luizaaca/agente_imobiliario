@@ -191,9 +191,11 @@ def test_finalidade_chega_ao_filtro_estruturado(llm_fake, catalogo, lead_id, dep
     assert "Cobertura Moema Alto Padrao" not in retorno
 
 
-def test_agendar_reuniao_cria_agendamento(llm_fake, lead_id, deps, db):
+def test_agendar_reuniao_cria_agendamento(llm_fake, catalogo, lead_id, deps, db):
     modelo = llm_fake(
-        ("agendar_reuniao", {"tipo": "visita", "data_hora": "2027-03-10 15:00"}),
+        ("agendar_reuniao", {
+            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1,
+        }),
         "Agendado!",
     )
     conversar("quero visitar", lead_id, deps, modelo)

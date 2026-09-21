@@ -20,6 +20,7 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+from src.tempo import UTC, formatar
 
 
 @pytest.fixture
@@ -222,9 +223,9 @@ def test_cancelar_o_ultimo_compromisso_tira_o_lead_de_agendado(
 # --- Duplicata ---------------------------------------------------------------
 
 
-def test_agendar_duas_vezes_o_mesmo_compromisso_nao_duplica(lead_id, deps, db):
+def test_agendar_duas_vezes_o_mesmo_compromisso_nao_duplica(catalogo, lead_id, deps, db):
     """O defeito original: confirmar virava um segundo agendamento igual."""
-    args = {"tipo": "visita", "data_hora": "2027-03-10 15:00"}
+    args = {"tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1}
 
     _chamar("agendar_reuniao", args, lead_id, deps, db)
     retorno = _chamar("agendar_reuniao", args, lead_id, deps, db)
@@ -234,13 +235,15 @@ def test_agendar_duas_vezes_o_mesmo_compromisso_nao_duplica(lead_id, deps, db):
     assert str(agendamentos[0].id) in retorno
 
 
-def test_remarcar_para_outro_horario_cria_compromisso_novo(lead_id, deps, db):
+def test_remarcar_para_outro_horario_cria_compromisso_novo(catalogo, lead_id, deps, db):
     _chamar(
         "agendar_reuniao",
-        {"tipo": "visita", "data_hora": "2027-03-10 15:00"}, lead_id, deps, db)
+        {"tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1},
+        lead_id, deps, db)
     _chamar(
         "agendar_reuniao",
-        {"tipo": "visita", "data_hora": "2027-03-11 15:00"}, lead_id, deps, db)
+        {"tipo": "visita", "data_hora": "2027-03-11 15:00", "imovel_id": 1},
+        lead_id, deps, db)
 
     assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 2
 
@@ -319,3 +322,73 @@ def test_compromisso_cancelado_sai_do_contexto(agendamento, lead_id, db):
 
     assert f"ID {agendamento.id}" not in contexto
     assert "Compromissos marcados: nenhum" in contexto
+
+# --- Visita sempre tem imovel ------------------------------------------------
+
+
+def test_visita_sem_imovel_e_recusada(catalogo, lead_id, deps, db):
+    """O corretor receberia um horario sem saber aonde ir.
+
+    Aconteceu de verdade: o agente marcou "sabado as 10h na Bela Vista" e o
+    agendamento ficou sem vinculo com o imovel, porque o id so existe no
+    retorno da busca e ele nao o tinha guardado.
+    """
+    retorno = _chamar(
+        "agendar_reuniao",
+        {"tipo": "visita", "data_hora": "2027-03-10 15:00"},
+        lead_id, deps, db)
+
+    assert "sempre a um imóvel" in retorno
+    assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 0
+
+
+def test_a_recusa_diz_as_duas_saidas(catalogo, lead_id, deps, db):
+    """Sem saida clara o modelo insiste no erro ate estourar as retentativas."""
+    retorno = _chamar(
+        "agendar_reuniao",
+        {"tipo": "visita", "data_hora": "2027-03-10 15:00"},
+        lead_id, deps, db)
+
+    assert "buscar_imoveis" in retorno
+    assert "reuniao" in retorno
+
+
+def test_reuniao_nao_precisa_de_imovel(lead_id, deps, db):
+    """Nem todo encontro e num imovel do catalogo."""
+    _chamar(
+        "agendar_reuniao",
+        {"tipo": "reuniao", "data_hora": "2027-03-10 15:00"},
+        lead_id, deps, db)
+
+    assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 1
+
+
+# --- Fuso horario ------------------------------------------------------------
+
+
+def test_a_hora_combinada_e_a_hora_que_o_lead_ve(catalogo, lead_id, deps, db):
+    """O container roda em UTC; sem converter, "15h" virava meio-dia aqui.
+
+    Guardar sem fuso fazia o Postgres assumir UTC: o lead 32 pediu 15h e o
+    banco ficou com 15:00+00, que em Sao Paulo e 12:00.
+    """
+    _chamar(
+        "agendar_reuniao",
+        {"tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1},
+        lead_id, deps, db)
+
+    guardado = db.query(Agendamento).filter(Agendamento.lead_id == lead_id).one()
+
+    assert formatar(guardado.data_hora) == "10/03/2027 às 15:00"
+    assert guardado.data_hora.astimezone(UTC).hour == 18  # 15h de SP sao 18h UTC
+
+
+def test_o_contexto_mostra_a_hora_no_relogio_do_lead(catalogo, lead_id, deps, db):
+    _chamar(
+        "agendar_reuniao",
+        {"tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1},
+        lead_id, deps, db)
+
+    contexto = montar_contexto_do_lead(LeadService().get_lead(lead_id, db))
+
+    assert "15:00" in contexto
