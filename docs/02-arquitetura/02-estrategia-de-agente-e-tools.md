@@ -30,9 +30,24 @@ O agente não deve despejar um questionário completo de uma vez. O fluxo ideal 
 
 O `perfil_narrativo` é tratado como um artefato vivo:
 - O agente recebe o perfil narrativo atual como parte do seu contexto a cada turno.
-- Quando a conversa revela informações novas (preferência, restrição, objeção, reação a um imóvel), o agente chama a tool `atualizar_perfil_lead` com o texto atualizado.
+- Quando a conversa revela informação nova (preferência, restrição, objeção, reação a um imóvel), o agente chama a tool `atualizar_perfil_lead` **com a novidade do turno, e só com ela**.
 - **Rejeições são dados valiosos**: "rejeitou o AP-007 porque achou a cozinha pequena" é tão importante quanto "gostou do AP-003".
 - O perfil é o **produto principal do SDR** — o artefato que justifica sua existência ao entregar contexto completo ao corretor.
+
+### Quem escreve o perfil
+
+O agente conversacional relata; quem redige é um agente separado, o **consolidador de perfil** (`src/agent/perfil_agent.py`). A tool lê o perfil gravado, entrega ao consolidador esse texto mais a novidade, e grava o resultado.
+
+A separação é o que garante o acúmulo. O agente conversacional nunca reescreve o texto anterior — ele não o tem como parâmetro —, então não tem como deixar nada de fora ao resumir. E o consolidador trabalha com dois textos, sem tools e sem histórico de conversa, o que mantém a chamada curta e o resultado previsível.
+
+Regras do consolidador:
+- nada do perfil atual pode sumir; a novidade acrescenta;
+- quando a novidade contradiz o perfil, vale a novidade, e a mudança fica registrada ("procurava na zona sul, passou a considerar a zona norte");
+- prosa corrida, no máximo 8 linhas, agrupada por assunto — é o corretor que lê.
+
+Se o provider falhar ou devolver texto vazio, a tool emenda a novidade ao fim do perfil sem consolidar. Um perfil com emenda visível é pior de ler que um consolidado, e muito melhor que um perfil sem a informação — que é a única cópia do que a pessoa acabou de contar.
+
+O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`: entra no orçamento de tokens do lead, mas não conta como turno de conversa para o limite que dispara o handover.
 
 ## 4. Tools do agente
 
@@ -40,7 +55,7 @@ O `perfil_narrativo` é tratado como um artefato vivo:
 |---|---|
 | `buscar_imoveis` | Consulta catálogo com filtros e ranking textual |
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
-| `atualizar_perfil_lead` | **Atualiza o perfil narrativo textual** com novas informações da conversa |
+| `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
 | `gerar_resumo_corretor` | Sintetiza briefing executivo final a partir do perfil e histórico |
 
@@ -53,6 +68,7 @@ O `perfil_narrativo` é tratado como um artefato vivo:
 - Poucas tools expostas por vez.
 - Sem parâmetros redundantes que o sistema já conhece.
 - Retornos estruturados para facilitar rastreabilidade e UI.
+- **O agente escreve o delta, nunca o estado inteiro.** Pedir a um LLM que reescreva um texto acumulado para preservá-lo é apostar num resumo que pode encolher; pedir só o que mudou torna a perda impossível e ainda barateia a chamada. Quem precisa do estado completo é o código, que já o tem no banco.
 
 ---
 

@@ -214,14 +214,16 @@ def test_agendar_reuniao_rejeita_data_malformada(llm_fake, lead_id, deps, db):
     assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 0
 
 
-def test_atualizar_perfil_narrativo(llm_fake, lead_id, deps, db):
-    texto = "Lead busca apartamento proximo ao metro; rejeitou opcoes sem varanda."
+def test_atualizar_perfil_narrativo(llm_fake, perfil_fake, lead_id, deps, db):
+    """A tool manda a novidade ao consolidador e grava o texto que ele devolve."""
+    consolidado = "Busca apartamento proximo ao metro. Recusou opcoes sem varanda."
     modelo = llm_fake(
-        ("atualizar_perfil_lead", {"perfil_narrativo_atualizado": texto}),
+        ("atualizar_perfil_lead", {"novidades": "recusou o AP-7 por nao ter varanda"}),
         "Anotado!",
     )
-    conversar("nao gostei, quero varanda", lead_id, deps, modelo)
-    assert LeadService().get_lead(lead_id, db).perfil_narrativo == texto
+    with perfil_fake(consolidado):
+        conversar("nao gostei, quero varanda", lead_id, deps, modelo)
+    assert LeadService().get_lead(lead_id, db).perfil_narrativo == consolidado
 
 
 def test_gerar_resumo_corretor_persiste_o_resumo(llm_fake, lead_id, deps, db):

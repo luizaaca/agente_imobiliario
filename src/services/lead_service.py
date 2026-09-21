@@ -323,10 +323,12 @@ class LeadService:
     def update_perfil_narrativo(
         self, lead_id: int, novo_texto: str, db: Session
     ) -> Optional[Lead]:
-        """Atualiza o perfil narrativo do lead.
+        """Grava o perfil narrativo do lead.
 
-        Recebe o texto completo atualizado (não incremental),
-        pois a LLM é responsável por manter a coerência do perfil.
+        Recebe o texto inteiro e o substitui. Quem monta esse texto é o agente
+        de consolidação (`src.agent.perfil_agent`), que junta o perfil anterior
+        com a novidade do turno antes de chegar aqui — a coerência e o acúmulo
+        se resolvem lá, e esta camada só persiste o resultado.
         """
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         if not lead:

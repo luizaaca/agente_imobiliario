@@ -279,7 +279,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [x] Implementar tools tipadas:
   - [x] `buscar_imoveis`
   - [x] `registrar_qualificacao`
-  - [x] `atualizar_perfil_lead` — atualização incremental do perfil narrativo
+  - [x] `atualizar_perfil_lead` — acréscimo ao perfil narrativo, consolidado por agente dedicado
   - [x] `agendar_reuniao`
   - [x] `gerar_resumo_corretor`
   - [x] `confirmar_agendamento` e `cancelar_agendamento` — o lead confirma ou desmarca pela conversa

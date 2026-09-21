@@ -41,3 +41,5 @@ Adotar um campo textual incremental chamado **`perfil_narrativo`** como artefato
 ## Impacto arquitetural
 
 O agente deve receber o `perfil_narrativo` como contexto e atualizá-lo incrementalmente por tool dedicada.
+
+A estratégia de atualização que as consequências negativas exigem é a separação entre quem observa e quem redige: o agente conversacional informa à tool apenas a novidade do turno, e um agente de consolidação dedicado funde essa novidade ao texto já gravado. O agente que conversa nunca recebe o perfil inteiro como parâmetro, então não tem como encolhê-lo ao reescrever; e o limite de tamanho fica sob controle do prompt do consolidador, num só lugar.

@@ -181,7 +181,7 @@ Lead começa como compra residencial e depois revela perfil investidor.
 ### Fluxo esperado
 1. Agente detecta mudança de intenção.
 2. Chama tools para atualizar a qualificação estruturada.
-3. Chama `atualizar_perfil_lead` com a nova leitura do contexto.
+3. Chama `atualizar_perfil_lead` relatando a mudança de intenção; o consolidador registra o antes e o depois no perfil, sem apagar o que já havia.
 4. Ajusta estratégia de perguntas e recomendação.
 5. Score e resumo futuro passam a refletir o novo contexto.
 

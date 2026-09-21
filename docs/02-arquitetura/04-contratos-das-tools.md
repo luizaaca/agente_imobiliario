@@ -191,28 +191,29 @@ Atualização persistente do lead no banco.
 ## 4. `atualizar_perfil_lead`
 
 ### Objetivo
-Atualizar incrementalmente o `perfil_narrativo` do lead.
+Acrescentar ao `perfil_narrativo` do lead o que a conversa acabou de revelar.
 
 ### Input esperado
-- `perfil_narrativo_atualizado`
-- `motivo_atualizacao` (opcional, recomendado)
+- `novidades` — a novidade do turno, em uma ou duas frases. **Só a novidade**: o perfil já gravado é preservado pela tool e não deve ser repetido aqui.
 
 ### Output esperado
-- `perfil_narrativo` atualizado;
-- confirmação de persistência.
+Confirmação de persistência.
 
 ### Efeitos colaterais
-Escrita no campo `perfil_narrativo` do lead.
+- leitura do `perfil_narrativo` atual;
+- chamada ao consolidador de perfil (`src/agent/perfil_agent.py`), que funde os dois textos;
+- escrita do resultado no campo `perfil_narrativo` do lead;
+- registro do custo em `llm_usage` com `operation="perfil"`.
 
 ### Regras
-- preservar coerência e legibilidade;
 - registrar preferências, objeções, rejeições e contexto de vida relevantes;
-- evitar duplicação desnecessária;
-- não transformar o perfil em transcrição bruta da conversa.
+- dado padronizado (orçamento, bairro, quartos, telefone) não entra aqui: vai em `registrar_qualificacao`;
+- o consolidador preserva tudo que já estava no perfil, e só sobrescreve o que a novidade contradiz;
+- o perfil não é transcrição bruta da conversa: é o texto que o corretor lê antes de ligar.
 
 ### Erros tratáveis
 - lead inexistente;
-- texto inválido ou vazio;
+- falha ou resposta vazia do consolidador — a novidade é emendada ao fim do perfil sem consolidação, e nada se perde;
 - falha de persistência.
 
 ---

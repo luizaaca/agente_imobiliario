@@ -113,7 +113,7 @@ def test_cenario_1_compra_residencial(llm_fake, catalogo, db):
 # --- Cenário 2: investimento -------------------------------------------------
 
 
-def test_cenario_2_investimento(llm_fake, catalogo, db):
+def test_cenario_2_investimento(llm_fake, perfil_fake, catalogo, db):
     """Perfil investidor → busca por ticket → resumo executivo ao corretor."""
     lead_service = LeadService()
     lead_id = lead_service.get_or_create_lead(
@@ -138,12 +138,14 @@ def test_cenario_2_investimento(llm_fake, catalogo, db):
         "Separei opcoes com bom potencial de locacao.",
     ), db)
 
-    # 3. O perfil narrativo acumula o contexto qualitativo
+    # 3. O perfil narrativo acumula o contexto qualitativo: o SDR relata a
+    #    novidade e o agente de consolidacao devolve o perfil inteiro.
     narrativa = "Investidor buscando ticket ate 500 mil na zona oeste, foco em renda de aluguel."
-    conversar(lead_id, "Priorizo liquidez.", llm_fake(
-        ("atualizar_perfil_lead", {"perfil_narrativo_atualizado": narrativa}),
-        "Anotado no seu perfil.",
-    ), db)
+    with perfil_fake(narrativa):
+        conversar(lead_id, "Priorizo liquidez.", llm_fake(
+            ("atualizar_perfil_lead", {"novidades": "prioriza liquidez na revenda"}),
+            "Anotado no seu perfil.",
+        ), db)
     assert lead_service.get_lead(lead_id, db).perfil_narrativo == narrativa
 
     # 4. Resumo executivo para o corretor

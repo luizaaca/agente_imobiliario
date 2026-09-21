@@ -13,6 +13,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 
 from src.agent.history import HISTORY_LIMIT, build_message_history
+from src.agent.perfil_agent import consolidar_perfil, juntar_sem_llm
 from src.agent.prompts import HANDOVER_MESSAGE, SYSTEM_PROMPT, UNAVAILABLE_MESSAGE
 from src.agent.provider import LLMConfigError, build_model
 from src.config import settings
@@ -420,15 +421,62 @@ async def registrar_qualificacao(
 @_instrumentada
 async def atualizar_perfil_lead(
     ctx: RunContext[SDRDependencies],
-    perfil_narrativo_atualizado: str,
-    motivo_atualizacao: Optional[str] = None,
+    novidades: Annotated[str, Field(min_length=3, description=(
+        "O que esta conversa acabou de revelar sobre a pessoa, em uma ou duas "
+        "frases: uma preferência, uma restrição, uma objeção, o motivo de ter "
+        "recusado um imóvel, o contexto de vida dela. Escreva SÓ a novidade — "
+        "o perfil que já existe é preservado e não precisa ser repetido."))],
 ) -> str:
-    """Atualizar o perfil narrativo textual do lead com novas informações."""
+    """Registrar no perfil narrativo algo qualitativo que a conversa revelou.
+
+    O que você escreve aqui é fundido ao perfil que já existe; nada do que
+    estava lá se perde. Use para o que não cabe em campo padronizado: por que
+    ela recusou um imóvel, o que valoriza, como é a vida dela. Orçamento,
+    bairro, quartos e telefone vão em `registrar_qualificacao`.
+    """
     with get_db() as db:
-        ctx.deps.lead_service.update_perfil_narrativo(
-            ctx.deps.lead_id, perfil_narrativo_atualizado, db
+        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
+        if lead is None:
+            return "Lead não encontrado."
+        perfil_atual = lead.perfil_narrativo
+
+    comeco = time.monotonic()
+    try:
+        consolidado = await consolidar_perfil(perfil_atual, novidades)
+        texto = consolidado.texto
+        registrar = functools.partial(
+            ctx.deps.llm_usage_service.record,
+            tokens_in=consolidado.tokens_in,
+            tokens_out=consolidado.tokens_out,
         )
-        return "Perfil narrativo atualizado com sucesso."
+    except Exception as e:
+        # A novidade não pode se perder junto com a chamada: ela é a única
+        # cópia do que a pessoa acabou de contar. Vai emendada ao fim do
+        # perfil, sem consolidação, e o corretor lê tudo do mesmo jeito.
+        logger.warning(
+            "event=consolidacao_de_perfil_falhou lead_id=%s tipo_erro=%s "
+            "acao=anexado_sem_consolidar",
+            ctx.deps.lead_id, type(e).__name__,
+        )
+        texto = juntar_sem_llm(perfil_atual, novidades)
+        registrar = functools.partial(
+            ctx.deps.llm_usage_service.record_failure,
+            error_type=type(e).__name__,
+        )
+
+    with get_db() as db:
+        # `operation="perfil"` separa este custo do turno de conversa: são
+        # tokens do mesmo lead, e entram no orçamento dele, mas não contam
+        # como turno para o limite que dispara o handover.
+        registrar(
+            lead_id=ctx.deps.lead_id,
+            model=settings.LLM_MODEL,
+            operation="perfil",
+            latency_ms=_decorrido_ms(comeco),
+            db=db,
+        )
+        ctx.deps.lead_service.update_perfil_narrativo(ctx.deps.lead_id, texto, db)
+    return "Perfil narrativo atualizado."
 
 
 @sdr_agent.tool

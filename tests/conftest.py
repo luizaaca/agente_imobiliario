@@ -191,3 +191,26 @@ def modelo_fake(*respostas):
 def llm_fake():
     """Fábrica de modelos simulados, para injetar via `agent.override`."""
     return modelo_fake
+
+
+@pytest.fixture
+def perfil_fake():
+    """Simula o agente que consolida o perfil narrativo.
+
+    `atualizar_perfil_lead` aciona um segundo LLM, separado do SDR. Sem este
+    override o teste sairia para o provider real e cairia no caminho de
+    degradacao da tool, gravando a novidade sem consolidar.
+
+    Usa-se como contexto em volta do turno:
+    `with perfil_fake("texto consolidado"): conversar(...)`.
+    """
+    from contextlib import contextmanager
+
+    from src.agent import perfil_agent as perfil_mod
+
+    @contextmanager
+    def usar(*respostas):
+        with perfil_mod.perfil_agent.override(model=modelo_fake(*respostas)):
+            yield
+
+    return usar
