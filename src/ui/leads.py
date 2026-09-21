@@ -192,10 +192,14 @@ COLUNAS_DA_LISTA = (
 )
 
 
-# Cor de cada situacao do compromisso, ao lado do selo de status do lead.
-# `agendado` sozinho nao diz o que importa para quem vai trabalhar a carteira:
-# uma visita que a pessoa ja confirmou e um caso; uma que continua pendente,
-# esperando retorno, e outro bem diferente.
+# A situacao da visita entra como COR do proprio selo `agendado`, e nao como um
+# segundo selo ao lado: dois selos na mesma celula quebravam a linha e
+# desalinhavam a tabela inteira.
+#
+# Distinguir importa para quem vai trabalhar a carteira: uma visita que a
+# pessoa ja confirmou e um caso, uma que continua pendente, esperando retorno,
+# e outro bem diferente. Verde e o desfecho bom, que e o mesmo verde que
+# `agendado` ja tinha; laranja pede atencao sem soar erro.
 COR_DO_AGENDAMENTO = {"confirmado": "green", "pendente": "orange"}
 
 # Preenchido a cada desenho da lista, antes da tabela. Evita uma consulta por
@@ -225,15 +229,13 @@ def _situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
 
 
 def _selo_de_status(lead: Lead) -> str:
-    """O estágio do lead e, quando agendado, a situação da visita."""
-    selo = (
-        f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
-        f"[{lead.status.replace('_', ' ')}]"
-    )
+    """O estágio do lead, colorido pela situação da visita quando há uma."""
     situacao = _situacao_por_lead.get(lead.id)
-    if not situacao:
-        return selo
-    return f"{selo} :{COR_DO_AGENDAMENTO.get(situacao, 'gray')}-badge[{situacao}]"
+    cor = (
+        COR_DO_AGENDAMENTO.get(situacao)
+        or COR_DO_STATUS.get(lead.status, "gray")
+    )
+    return f":{cor}-badge[{lead.status.replace('_', ' ')}]"
 
 
 def _pedir_exclusao(lead: Lead) -> None:
