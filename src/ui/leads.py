@@ -192,16 +192,6 @@ COLUNAS_DA_LISTA = (
 )
 
 
-# A situacao da visita entra como COR do proprio selo `agendado`, e nao como um
-# segundo selo ao lado: dois selos na mesma celula quebravam a linha e
-# desalinhavam a tabela inteira.
-#
-# Distinguir importa para quem vai trabalhar a carteira: uma visita que a
-# pessoa ja confirmou e um caso, uma que continua pendente, esperando retorno,
-# e outro bem diferente. Verde e o desfecho bom, que e o mesmo verde que
-# `agendado` ja tinha; laranja pede atencao sem soar erro.
-COR_DO_AGENDAMENTO = {"confirmado": "green", "pendente": "orange"}
-
 # Preenchido a cada desenho da lista, antes da tabela. Evita uma consulta por
 # linha: sao os compromissos de pe de todos os leads da pagina de uma vez.
 _situacao_por_lead: dict[int, str] = {}
@@ -229,10 +219,18 @@ def _situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
 
 
 def _selo_de_status(lead: Lead) -> str:
-    """O estágio do lead, colorido pela situação da visita quando há uma."""
+    """O estágio do lead, colorido pela situação da visita quando há uma.
+
+    A situação entra como cor do próprio selo, e não como um segundo selo ao
+    lado: dois selos na mesma célula quebravam a linha e desalinhavam a tabela.
+
+    A cor é a mesma que a situação já tem na ficha — azul para confirmado,
+    laranja para pendente. Um segundo vocabulário de cores para a mesma coisa
+    obrigaria a reaprender a leitura ao trocar de tela.
+    """
     situacao = _situacao_por_lead.get(lead.id)
     cor = (
-        COR_DO_AGENDAMENTO.get(situacao)
+        COR_DO_STATUS_DE_AGENDAMENTO.get(situacao)
         or COR_DO_STATUS.get(lead.status, "gray")
     )
     return f":{cor}-badge[{lead.status.replace('_', ' ')}]"
