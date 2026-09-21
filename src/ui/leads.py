@@ -575,6 +575,22 @@ def _conversa(lead: Lead) -> None:
                 st.markdown(markdown_seguro(conteudo))
 
 
+def _resumo_para_o_corretor(lead: Lead) -> None:
+    """O briefing executivo do atendimento, escrito no encerramento.
+
+    É o produto final do SDR: o que o corretor lê antes de ligar, para não
+    precisar reconstruir a conversa inteira a partir do histórico.
+    """
+    if not lead.resumo:
+        st.caption(
+            "O resumo é gerado quando o atendimento é encerrado — por "
+            "agendamento, desistência ou pedido de contato humano."
+        )
+        return
+
+    st.markdown(markdown_seguro(lead.resumo))
+
+
 def _opcoes_de_imovel(db) -> list[tuple[Optional[int], str]]:
     """(id, rótulo) dos imóveis disponíveis, com uma opção vazia na frente.
 
@@ -907,11 +923,13 @@ def _ficha(lead_id: int) -> None:
     _avisos_e_confirmacao(lead)
     st.divider()
 
-    ficha, canal, conversa, agenda = st.tabs(
-        ["Ficha", "Canal", "Conversa", "Agendamentos"]
+    ficha, resumo, canal, conversa, agenda = st.tabs(
+        ["Ficha", "Resumo", "Canal", "Conversa", "Agendamentos"]
     )
     with ficha:
         _formulario(lead)
+    with resumo:
+        _resumo_para_o_corretor(lead)
     with canal:
         _canal_do_lead(lead)
     with conversa:

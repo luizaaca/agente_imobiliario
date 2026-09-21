@@ -148,16 +148,23 @@ def test_cenario_2_investimento(llm_fake, perfil_fake, catalogo, db):
         ), db)
     assert lead_service.get_lead(lead_id, db).perfil_narrativo == narrativa
 
-    # 4. Resumo executivo para o corretor
-    conversar(lead_id, "Pode me passar para um corretor.", llm_fake(
-        ("gerar_resumo_corretor", {}), "Encaminhei seu perfil ao corretor."
-    ), db)
+    # 4. Encerramento: resumo executivo para o corretor e saída da régua
+    with perfil_fake(narrativa):
+        conversar(lead_id, "Pode me passar para um corretor.", llm_fake(
+            ("encerrar_atendimento", {
+                "desfecho": "pediu_corretor",
+                "motivo": "quer falar com um especialista antes de decidir",
+            }),
+            "Encaminhei seu perfil ao corretor.",
+        ), db)
 
-    resumo = lead_service.get_lead(lead_id, db).resumo
-    assert resumo is not None
-    assert "Resumo Executivo" in resumo
-    assert "investimento" in resumo
-    assert narrativa in resumo
+    lead = lead_service.get_lead(lead_id, db)
+    assert lead.resumo is not None
+    assert "Resumo Executivo" in lead.resumo
+    assert "investimento" in lead.resumo
+    assert narrativa in lead.resumo
+    # Um corretor assumiu: o follow-up automático não pode chegar por cima.
+    assert lead.status == "inativo"
 
 
 # --- Cenário 3: follow-up automático ----------------------------------------

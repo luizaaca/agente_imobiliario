@@ -241,7 +241,7 @@ async def process_message(lead_id: int, user_text: str, deps: dict) -> str:
     if await usage_service.is_conversation_over_limit(lead_id):
         logger.info(f"Lead {lead_id} atingiu limite de conversa. Fazendo handover.")
         # Gera resumo final e retorna mensagem de handover
-        await gerar_resumo_corretor(lead_id)
+        await registrar_handover(lead_id)  # gera o resumo e marca o lead como inativo
         return MENSAGEM_HANDOVER
 
     # 2. Executar o agente

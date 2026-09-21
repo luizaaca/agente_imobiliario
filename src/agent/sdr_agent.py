@@ -6,7 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import Field
 from pydantic_ai import Agent, ModelRetry, RunContext
@@ -434,10 +434,23 @@ async def atualizar_perfil_lead(
     ela recusou um imóvel, o que valoriza, como é a vida dela. Orçamento,
     bairro, quartos e telefone vão em `registrar_qualificacao`.
     """
+    if not await _anotar_no_perfil(ctx, novidades):
+        return "Lead não encontrado."
+    return "Perfil narrativo atualizado."
+
+
+async def _anotar_no_perfil(ctx: RunContext[SDRDependencies], novidades: str) -> bool:
+    """Funde `novidades` ao perfil do lead pelo consolidador. Falso se não há lead.
+
+    Fica separado da tool porque o encerramento do atendimento anota pelo
+    mesmo caminho: o motivo da saída é informação de perfil como qualquer
+    outra, e escrevê-la por outra via daria dois jeitos de montar o mesmo
+    texto — que foi o que fez o perfil encolher antes de haver consolidador.
+    """
     with get_db() as db:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         if lead is None:
-            return "Lead não encontrado."
+            return False
         perfil_atual = lead.perfil_narrativo
 
     comeco = time.monotonic()
@@ -476,7 +489,7 @@ async def atualizar_perfil_lead(
             db=db,
         )
         ctx.deps.lead_service.update_perfil_narrativo(ctx.deps.lead_id, texto, db)
-    return "Perfil narrativo atualizado."
+    return True
 
 
 @sdr_agent.tool
@@ -707,52 +720,93 @@ async def cancelar_agendamento(
         )
 
 
+# O que pode ter acontecido para não haver mais o que fazer pela conversa.
+Desfecho = Literal["agendou", "desistiu", "pediu_corretor"]
+
+# Desfechos em que o lead sai do alcance das réguas de follow-up. `agendado`
+# fica de fora de propósito: o compromisso de pé ainda precisa do lembrete de
+# confirmação, que é a régua `pos_agendamento`.
+DESFECHOS_QUE_ENCERRAM = ("desistiu", "pediu_corretor")
+
+
 @sdr_agent.tool
 @_instrumentada
-async def gerar_resumo_corretor(
+async def encerrar_atendimento(
     ctx: RunContext[SDRDependencies],
+    desfecho: Annotated[Desfecho, Field(description=(
+        "'agendou' quando a visita ou reunião já está marcada e não falta "
+        "nada; 'desistiu' quando a pessoa disse que não quer seguir; "
+        "'pediu_corretor' quando ela quer falar com uma pessoa."))],
+    motivo: Annotated[str, Field(max_length=200, description=(
+        "O que ela disse, na linguagem dela e em uma frase. Ex.: 'achou tudo "
+        "acima do orçamento depois de ver três opções'. Esta frase é o que o "
+        "corretor lê para saber por que a conversa terminou assim."))],
 ) -> str:
-    """Gerar briefing executivo para o corretor."""
+    """Fechar o atendimento quando não há mais nada que você possa fazer.
+
+    Faz três coisas de uma vez: registra o motivo no perfil, gera o resumo
+    executivo para o corretor e tira a pessoa da régua de follow-up quando o
+    caso é de saída. Depois disto, agradeça e encerre — sem nova pergunta.
+
+    Só chame quando o assunto realmente acabou. Dúvida, silêncio ou "vou
+    pensar" não é desistência: é conversa em aberto, e quem retoma é o
+    follow-up, não você.
+    """
     with get_db() as db:
-        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
-        if not lead:
-            return "Lead não encontrado."
-        messages = ctx.deps.lead_service.get_history(ctx.deps.lead_id, 50, db)
+        compromissos = compromissos_ativos(ctx.deps.lead_id, db)
 
-        nome = lead.nome or f"Lead {lead.id}"
-        intencao = lead.intencao or "não informada"
-        orc_min = lead.orcamento_min or "?"
-        orc_max = lead.orcamento_max or "?"
-        regiao = lead.regiao_interesse or lead.bairro_interesse or "não informada"
-        quartos = lead.quartos or "não informado"
-        urgencia = lead.urgencia or "não informada"
-        score = lead.score or "não calculado"
-        perfil_nar = lead.perfil_narrativo or "Ainda não construído."
-        total_msgs = len(messages)
-        user_msgs = sum(1 for m in messages if m.role == "user")
-
-        resumo = (
-            f"## Resumo Executivo — {nome}\n\n"
-            f"### Perfil\n"
-            f"- Intenção: {intencao}\n"
-            f"- Orçamento: R$ {orc_min} a R$ {orc_max}\n"
-            f"- Região: {regiao}\n"
-            f"- Quartos: {quartos}\n"
-            f"- Urgência: {urgencia}\n"
-            f"- Score: {score}/10\n"
-            f"- Status: {lead.status}\n\n"
-            f"### Perfil Narrativo\n{perfil_nar}\n\n"
-            f"### Histórico ({total_msgs} mensagens)\n"
-            f"Conversa ativa com {user_msgs} mensagens do lead.\n\n"
-            f"### Próximos Passos\n"
-            f"Baseado no score e perfil, o corretor deve priorizar o contato."
+    # Os dois desencontros possíveis entre o que o modelo diz e o que o banco
+    # mostra. Ambos deixariam a agenda do corretor errada, e nenhum dos dois
+    # ele consegue perceber sozinho depois.
+    if desfecho == "agendou" and not compromissos:
+        logger.info(
+            "event=encerramento_sem_compromisso lead_id=%s acao=recusado",
+            ctx.deps.lead_id,
+        )
+        raise ModelRetry(
+            "Não há nenhum compromisso de pé para esta pessoa, então o "
+            "atendimento não terminou em agendamento. Marque com "
+            "`agendar_reuniao` antes de encerrar, ou encerre com o desfecho "
+            "que realmente aconteceu."
+        )
+    if desfecho in DESFECHOS_QUE_ENCERRAM and compromissos:
+        logger.info(
+            "event=encerramento_com_compromisso_de_pe lead_id=%s acao=recusado",
+            ctx.deps.lead_id,
+        )
+        raise ModelRetry(
+            f"Esta pessoa tem {len(compromissos)} compromisso(s) de pé na "
+            "agenda do corretor. Encerrar agora apagaria o lembrete de "
+            "confirmação e ele iria ao imóvel à toa. Use "
+            "`cancelar_agendamento` primeiro, e só então encerre."
         )
 
-        # Save resumo to lead
+    if not await _anotar_no_perfil(ctx, f"Encerrou o atendimento: {motivo}."):
+        return "Lead não encontrado."
+
+    with get_db() as db:
+        if desfecho in DESFECHOS_QUE_ENCERRAM:
+            # `inativo` é o único status fora dos `status_alvo` de todas as
+            # réguas: é assim que a pessoa para de receber follow-up. Se ela
+            # voltar a escrever, `process_message` a devolve à qualificação.
+            ctx.deps.lead_service.update_status(ctx.deps.lead_id, "inativo", db)
+
+        resumo = SummaryService().generate_resumo(ctx.deps.lead_id, db)
         ctx.deps.lead_service.update_qualification(
             ctx.deps.lead_id, {"resumo": resumo}, db
         )
-        return resumo
+
+    logger.info(
+        "event=atendimento_encerrado lead_id=%s desfecho=%s",
+        ctx.deps.lead_id, desfecho,
+    )
+    # O resumo em si não volta: ele é para o corretor ler na ficha, e mandá-lo
+    # de volta ao modelo custaria alguns milhares de tokens para nada.
+    return (
+        "Atendimento encerrado e resumo entregue ao corretor. Agora agradeça "
+        "em uma ou duas linhas, diga o que acontece a seguir e termine sem "
+        "fazer pergunta nenhuma."
+    )
 
 
 def _formatar_orcamento(lead) -> Optional[str]:
@@ -946,6 +1000,10 @@ def _registrar_handover(
 
     resumo = SummaryService().generate_resumo(lead_id, db)
     deps.lead_service.update_qualification(lead_id, {"resumo": resumo}, db)
+    # Mesmo encerramento de `encerrar_atendimento`: daqui em diante quem
+    # atende é uma pessoa, e um follow-up automático cobrando o próximo dado
+    # chegaria por cima dela.
+    deps.lead_service.update_status(lead_id, "inativo", db)
     deps.lead_service.save_message(
         lead_id=lead_id,
         channel=channel,
@@ -1059,6 +1117,17 @@ async def process_message(
             db=db,
         )
 
+        # O lead respondeu: entra (ou volta) para o funil ativo. Um lead
+        # marcado como inativo pelo follow-up é retomado aqui.
+        #
+        # Antes do turno, e não depois: durante a execução as tools movem o
+        # status (para `qualificado`, `agendado`, ou `inativo` quando o agente
+        # encerra o atendimento), e reativar no fim desfaria o que elas
+        # acabaram de gravar.
+        lead = deps.lead_service.get_lead(lead_id, db)
+        if lead and lead.status in ("novo", "inativo"):
+            deps.lead_service.update_status(lead_id, "em_qualificacao", db)
+
         # Check limits
         if deps.llm_usage_service.is_daily_budget_exceeded(db):
             logger.warning(
@@ -1170,11 +1239,5 @@ async def process_message(
             message_type="chat",
             db=db,
         )
-
-        # O lead respondeu: entra (ou volta) para o funil ativo. Um lead
-        # marcado como inativo pelo follow-up é retomado aqui.
-        lead = deps.lead_service.get_lead(lead_id, db)
-        if lead and lead.status in ("novo", "inativo"):
-            deps.lead_service.update_status(lead_id, "em_qualificacao", db)
 
     return response_text

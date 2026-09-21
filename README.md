@@ -266,7 +266,7 @@ app.py (Streamlit)              run_telegram.py
             │                               │
             └──────────┬────────────────────┘
                        │
-        src/agent/    agente PydanticAI + 5 tools
+        src/agent/    agente PydanticAI + 8 tools
         src/services/ regras de domínio
         src/db/       SQLAlchemy + Alembic
                        │
@@ -295,7 +295,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 pytest
 ```
 
-255 testes, ~18 segundos. Cobrem services, contrato das sete tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+358 testes, ~30 segundos. Cobrem services, contrato das oito tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 

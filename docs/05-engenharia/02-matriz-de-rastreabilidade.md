@@ -19,7 +19,7 @@ Relacionar requisitos do desafio, cenários de negócio, componentes da soluçã
 | RT-03 | Recomendação de imóveis | Compra residencial / Investimento | `CatalogService`, `buscar_imoveis` | testes unitários de catálogo | lista coerente de imóveis ou refinamento |
 | RT-04 | Follow-up automático | Follow-up automático | `FollowUpService`, `followup_runner`, scheduler | `test_followup_service.py`, `test_followup_manual.py`, E2E | follow-up contextual registrado, pelo ciclo ou pelo botão do dashboard |
 | RT-05 | Agendamento | Compra residencial / Investimento | `SchedulingService`, `agendar_reuniao` | testes unitários + integração | agendamento persistido e visível |
-| RT-06 | Resumo para corretor | Todos | `SummaryService`, `gerar_resumo_corretor` | testes de contrato + revisão manual | resumo com score, objeções e próximos passos |
+| RT-06 | Resumo para corretor | Todos | `SummaryService`, `encerrar_atendimento` | testes de contrato + revisão manual | resumo com score, objeções e próximos passos |
 | RT-07 | Persistência de dados | Todos | PostgreSQL, SQLAlchemy, Alembic | testes de integração | leads, mensagens e agendamentos no banco |
 | RT-08 | Dashboard operacional | Todos | `app.py`, `ui/dashboard.py`, `ui/estilo.py` | validação manual + integração | KPIs, distribuição da carteira e tabela ordenável |
 | RT-08b | Operação sobre o lead | Todos | `ui/leads.py`, `LeadService` | `test_lead_crud.py` + validação manual | ficha editável, vínculo de canal, follow-up manual, conversa e exclusão |

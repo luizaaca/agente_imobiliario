@@ -129,8 +129,8 @@ Nenhum.
 Posição. As instruções abrem a requisição; o histórico vem depois delas. Numa
 conversa em que o agente já respondeu várias vezes que não achava os IDs, o
 modelo seguiu o padrão recente e contradisse a própria lista — chegou a chamar
-`gerar_resumo_corretor` como substituto e a relatar honestamente que aquilo não
-trazia os IDs. A tool devolve a mesma verdade na posição mais recente da
+outra tool como substituto e a relatar honestamente que aquilo não trazia os
+IDs. A tool devolve a mesma verdade na posição mais recente da
 conversa, que é onde o modelo olha.
 
 ---
@@ -311,36 +311,36 @@ recusa, ele pode acertar na retentativa.
 
 ---
 
-## 6. `gerar_resumo_corretor`
+## 6. `encerrar_atendimento`
 
 ### Objetivo
-Gerar briefing executivo para o corretor a partir do histórico e do perfil do lead.
+Fechar o atendimento quando não há mais nada que o agente possa fazer, entregando o briefing executivo ao corretor.
 
 ### Input esperado
-Nenhum: o lead vem das dependências do run e o contexto é lido do banco.
+- `desfecho` — `agendou`, `desistiu` ou `pediu_corretor`;
+- `motivo` — em uma frase, o que a pessoa disse. É o que o corretor lê para saber por que a conversa terminou assim.
 
 ### Output esperado
-Resumo contendo:
-- intenção;
-- perfil;
-- score;
-- preferências;
-- objeções;
-- imóveis de interesse;
-- próximos passos.
+Confirmação do encerramento e a instrução de se despedir sem nova pergunta. O resumo em si não volta ao modelo: ele é para a ficha do corretor, e devolvê-lo custaria alguns milhares de tokens sem uso.
 
 ### Efeitos colaterais
-Pode atualizar o campo `resumo` do lead.
+- anota o motivo no `perfil_narrativo`, pelo consolidador (tool 4);
+- gera o `resumo` executivo do lead a partir do `SummaryService`;
+- nos desfechos `desistiu` e `pediu_corretor`, move o lead para `inativo`.
 
 ### Regras
-- o resumo deve ser útil para ação humana;
-- deve explicar score e próximos passos;
-- não deve ser mera cópia do histórico.
+- **`agendou` exige compromisso de pé.** Sem nenhum na agenda, o atendimento não terminou em agendamento e a chamada é recusada com `ModelRetry`.
+- **`desistiu` e `pediu_corretor` exigem agenda limpa.** Com compromisso de pé, marcar `inativo` apagaria o lembrete de confirmação e o corretor iria ao imóvel à toa: a tool recusa e manda cancelar antes.
+- `agendou` **não** move o status: o lead fica em `agendado`, que é o único jeito de a régua `pos_agendamento` continuar valendo para ele.
+- hesitação, silêncio e "vou pensar" não são desistência — são conversa em aberto, e quem retoma é o follow-up.
+
+### Por que `inativo`, e não um status novo
+É o único status fora dos `status_alvo` de todas as réguas de inatividade, então marcá-lo é exatamente o que faz o follow-up parar. E `process_message` devolve o lead a `em_qualificacao` assim que ele voltar a escrever, o que dá de graça o comportamento desejado: para de perseguir, mas não tranca a porta.
 
 ### Erros tratáveis
 - lead inexistente;
-- contexto insuficiente;
-- falha de geração/persistência.
+- desfecho incompatível com a agenda (recusado com `ModelRetry`);
+- falha de geração ou persistência do resumo.
 
 ---
 

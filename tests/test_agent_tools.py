@@ -16,6 +16,7 @@ from src.agent.prompts import HANDOVER_MESSAGE, UNAVAILABLE_MESSAGE
 from src.agent.sdr_agent import SDRDependencies, process_message
 from src.db.models import Agendamento, LLMUsage, Mensagem
 from src.services.catalog_service import CatalogService
+from src.services.followup_service import REGUAS
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
@@ -67,7 +68,7 @@ def test_todas_as_tools_estao_expostas(llm_fake, lead_id, deps):
         "buscar_imoveis",
         "cancelar_agendamento",
         "confirmar_agendamento",
-        "gerar_resumo_corretor",
+        "encerrar_atendimento",
         "listar_agendamentos",
         "registrar_qualificacao",
     ]
@@ -226,12 +227,128 @@ def test_atualizar_perfil_narrativo(llm_fake, perfil_fake, lead_id, deps, db):
     assert LeadService().get_lead(lead_id, db).perfil_narrativo == consolidado
 
 
-def test_gerar_resumo_corretor_persiste_o_resumo(llm_fake, lead_id, deps, db):
-    modelo = llm_fake(("gerar_resumo_corretor", {}), "Resumo pronto!")
-    conversar("pode passar pro corretor", lead_id, deps, modelo)
+def _encerrar(desfecho, motivo, lead_id, deps, llm_fake, perfil_fake):
+    modelo = llm_fake(
+        ("encerrar_atendimento", {"desfecho": desfecho, "motivo": motivo}),
+        "Obrigada pelo contato!",
+    )
+    with perfil_fake("perfil consolidado"):
+        return conversar("era so isso", lead_id, deps, modelo)
+
+
+def test_encerrar_atendimento_entrega_o_resumo(
+    llm_fake, perfil_fake, lead_id, deps, db
+):
+    _encerrar("desistiu", "achou tudo acima do orcamento", lead_id, deps,
+              llm_fake, perfil_fake)
 
     resumo = LeadService().get_lead(lead_id, db).resumo
     assert resumo and "Resumo Executivo" in resumo
+
+
+def test_encerrar_por_desistencia_tira_o_lead_da_regua(
+    llm_fake, perfil_fake, lead_id, deps, db
+):
+    """`inativo` e o unico status fora do alvo de todas as reguas de follow-up.
+
+    Sem isto, quem disse que nao quer mais recebe "qual bairro voce prefere?"
+    seis horas depois, ate tres vezes.
+    """
+    _encerrar("desistiu", "vai comprar so no ano que vem", lead_id, deps,
+              llm_fake, perfil_fake)
+
+    lead = LeadService().get_lead(lead_id, db)
+    assert lead.status == "inativo"
+    assert lead.status not in REGUAS["qualificacao_interrompida"]["status_alvo"]
+    assert lead.status not in REGUAS["pos_envio_imoveis"]["status_alvo"]
+
+
+def test_encerrar_grava_o_motivo_no_perfil(llm_fake, perfil_fake, lead_id, deps, db):
+    """O motivo passa pelo consolidador, como qualquer outra anotacao."""
+    visto = {}
+
+    def capturar(messages, info):
+        from pydantic_ai.messages import ModelResponse, UserPromptPart
+        visto["prompt"] = "\n".join(
+            str(p.content) for m in messages for p in m.parts
+            if isinstance(p, UserPromptPart)
+        )
+        return ModelResponse(parts=[TextPart(content="perfil com o motivo")])
+
+    from pydantic_ai.models.function import FunctionModel
+
+    from src.agent import perfil_agent as perfil_mod
+
+    modelo = llm_fake(
+        ("encerrar_atendimento", {
+            "desfecho": "desistiu", "motivo": "achou a zona norte longe demais",
+        }),
+        "Obrigada!",
+    )
+    with perfil_mod.perfil_agent.override(model=FunctionModel(capturar)):
+        conversar("desisti", lead_id, deps, modelo)
+
+    assert "achou a zona norte longe demais" in visto["prompt"]
+    assert LeadService().get_lead(lead_id, db).perfil_narrativo == "perfil com o motivo"
+
+
+def test_encerrar_como_agendado_sem_compromisso_e_recusado(
+    llm_fake, perfil_fake, lead_id, deps, db
+):
+    """Encerrar por agendamento sem agendamento deixaria o corretor sem visita.
+
+    A recusa se ve pelo resumo: a tool para antes de gera-lo, entao o campo
+    continua vazio. Nao da para observar o `ModelRetry` pelo texto final, que
+    o modelo simulado devolve de qualquer jeito.
+    """
+    _encerrar("agendou", "marcou a visita", lead_id, deps, llm_fake, perfil_fake)
+
+    db.expire_all()
+    assert LeadService().get_lead(lead_id, db).resumo is None
+
+
+def test_encerrar_por_desistencia_com_visita_de_pe_e_recusado(
+    llm_fake, perfil_fake, catalogo, lead_id, deps, db
+):
+    """Marcar `inativo` apagaria o lembrete de uma visita que continua na agenda."""
+    conversar("quero visitar", lead_id, deps, llm_fake(
+        ("agendar_reuniao", {
+            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1,
+        }),
+        "Agendado!",
+    ))
+    _encerrar("desistiu", "mudou de ideia", lead_id, deps, llm_fake, perfil_fake)
+
+    db.expire_all()
+    lead = LeadService().get_lead(lead_id, db)
+    assert lead.status == "agendado"
+    assert lead.resumo is None
+
+
+def test_encerrar_nao_reativa_o_lead_no_mesmo_turno(
+    llm_fake, perfil_fake, lead_id, deps, db
+):
+    """`process_message` reativa lead inativo; o encerramento nao pode cair nisso.
+
+    A reativacao olha o status de ANTES do turno. Se olhasse o de agora, o
+    `inativo` gravado pela tool seria desfeito no mesmo segundo.
+    """
+    _encerrar("pediu_corretor", "quer falar com uma pessoa", lead_id, deps,
+              llm_fake, perfil_fake)
+
+    db.expire_all()
+    assert LeadService().get_lead(lead_id, db).status == "inativo"
+
+
+def test_lead_inativo_que_volta_a_escrever_e_reativado(
+    llm_fake, perfil_fake, lead_id, deps, db
+):
+    """A trava do encerramento nao pode prender quem voltou por conta propria."""
+    _encerrar("desistiu", "vai pensar melhor", lead_id, deps, llm_fake, perfil_fake)
+    conversar("mudei de ideia, quero ver de novo", lead_id, deps, llm_fake("Que bom!"))
+
+    db.expire_all()
+    assert LeadService().get_lead(lead_id, db).status == "em_qualificacao"
 
 
 # --- Ciclo de mensagem -------------------------------------------------------

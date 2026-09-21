@@ -57,7 +57,7 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
-| `gerar_resumo_corretor` | Sintetiza briefing executivo final a partir do perfil e histórico |
+| `encerrar_atendimento` | Fecha o atendimento, entrega o briefing executivo ao corretor e tira o lead da régua |
 
 > **Nota de escopo da POC:** a capacidade de geração de follow-up contextual existe no sistema, mas **não será exposta como tool do agente conversacional com o cliente**. Na POC, ela será usada exclusivamente pelo `FollowUpService`, que controla a régua, a elegibilidade, as tentativas e o envio, acionando a LLM apenas para compor a mensagem.
 
