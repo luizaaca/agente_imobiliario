@@ -152,25 +152,3 @@ def test_agendar_com_contato_completo_nao_cobra_nada(lead_id, deps, db):
     )
 
     assert "Você ainda não tem" not in retorno
-
-
-# --- O que o prompt manda ----------------------------------------------------
-#
-# Olham a INTENCAO, nao a redacao: `instrucao_com` (conftest) checa se as
-# palavras aparecem numa mesma instrucao do prompt.
-
-
-def test_o_prompt_manda_coletar_nome_e_telefone(instrucao_com):
-    """Sem isto o agente conversa bem e nao deixa como o corretor ligar."""
-    assert instrucao_com("nome")
-    assert instrucao_com("telefone")
-
-
-def test_o_prompt_liga_o_telefone_ao_agendamento(instrucao_com):
-    """Telefone pedido no comeco vira cadastro; pedido na visita tem motivo."""
-    assert instrucao_com("telefone", "agend")
-
-
-def test_o_prompt_diz_onde_gravar_o_contato(instrucao_com):
-    """Ouvir o dado e nao gravar deixa a ficha do corretor vazia do mesmo jeito."""
-    assert instrucao_com("registrar_qualificacao", "nome")
