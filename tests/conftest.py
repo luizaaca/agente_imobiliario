@@ -163,6 +163,43 @@ def catalogo(db):
     return IMOVEIS_DE_TESTE
 
 
+# --- Intencao do prompt ------------------------------------------------------
+
+
+def _trechos(texto: str) -> list[str]:
+    """O texto quebrado por instrucao, minusculo, para ver co-ocorrencia.
+
+    Duas palavras na mesma instrucao dizem que ela liga uma coisa a outra;
+    espalhadas pelo texto inteiro nao dizem nada.
+
+    A unidade e a LINHA, e nao a frase. O prompt e escrito em bullets, e um
+    bullet costuma gastar duas frases para dar a regra e a razao dela — "use
+    `confirmar_agendamento`. NUNCA `agendar_reuniao`, que criaria uma segunda
+    visita". Quebrar por frase separaria justamente o par que interessa.
+    """
+    return [linha.lower() for linha in texto.splitlines() if linha.strip()]
+
+
+@pytest.fixture
+def instrucao_com():
+    """Checa se o SYSTEM_PROMPT liga certas palavras numa mesma instrucao.
+
+    Existe para os testes de prompt olharem a INTENCAO e nao a redacao. A
+    primeira versao deles prendia frases inteiras ("Pergunte o nome cedo") e
+    quebrou na primeira reescrita, sem que nada de fato tivesse se perdido —
+    falso alarme de teste que atrapalha em vez de proteger. O prompt e a parte
+    do sistema que mais se reescreve.
+    """
+    from src.agent.prompts import SYSTEM_PROMPT
+
+    def checar(*palavras: str) -> bool:
+        return any(
+            all(p in trecho for p in palavras) for trecho in _trechos(SYSTEM_PROMPT)
+        )
+
+    return checar
+
+
 # --- LLM simulado ------------------------------------------------------------
 
 

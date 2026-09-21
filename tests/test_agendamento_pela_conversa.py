@@ -319,3 +319,23 @@ def test_compromisso_cancelado_sai_do_contexto(agendamento, lead_id, db):
 
     assert f"ID {agendamento.id}" not in contexto
     assert "Compromissos marcados: nenhum" in contexto
+
+# --- O que o prompt manda ----------------------------------------------------
+
+
+def test_o_prompt_manda_confirmar_com_a_tool(instrucao_com):
+    """Sem citar a tool, o agente confirma de boca e o status fica `pendente`.
+
+    Foi o defeito original: "Visita confirmada com sucesso!" numa resposta que
+    tres linhas abaixo imprimia `Status: pendente`.
+    """
+    assert instrucao_com("confirmar_agendamento")
+
+
+def test_o_prompt_separa_confirmar_de_agendar(instrucao_com):
+    """Confirmar chamando `agendar_reuniao` cria uma segunda visita igual."""
+    assert instrucao_com("confirmar_agendamento", "agendar_reuniao")
+
+
+def test_o_prompt_proibe_afirmar_confirmacao_que_a_tool_nao_deu(instrucao_com):
+    assert instrucao_com("confirmada", "pendente")
