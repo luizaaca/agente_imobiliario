@@ -7,9 +7,11 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Optional
+from zoneinfo import ZoneInfo
 
 from pydantic import Field
 from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 
 from src.agent.history import HISTORY_LIMIT, build_message_history
 from src.agent.prompts import HANDOVER_MESSAGE, SYSTEM_PROMPT, UNAVAILABLE_MESSAGE
@@ -169,6 +171,40 @@ def _operacao_do_lead(ctx: RunContext[SDRDependencies]) -> Optional[str]:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         intencao = lead.intencao if lead else None
     return OPERACAO_POR_INTENCAO.get(intencao or "")
+
+
+# O container roda em UTC, e o lead está em São Paulo. Sem converter, às 21h de
+# um sábado o agente acharia que já é domingo — e "sábado que vem" sairia uma
+# semana errado.
+FUSO_DO_LEAD = ZoneInfo("America/Sao_Paulo")
+
+DIAS_DA_SEMANA = (
+    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+    "sexta-feira", "sábado", "domingo",
+)
+
+
+def agora_no_fuso_do_lead() -> datetime:
+    """O instante atual no relógio de quem está conversando."""
+    return datetime.now(FUSO_DO_LEAD)
+
+
+def momento_atual() -> str:
+    """Data, hora e dia da semana para as instruções do turno.
+
+    Sem isto o modelo não tem como resolver "sábado que vem", "amanhã" ou
+    "semana que vem" — e `agendar_reuniao` exige `YYYY-MM-DD`, então até o ano
+    seria chute. Numa conversa real ele propôs "sábado, 26/09" sem saber que
+    dia era hoje; acertou o dia da semana por sorte, uma chance em sete.
+
+    O dia da semana vem escrito porque é assim que a pessoa marca visita —
+    ninguém diz "dia 26", diz "sábado".
+    """
+    agora = agora_no_fuso_do_lead()
+    return (
+        f"{DIAS_DA_SEMANA[agora.weekday()]}, {agora:%d/%m/%Y}, {agora:%H:%M} "
+        f"(horário de Brasília)"
+    )
 
 
 # Aviso para quando a busca sai sem operação definida. A ordenação por preço
@@ -856,6 +892,7 @@ async def instrucoes_do_agente(ctx: RunContext[SDRDependencies]) -> str:
         )
 
     return SYSTEM_PROMPT.format(
+        agora=momento_atual(),
         lead_context=lead_context,
         perfil_narrativo=perfil,
     )
@@ -919,6 +956,52 @@ def _registrar_turno_bloqueado(
         message_type="system_notice",
         db=db,
     )
+
+
+def _registrar_ferramentas_do_turno(
+    result,
+    lead_id: int,
+    channel: str,
+    deps: SDRDependencies,
+    db,
+) -> None:
+    """Persiste as chamadas de ferramenta do turno, com o que elas devolveram.
+
+    Sem isto o agente perde, entre um turno e outro, tudo que as tools lhe
+    disseram. Os IDs dos imóveis, por exemplo, só existem no retorno da busca —
+    ele nunca os escreve para a pessoa —, então na busca seguinte ele
+    reapresentava o mesmo imóvel sem ter como perceber que era o mesmo.
+
+    Guarda o retorno inteiro; quem decide quanto disso volta ao contexto é
+    `build_message_history`, que abrevia. Assim a ficha do corretor mantém o
+    registro completo do que a ferramenta respondeu sem que o custo do turno
+    seguinte cresça na mesma proporção.
+    """
+    chamadas: dict[str, dict] = {}
+    for mensagem in result.new_messages():
+        for parte in mensagem.parts:
+            if isinstance(parte, ToolCallPart):
+                chamadas[parte.tool_call_id] = {
+                    "tool_name": parte.tool_name,
+                    "args": parte.args_as_dict() if parte.args else {},
+                    "tool_call_id": parte.tool_call_id,
+                }
+            elif isinstance(parte, ToolReturnPart):
+                meta = chamadas.pop(parte.tool_call_id, None)
+                if meta is None:
+                    # Retorno sem a chamada correspondente no mesmo run não tem
+                    # como ser remontado depois, e um par quebrado faz o
+                    # provider recusar a requisição inteira.
+                    continue
+                deps.lead_service.save_message(
+                    lead_id=lead_id,
+                    channel=channel,
+                    role="tool",
+                    content=str(parte.content),
+                    message_type="chat",
+                    db=db,
+                    metadata_json=meta,
+                )
 
 
 async def process_message(
@@ -1040,6 +1123,11 @@ async def process_message(
             latency_ms=latencia_ms,
             db=db,
         )
+
+        # Antes da resposta do agente, para o histórico sair na ordem em que
+        # as coisas aconteceram: a pessoa perguntou, as tools rodaram, ele
+        # respondeu.
+        _registrar_ferramentas_do_turno(result, lead_id, channel, deps, db)
 
         # Save assistant response
         deps.lead_service.save_message(

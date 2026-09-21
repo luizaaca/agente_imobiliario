@@ -74,7 +74,7 @@ class Settings:
     LLM_DAILY_TOKEN_BUDGET: int = int(os.getenv("LLM_DAILY_TOKEN_BUDGET", "500000"))
     LLM_MONTHLY_TOKEN_BUDGET: int = int(os.getenv("LLM_MONTHLY_TOKEN_BUDGET", "3000000"))
     LLM_MAX_TURNS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TURNS_PER_CONVERSATION", "30"))
-    LLM_MAX_TOKENS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TOKENS_PER_CONVERSATION", "50000"))
+    LLM_MAX_TOKENS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TOKENS_PER_CONVERSATION", "150000"))
 
     # Observabilidade
     LOGFIRE_TOKEN: str = os.getenv("LOGFIRE_TOKEN", "")

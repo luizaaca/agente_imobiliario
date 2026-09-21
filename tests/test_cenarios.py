@@ -98,7 +98,16 @@ def test_cenario_1_compra_residencial(llm_fake, catalogo, db):
     assert lead.status == "agendado"
     assert agendamento.tipo == "visita"
     assert float(lead.score) > 0
-    assert db.query(Mensagem).filter(Mensagem.lead_id == lead_id).count() == 8
+
+    # As falas da conversa, mais uma linha por ferramenta chamada: sem elas o
+    # agente esqueceria, no turno seguinte, o que as tools lhe disseram.
+    papeis = [
+        m.role for m in
+        db.query(Mensagem).filter(Mensagem.lead_id == lead_id)
+        .order_by(Mensagem.id).all()
+    ]
+    assert papeis.count("user") + papeis.count("assistant") == 8
+    assert papeis.count("tool") == 2
 
 
 # --- Cenário 2: investimento -------------------------------------------------

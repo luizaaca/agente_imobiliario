@@ -38,7 +38,7 @@ Evita que uma única conversa consuma tokens desproporcionalmente.
 | Limite | Valor Padrão | Variável de Ambiente | Comportamento ao atingir |
 |---|---|---|---|
 | Máximo de turnos | 30 | `LLM_MAX_TURNS_PER_CONVERSATION` | Agente faz handover para corretor humano |
-| Máximo de tokens acumulados | 50.000 | `LLM_MAX_TOKENS_PER_CONVERSATION` | Handover + gera resumo final automaticamente |
+| Máximo de tokens acumulados | 150.000 | `LLM_MAX_TOKENS_PER_CONVERSATION` | Handover + gera resumo final automaticamente |
 
 **Mensagem de handover:**
 > "Obrigado por todas as informações! Para dar continuidade com o melhor atendimento, vou direcionar você para um dos nossos corretores especialistas. Ele já terá todo o seu perfil e preferências. 😊"
@@ -291,7 +291,7 @@ está tudo bem quando nada foi exercitado.
 ```env
 # Limites por conversa
 LLM_MAX_TURNS_PER_CONVERSATION=30
-LLM_MAX_TOKENS_PER_CONVERSATION=50000
+LLM_MAX_TOKENS_PER_CONVERSATION=150000
 
 # Limites globais
 LLM_DAILY_TOKEN_BUDGET=500000

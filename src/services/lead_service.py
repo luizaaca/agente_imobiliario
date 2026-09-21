@@ -439,8 +439,14 @@ class LeadService:
         message_type: str,
         db: Session,
         status: str = "created",
+        metadata_json: Optional[dict] = None,
     ) -> Mensagem:
-        """Salva uma mensagem no histórico."""
+        """Salva uma mensagem no histórico.
+
+        `metadata_json` carrega o que não cabe em `content`: numa linha de
+        `role="tool"`, o nome da ferramenta, os argumentos e o id da chamada,
+        que é o que permite remontar o par chamada/retorno no turno seguinte.
+        """
         msg = Mensagem(
             lead_id=lead_id,
             channel=channel,
@@ -448,6 +454,7 @@ class LeadService:
             content=content,
             message_type=message_type,
             status=status,
+            metadata_json=metadata_json,
         )
         db.add(msg)
         db.commit()
@@ -516,18 +523,43 @@ class LeadService:
             is not None
         )
 
+    # Linhas que contam para o `limit` do histórico: são as falas da conversa.
+    # As de `tool` entram de carona na janela que estas delimitam.
+    PAPEIS_DA_CONVERSA = ("user", "assistant")
+
     def get_history(
         self, lead_id: int, limit: int, db: Session
     ) -> list[Mensagem]:
-        """Recupera as últimas mensagens de um lead, ordenadas cronologicamente."""
-        messages = (
-            db.query(Mensagem)
-            .filter(Mensagem.lead_id == lead_id)
-            .order_by(Mensagem.timestamp.desc())
+        """As últimas `limit` falas do lead, com as tools que houve entre elas.
+
+        O limite conta só `user` e `assistant`. Se contasse tudo, uma conversa
+        com muitas buscas gastaria a janela em linhas de ferramenta e o agente
+        esqueceria o que a pessoa disse — o oposto do que o histórico serve.
+
+        A ordem é por `id`, e não por `timestamp`: uma chamada de ferramenta e
+        a resposta que ela gerou caem no mesmo segundo, e empate de timestamp
+        embaralharia o par chamada/retorno, que precisa chegar junto e na
+        ordem certa para o modelo aceitar.
+        """
+        falas = (
+            db.query(Mensagem.id)
+            .filter(
+                Mensagem.lead_id == lead_id,
+                Mensagem.role.in_(self.PAPEIS_DA_CONVERSA),
+            )
+            .order_by(Mensagem.id.desc())
             .limit(limit)
             .all()
         )
-        return list(reversed(messages))
+        if not falas:
+            return []
+
+        return (
+            db.query(Mensagem)
+            .filter(Mensagem.lead_id == lead_id, Mensagem.id >= min(f.id for f in falas))
+            .order_by(Mensagem.id.asc())
+            .all()
+        )
 
     def delete_lead(self, lead_id: int, db: Session) -> bool:
         """Remove um lead e tudo que depende dele.

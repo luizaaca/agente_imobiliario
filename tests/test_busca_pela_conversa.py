@@ -13,7 +13,13 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
 from src.agent import sdr_agent as agent_mod
+from src.agent.history import (
+    HISTORY_LIMIT,
+    LIMITE_DO_RETORNO_DE_TOOL,
+    build_message_history,
+)
 from src.agent.sdr_agent import SDRDependencies, process_message
+from src.db.models import Mensagem
 from src.services.catalog_service import (
     PERFIS_INDICADOS,
     TIPOS,
@@ -200,3 +206,49 @@ def test_a_operacao_sai_da_intencao_ja_registrada_do_lead(catalogo, lead_id, dep
 
     assert "mistura venda e aluguel" not in retorno
     assert "Apartamento Bela Vista Compacto" not in retorno  # é venda
+
+# --- O agente lembra do que ja mostrou ---------------------------------------
+
+
+def test_o_imovel_mostrado_volta_no_historico_do_turno_seguinte(
+    catalogo, lead_id, deps, db
+):
+    """O ponto todo da persistencia de tool: reconhecer o que ja apresentou.
+
+    Numa conversa real ele buscou de novo, veio o mesmo apartamento, e ele o
+    apresentou como novidade — os IDs so existem no retorno da busca, que antes
+    era descartado entre um turno e outro.
+    """
+    _buscar({"tipo": "galpao"}, lead_id, deps)
+
+    historico = build_message_history(
+        LeadService().get_history(lead_id, HISTORY_LIMIT, db)
+    )
+
+    tudo = "".join(
+        str(getattr(p, "content", "")) for msg in historico for p in msg.parts
+    )
+    assert "Galpao Belem Logistico" in tudo
+
+
+def test_a_chamada_fica_gravada_com_os_argumentos(catalogo, lead_id, deps, db):
+    """Saber o que ele buscou, e nao so o que achou, e o que evita repetir."""
+    _buscar({"tipo": "galpao"}, lead_id, deps)
+
+    linha = db.query(Mensagem).filter(
+        Mensagem.lead_id == lead_id, Mensagem.role == "tool"
+    ).one()
+
+    assert linha.metadata_json["tool_name"] == "buscar_imoveis"
+    assert linha.metadata_json["args"]["tipo"] == "galpao"
+
+
+def test_o_banco_guarda_o_retorno_inteiro(catalogo, lead_id, deps, db):
+    """Abreviar e coisa do historico; a ficha do corretor fica com tudo."""
+    _buscar({"operacao": "venda"}, lead_id, deps)
+
+    linha = db.query(Mensagem).filter(
+        Mensagem.lead_id == lead_id, Mensagem.role == "tool"
+    ).one()
+
+    assert len(linha.content) > LIMITE_DO_RETORNO_DE_TOOL

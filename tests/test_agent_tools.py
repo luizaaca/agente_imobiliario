@@ -3,7 +3,12 @@
 import asyncio
 
 import pytest
-from pydantic_ai.messages import TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 
 from src.agent import sdr_agent as agent_mod
 from src.agent.history import build_message_history
@@ -348,20 +353,72 @@ def test_mensagem_atual_nao_aparece_duplicada(llm_fake, lead_id, deps):
     assert capturado[1].count("segunda") == 1
 
 
-def test_conversao_de_historico_ignora_papeis_nao_conversacionais(db):
-    class MensagemFalsa:
-        def __init__(self, role, content):
-            self.role = role
-            self.content = content
+class MensagemFalsa:
+    def __init__(self, role, content, metadata_json=None, id=1):
+        self.role = role
+        self.content = content
+        self.metadata_json = metadata_json
+        self.id = id
 
+
+def test_conversao_de_historico_deixa_system_de_fora(db):
+    """`system` guarda avisos nossos, como o de turno bloqueado por orçamento.
+
+    Se voltasse, o modelo repetiria o aviso de indisponibilidade como se fosse
+    fala sua no turno seguinte.
+    """
     historico = build_message_history([
         MensagemFalsa("user", "oi"),
         MensagemFalsa("system", "instrucao interna"),
-        MensagemFalsa("tool", "resultado de tool"),
         MensagemFalsa("assistant", "ola"),
         MensagemFalsa("user", "   "),
     ])
+
     assert len(historico) == 2
+
+
+def test_tool_volta_como_par_de_chamada_e_retorno(db):
+    """Sem isso o agente esquece o que as tools disseram entre um turno e outro.
+
+    Os IDs dos imóveis só existem no retorno da busca — ele nunca os escreve
+    para a pessoa —, então reapresentava o mesmo imóvel sem perceber.
+    """
+    historico = build_message_history([
+        MensagemFalsa("user", "busque"),
+        MensagemFalsa(
+            "tool", "Encontrei 1 imóvel",
+            metadata_json={
+                "tool_name": "buscar_imoveis",
+                "args": {"tipo": "galpao"},
+                "tool_call_id": "chamada-1",
+            },
+        ),
+        MensagemFalsa("assistant", "achei um"),
+    ])
+
+    partes = [p for msg in historico for p in msg.parts]
+    chamada = next(p for p in partes if isinstance(p, ToolCallPart))
+    retorno = next(p for p in partes if isinstance(p, ToolReturnPart))
+
+    assert chamada.tool_name == "buscar_imoveis"
+    assert chamada.tool_call_id == retorno.tool_call_id  # o par precisa casar
+    assert "Encontrei 1 imóvel" in str(retorno.content)
+
+
+def test_retorno_de_tool_muito_longo_e_abreviado(db):
+    """Reenviar 3.000 chars de busca a cada turno foi o que estourou um teto."""
+    historico = build_message_history([
+        MensagemFalsa(
+            "tool", "x" * 5000,
+            metadata_json={"tool_name": "buscar_imoveis", "tool_call_id": "c1"},
+        ),
+    ])
+
+    retorno = next(
+        p for msg in historico for p in msg.parts if isinstance(p, ToolReturnPart)
+    )
+    assert len(str(retorno.content)) < 1200
+    assert "abreviado" in str(retorno.content)
 
 
 # --- Limites de custo --------------------------------------------------------
