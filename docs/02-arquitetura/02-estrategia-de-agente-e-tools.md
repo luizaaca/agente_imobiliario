@@ -135,6 +135,24 @@ Aspas ali dentro delimitam frase exata, não ênfase: `"varanda gourmet"` vira a
 sequência `varand <-> gourmet`, que exige as duas palavras adjacentes. É o
 oposto do OU, e serve para quando a adjacência é mesmo o que se procura.
 
+**A sintaxe é de busca web, não de SQL.** O espaço já significa E; `or` é a
+alternativa e `-` a negação. `and` e `not` não são operadores: viram termos de
+busca, e como nenhum anúncio contém essas palavras, escrevê-los zera a consulta
+inteira. A camada de execução avisa quando isso aparece, porque o erro é
+silencioso — a consulta roda, não dá erro e devolve nada.
+
+**A configuração `portuguese` radicaliza mas não dobra acento.** `varanda` e
+`varandas` viram o mesmo `varand`, mas `metro` vira `metr` e `metrô` vira
+`metrô`: são lexemas diferentes, e só `metro or metrô` alcança os 102 imóveis
+que falam de metrô de algum jeito. Palavra com duas grafias usuais precisa das
+duas.
+
+**Nome de tag com underscore não entra no vetor.** O tokenizador quebra no
+underscore, então `metro_proximo` vira a adjacência `metr <-> proxim` e exige as
+duas palavras coladas nessa ordem. Dentro do `search_vector` vale a palavra
+simples; o nome da tag serve a `tags ILIKE`, quando o que se quer é a etiqueta
+literal e nada além dela.
+
 **O que não está no vetor:** zona, finalidade, perfil indicado, preço, área e
 número de cômodos. Todos têm coluna própria e se filtram com `WHERE`. Procurar
 "comercial" no texto traz apartamento que usa a palavra na descrição e perde

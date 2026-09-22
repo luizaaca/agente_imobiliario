@@ -218,3 +218,73 @@ def test_a_transacao_e_somente_leitura_e_tem_tempo_limite():
         limite = conn.execute(text("SHOW statement_timeout")).scalar()
     assert somente_leitura == "on"
     assert limite == "3s"
+
+
+# --- A sintaxe da tsquery, que não é a do SQL --------------------------------
+
+def test_and_dentro_da_tsquery_e_avisado():
+    """`and` não é operador ali: vira termo, e nenhum anúncio o contém.
+
+    Medido no catálogo: `websearch_to_tsquery('portuguese','varanda gourmet
+    and metro')` produz `'varand' & 'gourmet' & 'and' & 'metr'` e casa zero,
+    sempre. A consulta roda, não dá erro, e devolve nada — o tipo de engano que
+    ninguém descobre olhando o resultado.
+    """
+    _, avisos = validar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        "websearch_to_tsquery('portuguese', 'varanda gourmet and metro')"
+    )
+
+    assert any("'and' não é operador" in a for a in avisos)
+    assert any("casa zero" in a for a in avisos)
+
+
+def test_not_dentro_da_tsquery_tambem_e_avisado():
+    _, avisos = validar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        "websearch_to_tsquery('portuguese', 'casa not garagem')"
+    )
+    assert any("'not' não é operador" in a for a in avisos)
+
+
+def test_nome_de_tag_dentro_da_tsquery_e_avisado():
+    """O underscore vira adjacência e restringe muito mais do que parece.
+
+    `metro_proximo` casa 33 imóveis; `metro` casa 90. A diferença é todo
+    anúncio que fala de metrô sem usar as duas palavras coladas nessa ordem.
+    """
+    _, avisos = validar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        "websearch_to_tsquery('portuguese', 'metro_proximo')"
+    )
+
+    aviso = next(a for a in avisos if "metro_proximo" in a)
+    assert "metro <-> proximo" in aviso
+    assert "tags ILIKE" in aviso
+
+
+def test_a_tsquery_bem_escrita_nao_gera_aviso():
+    """Frase entre aspas e espaço como E: a forma correta fica calada."""
+    _, avisos = validar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        'websearch_to_tsquery(\'portuguese\', \'"varanda gourmet" metro\')'
+    )
+    assert avisos == []
+
+
+def test_underscore_fora_da_tsquery_nao_gera_aviso():
+    """`tags ILIKE '%metro_proximo%'` é exatamente o jeito certo de usar a tag."""
+    _, avisos = validar(
+        "SELECT id FROM imoveis WHERE tags ILIKE '%metro_proximo%' "
+        "AND zona = 'zona_sul'"
+    )
+    assert avisos == []
+
+
+def test_o_aviso_chega_ao_agente_no_texto_do_resultado(catalogo):
+    """Aviso que não volta com as linhas não corrige nada."""
+    resultado = executar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        "websearch_to_tsquery('portuguese', 'varanda and metro')"
+    )
+    assert "não é operador" in resultado.para_texto().splitlines()[0]

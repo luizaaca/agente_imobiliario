@@ -215,7 +215,8 @@ def validar(sql: str) -> tuple[str, list[str]]:
 
     _conferir_tabelas(mascarado)
 
-    return _com_limite(sql, mascarado)
+    preparado, avisos = _com_limite(sql, mascarado)
+    return preparado, avisos + _avisos_da_tsquery(sql)
 
 
 def _conferir_tabelas(mascarado: str) -> None:
@@ -229,6 +230,43 @@ def _conferir_tabelas(mascarado: str) -> None:
                 f"'{nome}' não está disponível. A única tabela que esta "
                 f"ferramenta lê é `{TABELA_PERMITIDA}`."
             )
+
+
+# O argumento de texto de um `*_tsquery`, que é onde a sintaxe de busca web
+# vale e a do SQL não.
+_ARGUMENTO_DA_TSQUERY = re.compile(
+    r"tsquery\s*\(\s*'[^']*'\s*,\s*'([^']*)'", re.IGNORECASE
+)
+_OPERADOR_QUE_NAO_E = re.compile(r"\b(and|not)\b", re.IGNORECASE)
+_TERMO_COM_UNDERSCORE = re.compile(r"\b\w+_\w+\b")
+
+
+def _avisos_da_tsquery(sql: str) -> list[str]:
+    """Aponta o que, dentro de uma tsquery, não faz o que parece fazer.
+
+    Dois enganos observados em consultas reais, os dois silenciosos — a
+    consulta roda, devolve menos do que devia ou nada, e ninguém fica sabendo
+    por quê. Vale mais como aviso que como recusa: a consulta pode estar
+    correta para outra intenção, e quem decide é quem a escreveu.
+    """
+    avisos: list[str] = []
+    for argumento in _ARGUMENTO_DA_TSQUERY.findall(sql):
+        if achado := _OPERADOR_QUE_NAO_E.search(argumento):
+            palavra = achado.group(1)
+            avisos.append(
+                f"Atenção: '{palavra}' não é operador de tsquery — virou termo "
+                f"de busca, e nenhum anúncio contém essa palavra, então esta "
+                f"condição casa zero. O espaço já significa E; para OU use "
+                f"`or`, para NÃO use `-` colado na palavra."
+            )
+        for termo in _TERMO_COM_UNDERSCORE.findall(argumento):
+            avisos.append(
+                f"Atenção: '{termo}' dentro da tsquery vira adjacência "
+                f"('{termo.replace('_', ' <-> ')}'), que exige as palavras "
+                f"coladas e restringe muito. Use a palavra simples aqui, ou "
+                f"`tags ILIKE '%{termo}%'` para casar a tag literal."
+            )
+    return avisos
 
 
 def _com_limite(sql: str, mascarado: str) -> tuple[str, list[str]]:

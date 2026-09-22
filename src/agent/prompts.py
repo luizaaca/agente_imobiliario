@@ -185,7 +185,38 @@ No aluguel, `preco` é o valor MENSAL, e a mediana do catálogo é R$ 6.200. Na 
     WHERE search_vector @@ websearch_to_tsquery('portuguese', 'varanda or piscina or churrasqueira')
     ORDER BY ts_rank(search_vector, websearch_to_tsquery('portuguese', 'varanda or piscina')) DESC
 
-Use `or` entre os termos. Exigir todas as palavras zera o resultado quase sempre, e quem separa relevância é o `ts_rank`.
+### A sintaxe do `websearch_to_tsquery`, que não é a do SQL
+
+Dentro das aspas vale a sintaxe de busca web, e só ela:
+
+| Você escreve | Vira | Significa |
+|---|---|---|
+| `varanda gourmet` | `varand & gourmet` | as duas palavras, em qualquer lugar |
+| `"varanda gourmet"` | `varand <-> gourmet` | as duas **coladas**, nessa ordem |
+| `varanda or piscina` | `varand \| piscin` | qualquer uma |
+| `varanda -térreo` | `varand & !terre` | com varanda, sem térreo |
+
+**O espaço já significa E.** `and` e `not` NÃO são operadores: viram termos de busca. `'varanda gourmet and metro'` procura a palavra "and" no anúncio e devolve **zero**, sempre. Para E use o espaço, para OU use `or`, para NÃO use `-` colado na palavra.
+
+**Acento conta.** A configuração `portuguese` radicaliza mas não dobra acento: `metro` vira `metr` e casa 90 imóveis, `metrô` vira `metrô` e casa 63, e só `metro or metrô` alcança os 102. Sempre que a palavra tiver duas grafias usuais, procure as duas com `or`. Radicalização, essa, funciona: `varanda` e `varandas` viram o mesmo `varand`.
+
+**Nome de tag com underscore não vai aqui.** O tokenizador quebra no underscore e vira adjacência: `metro_proximo` exige "metro" e "proximo" colados nessa ordem. Dentro do `search_vector`, use a palavra simples; o nome da tag serve para `tags ILIKE '%metro_proximo%'`, quando você quiser exatamente a tag e nada além dela.
+
+### Qual dos dois usar
+
+O `search_vector` é o instrumento principal para amenidade. Ele cobre título, descrição e tags de uma vez, e radicaliza — `ILIKE` não faz nenhuma das duas coisas e perde todo anúncio que escreveu a mesma ideia com outra palavra.
+
+`tags ILIKE` é para quando a tag literal é o que interessa: contar quantos têm `piscina_aquecida`, separar quem tem a etiqueta de quem só menciona piscina no texto.
+
+Exemplo, para "varanda gourmet e perto do metrô":
+
+    -- a frase exata e metrô, nas duas grafias
+    AND search_vector @@ websearch_to_tsquery('portuguese', '"varanda gourmet"')
+    AND search_vector @@ websearch_to_tsquery('portuguese', 'metro or metrô')
+
+Duas condições separadas, e não uma só, porque cada uma é uma exigência diferente — e assim dá para afrouxar uma sem perder a outra. Se "varanda gourmet" exata não devolver nada, troque só a primeira por `'"varanda gourmet" or churrasqueira'` e mantenha a segunda.
+
+Exigir todas as palavras de uma lista longa zera o resultado quase sempre; quando estiver juntando sinônimos, use `or` e deixe o `ts_rank` separar relevância.
 
 NÃO estão no vetor: `zona`, `finalidade`, `operacao`, `perfil_indicado`, preço, área e número de cômodos. Procurar "zona norte" ou "comercial" como texto não funciona — todos esses têm coluna própria e se filtram com `WHERE`.
 
