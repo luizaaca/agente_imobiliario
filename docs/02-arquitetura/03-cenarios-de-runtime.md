@@ -78,7 +78,7 @@ dedicado investiga o catálogo para responder.
 5. Devolve os IDs escolhidos e uma justificativa para cada.
 6. A camada de código relê os imóveis por ID, monta as fichas com os números do banco e intercala as justificativas.
 7. Os IDs entram no cache da conversa; o consumo é registrado com `operation="busca"`.
-8. O agente conversacional apresenta no máximo três deles à pessoa.
+8. O agente conversacional apresenta no máximo cinco deles à pessoa.
 
 ### Regras importantes
 - operação, tipo e finalidade não são trocados por outra coisa;
@@ -111,7 +111,7 @@ sequenceDiagram
     DB-->>Tool: dados do catálogo
     Tool->>Tool: formatar fichas e registrar IDs no cache
     Tool-->>SDR: fichas com números do banco
-    SDR-->>Lead: no máximo três imóveis, uma linha cada
+    SDR-->>Lead: no máximo cinco imóveis, uma linha cada
 ```
 
 ---

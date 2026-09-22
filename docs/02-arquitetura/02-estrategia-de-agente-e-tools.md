@@ -118,7 +118,7 @@ conjunto fechado de filtros, e são elas que separam "não achei" de "não exist
 
 Um erro de SQL volta ao agente de busca como texto, para ele reescrever a
 consulta. O limite de linhas é do statement, não da resposta: ele pode ler
-dezenas de imóveis e devolver três.
+dezenas de imóveis e devolver cinco.
 
 **O que ele nunca troca:** operação, tipo e finalidade. Quem pede galpão não
 recebe sala comercial. Bairro, preço, metragem e amenidades são negociáveis e
@@ -131,9 +131,11 @@ A coluna `imoveis.search_vector` é **gerada pelo banco** (`GENERATED ALWAYS AS 
 
 Para texto, a consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata acentos e pontuação do texto cru sem risco de erro de sintaxe. Os termos são combinados com **OU** — exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira". Quem separa relevância é o `ts_rank`, que ordena o resultado.
 
-Aspas ali dentro delimitam frase exata, não ênfase: `"varanda gourmet"` vira a
-sequência `varand <-> gourmet`, que exige as duas palavras adjacentes. É o
-oposto do OU, e serve para quando a adjacência é mesmo o que se procura.
+**Aspas ali dentro delimitam frase exata, não ênfase**, e custam alcance:
+`"varanda gourmet"` vira a sequência `varand <-> gourmet`, que exige as duas
+palavras adjacentes e casa 11 imóveis, contra 18 de `varanda gourmet` e 57 de
+`varanda`. Serve para conferir se a expressão existe assim no catálogo, não
+para procurar de verdade.
 
 **A sintaxe é de busca web, não de SQL.** O espaço já significa E; `or` é a
 alternativa e `-` a negação. `and` e `not` não são operadores: viram termos de
@@ -148,7 +150,10 @@ radical de *metros*, a unidade de comprimento. Procurar `metro` casa 109
 imóveis, 38 deles falando de "a 300 metros da praça" e "600 metros quadrados".
 A grafia acentuada é a que significa estação: `metrô or estação` chega a 86 com
 ruído próximo de zero. Somar grafias com `or` só ajuda quando a segunda grafia
-é mesmo a mesma palavra.
+é mesmo a mesma palavra. A camada de execução também avisa aqui, e o
+vocabulário acentuado que ela usa para isso sai do próprio índice, via
+`ts_stat` sobre o `search_vector`: uma lista fixa no código envelheceria junto
+com o catálogo.
 
 **Nome de tag com underscore não entra no vetor.** O tokenizador quebra no
 underscore, então `metro_proximo` vira a adjacência `metr <-> proxim` e exige as

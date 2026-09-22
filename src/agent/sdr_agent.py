@@ -126,14 +126,14 @@ def _instrumentada(funcao):
 #
 # A regra de abrir pelo que existe nasceu de uma resposta real. A busca anotou
 # "nao encontrei a combinacao exata de varanda gourmet e metro", o agente
-# comecou a mensagem por isso, e os tres imoveis que ele mostrou logo abaixo
+# comecou a mensagem por isso, e os imoveis que ele mostrou logo abaixo
 # tinham churrasqueira E metro — a pessoa leu uma recusa antes de ler o que
 # servia para ela. O texto da busca descreve a BUSCA; a mensagem tem que
 # descrever os IMOVEIS.
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
-    "Ao responder: no máximo três destes imóveis, uma linha de porquê para "
-    "cada, até seis linhas no total.\n"
+    "Ao responder: no máximo cinco destes imóveis, uma linha de porquê para "
+    "cada, até nove linhas no total.\n"
     "Abra pelo que você TEM, nunca pelo que faltou. Antes de escrever, leia as "
     "fichas acima e veja o que elas atendem do que ela pediu — muitas vezes "
     "atendem, e de outro jeito. Só diga que algo não existe depois de conferir "

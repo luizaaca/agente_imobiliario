@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # A única tabela que o agente de busca enxerga.
 TABELA_PERMITIDA = "imoveis"
 
-# Teto de linhas por consulta. Ele pode ler dezenas de imóveis e devolver três
+# Teto de linhas por consulta. Ele pode ler dezenas de imóveis e devolver cinco
 # — o limite é do statement, não da resposta —, mas não o catálogo inteiro a
 # cada pergunta: 286 linhas são cerca de 13 mil tokens.
 LIMITE_MAXIMO = 100

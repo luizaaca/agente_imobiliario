@@ -66,7 +66,7 @@ class Recomendacao(BaseModel):
     """O que a busca concluiu."""
 
     escolhidos: Annotated[list[ImovelEscolhido], Field(description=(
-        "De 3 a 5 imóveis, do mais aderente ao menos. Vazio quando o catálogo "
+        "De 5 a 8 imóveis, do mais aderente ao menos. Vazio quando o catálogo "
         "não tem o que foi pedido — nesse caso a `observacao` explica."))]
     observacao: Annotated[str, Field(max_length=600, description=(
         "O que precisou ser afrouxado em relação ao pedido, ou o que o "
