@@ -144,6 +144,26 @@ ABERTURA_DA_CONVERSA = (
 )
 
 
+# O que o corretor lê quando foi a trava, e não a pessoa, que terminou a
+# conversa. Sem isto o perfil acaba na última objeção e o lead parece aberto:
+# na conversa que expôs a falha, a pessoa tinha acabado de escrever que não
+# ia seguir, e nada disso chegou à ficha.
+#
+# Vai sem consolidador de propósito: chega-se aqui porque o orçamento de
+# tokens da conversa acabou, e gastar mais uma chamada de LLM para registrar
+# que não há mais orçamento seria a contradição em pessoa.
+NOTA_DO_HANDOVER = (
+    "Atendimento entregue ao corretor automaticamente, ao atingir o limite de "
+    "tokens da conversa. Não foi a pessoa que encerrou, e o motivo da saída "
+    "não chegou a ser apurado. A última coisa que ela escreveu foi: "
+    '"{mensagem}".'
+)
+
+# Quanto da última mensagem entra na nota. O bastante para o corretor entender
+# o que estava em jogo, sem colar um parágrafo inteiro no meio do perfil.
+TRECHO_DA_ULTIMA_MENSAGEM = 200
+
+
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
     "Ao responder: um destaque em duas ou três linhas — o imóvel que mais combina com o que ela contou de si, com o que a descrição diz de concreto e a ligação com ELA — e até quatro alternativas de uma linha, dizendo a diferença "
@@ -1215,6 +1235,7 @@ def _registrar_handover(
     channel: str,
     deps: SDRDependencies,
     db,
+    ultima_mensagem: str = "",
 ) -> None:
     """Gera e persiste o resumo executivo ao entregar o lead ao corretor.
 
@@ -1224,6 +1245,18 @@ def _registrar_handover(
     if deps.lead_service.has_message_type(lead_id, "handover", db):
         return
 
+    lead = deps.lead_service.get_lead(lead_id, db)
+    nota = NOTA_DO_HANDOVER.format(
+        mensagem=(ultima_mensagem or "").strip()[:TRECHO_DA_ULTIMA_MENSAGEM]
+    )
+    deps.lead_service.update_perfil_narrativo(
+        lead_id,
+        juntar_sem_llm(lead.perfil_narrativo if lead else None, nota),
+        db,
+    )
+
+    # Depois da nota: o resumo é gerado a partir do perfil, e assim ele já sai
+    # sabendo que a conversa terminou por limite.
     resumo = SummaryService().generate_resumo(lead_id, db)
     deps.lead_service.update_qualification(lead_id, {"resumo": resumo}, db)
     # Mesmo encerramento de `encerrar_atendimento`: daqui em diante quem
@@ -1385,7 +1418,7 @@ async def process_message(
                 "acao=handover",
                 lead_id, channel,
             )
-            _registrar_handover(lead_id, channel, deps, db)
+            _registrar_handover(lead_id, channel, deps, db, user_text)
             return HANDOVER_MESSAGE
 
     # Run agent

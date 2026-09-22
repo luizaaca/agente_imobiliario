@@ -49,6 +49,18 @@ mede o que interessa.
 **Mensagem de handover:**
 > "Obrigado por todas as informações! Para dar continuidade com o melhor atendimento, vou direcionar você para um dos nossos corretores especialistas. Ele já terá todo o seu perfil e preferências. 😊"
 
+**O que fica registrado.** O handover acrescenta ao perfil narrativo uma linha
+dizendo que quem encerrou foi a trava, e não a pessoa, com a última mensagem
+dela entre aspas. Sem isso o perfil termina na última coisa que ela disse antes
+do estouro, e o corretor abre uma ficha inativa sem saber por quê — inclusive
+quando a pessoa tinha acabado de escrever que não ia seguir.
+
+A linha é emendada sem passar pelo consolidador: chega-se aqui porque o
+orçamento de tokens da conversa acabou, e gastar mais uma chamada de LLM para
+registrar que não há mais orçamento seria a contradição em pessoa. O resumo
+executivo é gerado depois dela, e por isso já sai sabendo como a conversa
+terminou.
+
 ### Camada 2: Limites globais (por período)
 
 Evita que o custo total saia do controle.

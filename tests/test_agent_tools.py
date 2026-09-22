@@ -614,6 +614,61 @@ def test_handover_nao_se_repete(llm_fake, lead_id, deps, db, monkeypatch):
     assert handovers == 1
 
 
+def test_o_handover_registra_no_perfil_que_a_trava_encerrou(
+    llm_fake, lead_id, deps, db, monkeypatch
+):
+    """Sem isto o perfil acaba na ultima objecao e o lead parece aberto.
+
+    Na conversa que expos a falha, a pessoa tinha acabado de escrever que nao
+    ia seguir. O corretor abriu uma ficha inativa sem uma linha dizendo por
+    que, nem que quem encerrou foi a trava de custo.
+    """
+    monkeypatch.setattr(
+        LLMUsageService, "is_conversation_over_limit", lambda self, lead, db: True
+    )
+    conversar("nao vou seguir, obrigado", lead_id, deps, llm_fake("x"))
+
+    perfil = LeadService().get_lead(lead_id, db).perfil_narrativo
+
+    assert "limite de tokens da conversa" in perfil
+    assert "nao vou seguir, obrigado" in perfil
+
+
+def test_o_handover_nao_gasta_llm_para_anotar(
+    llm_fake, lead_id, deps, db, monkeypatch
+):
+    """Chega-se aqui porque o orcamento acabou; consolidar custaria mais."""
+    monkeypatch.setattr(
+        LLMUsageService, "is_conversation_over_limit", lambda self, lead, db: True
+    )
+
+    async def nao_deveria_ser_chamado(*args, **kwargs):
+        raise AssertionError("consolidou o perfil com o orcamento estourado")
+
+    monkeypatch.setattr(agent_mod, "consolidar_perfil", nao_deveria_ser_chamado)
+    conversar("nao vou seguir", lead_id, deps, llm_fake("x"))
+
+    assert LeadService().get_lead(lead_id, db).perfil_narrativo
+
+
+def test_o_perfil_anterior_sobrevive_ao_handover(
+    llm_fake, lead_id, deps, db, monkeypatch
+):
+    """A nota acrescenta; o que o corretor precisa ler continua ali."""
+    LeadService().update_perfil_narrativo(
+        lead_id, "Procura tres quartos na zona sul para o consultorio.", db
+    )
+    monkeypatch.setattr(
+        LLMUsageService, "is_conversation_over_limit", lambda self, lead, db: True
+    )
+    conversar("nao vou seguir", lead_id, deps, llm_fake("x"))
+
+    perfil = LeadService().get_lead(lead_id, db).perfil_narrativo
+
+    assert "consultorio" in perfil
+    assert "limite de tokens" in perfil
+
+
 def test_agendar_reuniao_vincula_o_imovel(llm_fake, lead_id, deps, catalogo, db):
     modelo = llm_fake(
         ("agendar_reuniao", {
