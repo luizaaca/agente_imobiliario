@@ -107,12 +107,19 @@ def _tsquery(termos: str):
     """Monta a tsquery de busca livre com semantica de OU.
 
     `websearch_to_tsquery` e usada em vez de `to_tsquery` porque ela ja trata
-    aspas, acentos e pontuacao do texto cru, sem risco de erro de sintaxe com o
-    que a LLM mandar. O `or` entre os termos e deliberado: exigir todas as
-    palavras (o padrao) zeraria o resultado em buscas como
-    "varanda gourmet churrasqueira", e quem separa relevancia e o ranking.
+    acentos e pontuacao do texto cru, sem risco de erro de sintaxe com o que a
+    LLM mandar. O `or` entre os termos e deliberado: exigir todas as palavras
+    (o padrao) zeraria o resultado em buscas como "varanda gourmet
+    churrasqueira", e quem separa relevancia e o ranking.
+
+    As aspas saem antes de montar a consulta, e é por causa desse mesmo `or`:
+    para o `websearch_to_tsquery` um par de aspas delimita frase exata, e
+    intercalar `or` entre as palavras de dentro dele transforma
+    `"varanda gourmet"` na frase `varand <-> or <-> gourmet`, que nao existe em
+    imovel nenhum. Busca livre aqui e OU com ranking, nao frase — entao a aspa
+    e ruido de formatacao do modelo, e nao um pedido de busca exata.
     """
-    palavras = [p for p in termos.split() if p]
+    palavras = [p for p in termos.replace('"', " ").split() if p]
     return func.websearch_to_tsquery(FTS_CONFIG, " or ".join(palavras))
 
 

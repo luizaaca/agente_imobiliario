@@ -88,7 +88,9 @@ Ordenar os resultados restantes por aderência textual usando o Full-Text Search
 
 A coluna `imoveis.search_vector` é **gerada pelo banco** (`GENERATED ALWAYS AS ... STORED`) a partir de título, descrição, tags, bairro e tipo, com índice GIN. Sem trigger nem código de aplicação para manter o vetor, ele não tem como ficar defasado.
 
-A consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata aspas e pontuação do texto cru sem risco de erro de sintaxe, e combina os termos com **OU** — exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira". Quem separa relevância é o `ts_rank`, que ordena o resultado. Se sobrarem apenas stopwords, a camada textual é ignorada em vez de zerar a busca.
+A consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata acentos e pontuação do texto cru sem risco de erro de sintaxe, e combina os termos com **OU** — exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira". Quem separa relevância é o `ts_rank`, que ordena o resultado. Se sobrarem apenas stopwords, a camada textual é ignorada em vez de zerar a busca.
+
+As aspas do texto que o modelo manda são removidas antes de montar a consulta, pela mesma razão do OU: para o `websearch_to_tsquery` um par de aspas delimita frase exata, e intercalar `or` entre as palavras de dentro dele transformaria `"varanda gourmet"` na frase `varand <-> or <-> gourmet`, que não casa imóvel nenhum. Busca livre aqui é OU com ranking, não frase.
 
 ### Evolução opcional
 Adicionar colunas `pgvector` para armazenar embeddings da descrição do imóvel, permitindo busca semântica real (cosine similarity). Isso deve ser tratado como **incremento** para a POC.

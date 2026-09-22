@@ -322,6 +322,26 @@ def test_mais_termos_casados_vem_primeiro(catalog, catalogo, db):
     assert len(titulos) > 1
 
 
+def test_aspas_no_termo_nao_viram_busca_por_frase(catalog, catalogo, db):
+    """Aspas do modelo nao podem zerar a busca.
+
+    Para o `websearch_to_tsquery` um par de aspas e frase exata. Como os
+    termos sao unidos com `or`, o `or` caía dentro das aspas e a consulta
+    virava a frase `varand <-> or <-> gourmet` — que nao casa imovel nenhum.
+    """
+    com_aspas = catalog.search(db=db, termos_livres='"varanda gourmet"', limite=10)
+    sem_aspas = catalog.search(db=db, termos_livres="varanda gourmet", limite=10)
+
+    assert [i.id for i in com_aspas] == [i.id for i in sem_aspas]
+    assert "Cobertura Moema Alto Padrao" in [i.titulo for i in com_aspas]
+
+
+def test_aspas_soltas_no_meio_dos_termos(catalog, catalogo, db):
+    """Aspa impar, que nem par forma: nao pode derrubar a consulta."""
+    resultados = catalog.search(db=db, termos_livres='piscina "metro', limite=10)
+    assert "Cobertura Moema Alto Padrao" in [i.titulo for i in resultados]
+
+
 def test_so_stopwords_nao_zera_a_busca(catalog, catalogo, db):
     """'de a e' vira uma tsquery vazia, que nao casaria nada."""
     resultados = catalog.search(db=db, termos_livres="de a e", bairro="Moema", limite=10)
