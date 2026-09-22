@@ -507,6 +507,20 @@ class LeadService:
     # As de `tool` entram de carona na janela que estas delimitam.
     PAPEIS_DA_CONVERSA = ("user", "assistant")
 
+    def ja_respondeu(self, lead_id: int, db: Session) -> bool:
+        """Se o agente já falou com este lead alguma vez.
+
+        É o que separa a primeira mensagem da conversa das demais, e só na
+        primeira a Marina se apresenta. Uma pergunta de existência sobre o
+        índice de `lead_id`, e não uma leitura do histórico: a resposta é um
+        booleano e roda a cada turno.
+        """
+        return db.query(
+            db.query(Mensagem)
+            .filter(Mensagem.lead_id == lead_id, Mensagem.role == "assistant")
+            .exists()
+        ).scalar()
+
     def imoveis_apresentados(self, lead_id: int, db: Session) -> list[int]:
         """IDs dos imóveis já mostrados a este lead, do mais antigo ao recente.
 

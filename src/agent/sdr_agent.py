@@ -130,6 +130,20 @@ def _instrumentada(funcao):
 # tinham churrasqueira E metro — a pessoa leu uma recusa antes de ler o que
 # servia para ela. O texto da busca descreve a BUSCA; a mensagem tem que
 # descrever os IMOVEIS.
+# A apresentacao so vale na primeira mensagem da conversa, e a regra enterrada
+# no meio do prompt nao pegou: na primeira conversa de teste a Marina foi
+# direto para a pergunta de descoberta. Como instrucao de runtime, ela e a
+# ultima coisa que o modelo le antes de escrever — o mesmo motivo que fez o
+# FECHAMENTO_DA_BUSCA funcionar.
+ABERTURA_DA_CONVERSA = (
+    "\n\n---\n"
+    "ESTA É A SUA PRIMEIRA MENSAGEM DESTA CONVERSA. Comece se apresentando em "
+    "UMA linha: seu nome, que você é a assistente virtual da imobiliária e que "
+    "seu papel é entender o que a pessoa procura e marcar a visita com o "
+    "corretor. A pergunta vem depois disso."
+)
+
+
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
     "Ao responder: um destaque em duas ou três linhas — o imóvel que mais combina com o que ela contou de si, com o que a descrição diz de concreto e a ligação com ELA — e até quatro alternativas de uma linha, dizendo a diferença "
@@ -1182,16 +1196,18 @@ async def instrucoes_do_agente(ctx: RunContext[SDRDependencies]) -> str:
     with get_db() as db:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         lead_context = montar_contexto_do_lead(lead)
+        ja_respondeu = ctx.deps.lead_service.ja_respondeu(ctx.deps.lead_id, db)
         perfil = (lead.perfil_narrativo if lead else None) or (
             "Ainda não há perfil escrito. Comece um assim que souber algo "
             "que valha a pena o corretor saber."
         )
 
-    return SYSTEM_PROMPT.format(
+    instrucoes = SYSTEM_PROMPT.format(
         agora=momento_atual(),
         lead_context=lead_context,
         perfil_narrativo=perfil,
     )
+    return instrucoes if ja_respondeu else instrucoes + ABERTURA_DA_CONVERSA
 
 
 def _registrar_handover(

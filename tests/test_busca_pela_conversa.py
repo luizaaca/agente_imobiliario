@@ -19,7 +19,11 @@ from src.agent.history import (
     LIMITE_DO_RETORNO_DE_TOOL,
     build_message_history,
 )
-from src.agent.sdr_agent import SDRDependencies, process_message
+from src.agent.sdr_agent import (
+    ABERTURA_DA_CONVERSA,
+    SDRDependencies,
+    process_message,
+)
 from src.db.models import Imovel, LLMUsage, Mensagem
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
@@ -571,3 +575,78 @@ def test_a_degradacao_tambem_grava_o_que_apresentou(
         _turno_com_busca("qualquer coisa", lead_id, deps)
 
     assert LeadService().imoveis_apresentados(lead_id, db) != []
+
+
+# --- A apresentacao, que so vale na primeira mensagem -----------------------
+
+def _instrucoes_do_turno(texto_do_lead, lead_id, deps) -> str:
+    """Roda um turno e devolve as instrucoes que o modelo recebeu."""
+    capturadas = {}
+
+    def modelo(messages, info):
+        # As instruções vão na requisição mais recente. `messages[0]`, a partir
+        # do segundo turno, é uma requisição antiga reidratada do banco, e vem
+        # sempre sem instrução nenhuma.
+        capturadas["texto"] = messages[-1].instructions or ""
+        return ModelResponse(parts=[TextPart(content="Certo.")])
+
+    with agent_mod.sdr_agent.override(model=FunctionModel(modelo)):
+        asyncio.run(process_message(lead_id, texto_do_lead, "teste", deps()))
+    return capturadas["texto"]
+
+
+def test_na_primeira_mensagem_a_marina_recebe_ordem_de_se_apresentar(
+    lead_id, deps
+):
+    """A regra no meio do prompt nao pegou; como instrucao de runtime, pega.
+
+    Na primeira conversa de teste a Marina foi direto para a pergunta de
+    descoberta, sem dizer quem era.
+    """
+    instrucoes = _instrucoes_do_turno("oi, quero comprar", lead_id, deps)
+
+    assert ABERTURA_DA_CONVERSA in instrucoes
+
+
+def test_da_segunda_mensagem_em_diante_ela_nao_se_reapresenta(lead_id, deps):
+    """Reapresentacao a cada turno soaria um robo em loop."""
+    _instrucoes_do_turno("oi, quero comprar", lead_id, deps)
+
+    instrucoes = _instrucoes_do_turno("na zona sul", lead_id, deps)
+
+    assert ABERTURA_DA_CONVERSA not in instrucoes
+
+
+def test_o_resto_das_instrucoes_continua_em_todos_os_turnos(lead_id, deps):
+    """A abertura acrescenta; nao substitui a persona nem o contexto."""
+    _instrucoes_do_turno("oi", lead_id, deps)
+
+    instrucoes = _instrucoes_do_turno("na zona sul", lead_id, deps)
+
+    assert "Você é a Marina" in instrucoes
+    assert "Antes de enviar, releia" in instrucoes
+
+
+def test_conversa_de_outro_lead_nao_cancela_a_apresentacao(lead_id, deps, db):
+    """A primeira mensagem é por lead, não por instalação.
+
+    Sem o filtro por `lead_id`, o primeiro lead atendido silenciaria a
+    apresentação para todos os que viessem depois.
+    """
+    _instrucoes_do_turno("oi, quero comprar", lead_id, deps)
+
+    outro = LeadService().get_or_create_lead(
+        channel="teste", external_id="outro-lead", db=db
+    ).id
+
+    def deps_do_outro():
+        return SDRDependencies(
+            lead_id=outro, channel="teste", lead_service=LeadService(),
+            catalog_service=CatalogService(),
+            scheduling_service=SchedulingService(),
+            llm_usage_service=LLMUsageService(),
+        )
+
+    instrucoes = _instrucoes_do_turno("oi", outro, lambda: deps_do_outro())
+
+    assert ABERTURA_DA_CONVERSA in instrucoes
