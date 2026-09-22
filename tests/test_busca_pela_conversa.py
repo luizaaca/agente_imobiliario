@@ -1,9 +1,10 @@
-"""A tool de busca vista de fora: o que o modelo manda e o que ele recebe.
+"""A tool de busca vista de fora: o que a Marina manda e o que ela recebe.
 
-Os testes do `CatalogService` cobrem o SQL. Estes cobrem a camada que o modelo
-enxerga — o schema que ele preenche e o texto que volta — porque foi ali que os
-defeitos reais apareceram: a pessoa pediu galpão e recebeu sala comercial, e a
-busca saiu com a cidade no campo de bairro.
+Os testes do `CatalogService` cobrem o SQL, e os de `test_busca_agent.py`
+cobrem quem decide o que mostrar. Estes cobrem a costura entre os dois — o
+schema que a Marina preenche, os números que voltam e o que sobra registrado —
+porque foi na costura que os defeitos reais apareceram: a pessoa pediu galpão e
+recebeu sala comercial, e o imóvel já mostrado voltou como novidade.
 """
 
 import asyncio
@@ -19,16 +20,13 @@ from src.agent.history import (
     build_message_history,
 )
 from src.agent.sdr_agent import SDRDependencies, process_message
-from src.db.models import Mensagem
-from src.services.catalog_service import (
-    PERFIS_INDICADOS,
-    TIPOS,
-    ZONAS,
-    CatalogService,
-)
+from src.db.models import LLMUsage, Mensagem
+from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+
+from .conftest import consulta_do_catalogo, escolha_da_busca
 
 
 @pytest.fixture
@@ -52,16 +50,16 @@ def deps(lead_id):
     return criar
 
 
-def _buscar(args, lead_id, deps) -> str:
-    """Roda um turno em que o modelo chama a busca e devolve o que a tool disse."""
+def _turno_com_busca(pedido, lead_id, deps) -> str:
+    """Roda um turno em que a Marina chama a busca e devolve o que a tool disse."""
     capturado = {}
 
     def modelo(messages, info):
         if not capturado:
             capturado["chamou"] = True
-            return ModelResponse(
-                parts=[ToolCallPart(tool_name="buscar_imoveis", args=args)]
-            )
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="buscar_imoveis", args={"pedido": pedido}
+            )])
         capturado["retorno"] = str(messages[-1].parts[0].content)
         return ModelResponse(parts=[TextPart(content="ok")])
 
@@ -85,167 +83,339 @@ def _schema(lead_id, deps) -> dict:
     return tool.parameters_json_schema
 
 
-def _enum(schema: dict, campo: str) -> list:
-    """Os valores aceitos de um parâmetro, que o `Optional` embrulha em anyOf."""
-    prop = schema["properties"][campo]
-    if "enum" in prop:
-        return prop["enum"]
-    return next(a["enum"] for a in prop["anyOf"] if "enum" in a)
+# --- O que a Marina vê -------------------------------------------------------
 
 
-# --- O que o modelo vê -------------------------------------------------------
+def test_a_busca_pede_um_campo_so(lead_id, deps):
+    """O contrato de dezenove filtros pesava em toda requisição de todo turno.
 
-
-def test_o_vocabulario_do_catalogo_vai_no_schema(lead_id, deps):
-    """Enum no schema em vez de instrução em prosa: o valor inválido nem passa."""
+    Descrever bem cada filtro — que é o que a expressividade pedia — encarecia
+    os turnos sem busca para melhorar os com busca. Um campo de texto livre
+    tira esse detalhe do caminho de quem conversa.
+    """
     schema = _schema(lead_id, deps)
 
-    assert _enum(schema, "tipo") == list(TIPOS)
-    assert _enum(schema, "zona") == list(ZONAS)
-    assert _enum(schema, "perfil_indicado") == list(PERFIS_INDICADOS)
-    assert _enum(schema, "operacao") == ["venda", "aluguel"]
+    assert list(schema["properties"]) == ["pedido"]
+    assert schema["required"] == ["pedido"]
 
 
-def test_todo_parametro_da_busca_e_descrito(lead_id, deps):
+def test_o_campo_da_busca_e_descrito(lead_id, deps):
     """Descrição de parâmetro é o que mais muda o acerto de uma tool."""
-    props = _schema(lead_id, deps)["properties"]
+    pedido = _schema(lead_id, deps)["properties"]["pedido"]
 
-    sem_descricao = [nome for nome, p in props.items() if not p.get("description")]
-    assert sem_descricao == []
-
-
-def test_a_descricao_do_bairro_avisa_para_nao_mandar_a_cidade(lead_id, deps):
-    """O lead 43 disse "galpão em sp" e o modelo mandou SP como bairro."""
-    bairro = _schema(lead_id, deps)["properties"]["bairro"]["description"]
-
-    assert "São Paulo" in bairro and "zera a busca" in bairro
+    assert pedido.get("description")
+    assert "palavras dela" in pedido["description"]
 
 
-def test_a_descricao_do_preco_avisa_da_escala(lead_id, deps):
-    """Teto de 5.000 numa busca de venda não acha nada, e o modelo não sabia."""
-    preco = _schema(lead_id, deps)["properties"]["preco_max"]["description"]
+def test_o_schema_da_busca_e_barato(lead_id, deps):
+    """Ele é reenviado em toda requisição, inclusive nos turnos sem busca."""
+    import json
 
-    assert "MENSAL" in preco and "TOTAL" in preco
-
-
-# --- O que a tool devolve ----------------------------------------------------
+    tamanho = len(json.dumps(_schema(lead_id, deps), ensure_ascii=False))
+    assert tamanho < 1000
 
 
-def test_tipo_pedido_e_tipo_devolvido(catalogo, lead_id, deps):
-    retorno = _buscar({"tipo": "galpao"}, lead_id, deps)
+# --- Os números vêm do banco -------------------------------------------------
+
+
+def test_o_imovel_escolhido_vira_ficha_com_os_dados_do_catalogo(
+    catalogo, lead_id, deps, busca_fake
+):
+    with busca_fake(
+        consulta_do_catalogo("SELECT id FROM imoveis WHERE tipo = 'galpao'"),
+        escolha_da_busca((7, "780m² com doca, é o único galpão")),
+    ):
+        retorno = _turno_com_busca("galpão para logística", lead_id, deps)
 
     assert "Galpao Belem Logistico" in retorno
-    assert "Sala Comercial Paulista" not in retorno
+    assert "780m² com doca" in retorno
 
 
-def test_o_que_nao_existe_volta_com_os_numeros_do_catalogo(catalogo, lead_id, deps):
-    """"Não achei" sozinho faz o agente pedir desculpa no vazio."""
-    retorno = _buscar(
-        {"tipo": "galpao", "operacao": "aluguel", "preco_max": 3000}, lead_id, deps
-    )
+def test_o_preco_apresentado_e_o_do_banco_e_nao_o_que_o_modelo_disse(
+    catalogo, lead_id, deps, busca_fake
+):
+    """O julgamento é do agente de busca; os números são do PostgreSQL.
 
-    assert "Nenhum imóvel encontrado" in retorno
-    assert "1 galpao para alugar" in retorno
-    assert "R$ 18.000" in retorno
-    assert "Não ofereça um imóvel de outro tipo" in retorno
-
-
-def test_preco_sai_no_formato_brasileiro(catalogo, lead_id, deps):
-    """"R$ 12,500" em português se lê doze reais e meio."""
-    retorno = _buscar({"tipo": "galpao"}, lead_id, deps)
+    A persona promete à pessoa que nunca inventa preço, e essa promessa não
+    sobrevive a número escrito por modelo. Aqui o agente de busca mente no
+    `porque`, e o preço da ficha continua certo.
+    """
+    with busca_fake(escolha_da_busca((7, "sai por R$ 1.000, uma pechincha"))):
+        retorno = _turno_com_busca("galpão barato", lead_id, deps)
 
     assert "R$ 18.000" in retorno
     assert "R$ 18,000" not in retorno
 
 
-def test_aluguel_mostra_o_custo_total_do_mes(catalogo, lead_id, deps):
-    retorno = _buscar({"tipo": "sala_comercial"}, lead_id, deps)
+def test_aluguel_mostra_o_custo_total_do_mes(catalogo, lead_id, deps, busca_fake):
+    with busca_fake(escolha_da_busca((6, "sala pronta para escritório"))):
+        retorno = _turno_com_busca("sala comercial", lead_id, deps)
 
     assert "R$ 4.500 + condomínio R$ 900 = R$ 5.400/mês" in retorno
 
 
-def test_metragem_sai_sem_casa_decimal(catalogo, lead_id, deps):
-    """`Decimal` com escala 2 imprime "500.00m2" mesmo com :g."""
-    retorno = _buscar({"tipo": "galpao"}, lead_id, deps)
+def test_metragem_sai_sem_casa_decimal(catalogo, lead_id, deps, busca_fake):
+    """`Decimal` com escala 2 imprime "780.00m²" mesmo com :g."""
+    with busca_fake(escolha_da_busca((7, "cabe a operação inteira"))):
+        retorno = _turno_com_busca("galpão", lead_id, deps)
 
     assert "780m²" in retorno
     assert "780.00m²" not in retorno
 
 
-def test_filtro_contraditorio_vira_pedido_de_correcao(catalogo, lead_id, deps):
-    """Nem tipo nem finalidade são afrouxados: sem isto, zero para sempre."""
-    retorno = _buscar(
-        {"tipo": "galpao", "finalidade": "residencial"}, lead_id, deps
+def test_id_inventado_nao_vira_ficha(catalogo, lead_id, deps, busca_fake):
+    """Ficha de imóvel que não existe é a pior saída possível.
+
+    O ID vai para `agendar_reuniao` e de lá para a agenda do corretor: um
+    número inventado poria uma visita a um imóvel inexistente na agenda dele.
+    """
+    with busca_fake(escolha_da_busca((7, "existe"), (9999, "não existe"))):
+        retorno = _turno_com_busca("galpão", lead_id, deps)
+
+    assert "Galpao Belem Logistico" in retorno
+    assert "9999" not in retorno
+    assert "não existe" not in retorno
+
+
+# --- A observação da busca ---------------------------------------------------
+
+
+def test_o_que_foi_afrouxado_chega_a_marina(catalogo, lead_id, deps, busca_fake):
+    """Sem as palavras do que mudou, ela inventa que ampliou sem ter ampliado."""
+    with busca_fake(escolha_da_busca(
+        (3, "a única cobertura do catálogo"),
+        observacao="Não havia cobertura em Pinheiros; ampliei para a zona sul.",
+    )):
+        retorno = _turno_com_busca("cobertura em Pinheiros", lead_id, deps)
+
+    assert "ampliei para a zona sul" in retorno
+
+
+def test_catalogo_sem_nada_ainda_traz_os_numeros(
+    catalogo, lead_id, deps, busca_fake
+):
+    """"Não achei" sozinho faz a Marina pedir desculpa no vazio."""
+    with busca_fake(escolha_da_busca(
+        observacao="O catálogo tem 1 galpão, e é para alugar, não à venda.",
+    )):
+        retorno = _turno_com_busca("galpão à venda", lead_id, deps)
+
+    assert "1 galpão" in retorno
+
+
+# --- O que não se repete -----------------------------------------------------
+
+
+def test_o_imovel_ja_mostrado_vai_como_exclusao_na_busca_seguinte(
+    catalogo, lead_id, deps, busca_fake
+):
+    """Numa conversa real ele reapresentou o mesmo apartamento como novidade."""
+    with busca_fake(escolha_da_busca((7, "serve"))):
+        _turno_com_busca("galpão", lead_id, deps)
+
+    visto = {}
+
+    def espiar(messages, info):
+        visto["prompt"] = "\n".join(
+            str(p.content) for m in messages for p in m.parts
+            if type(p).__name__ == "UserPromptPart"
+        )
+        return escolha_da_busca((6, "outra opção"))
+
+    from src.agent import busca_agent as busca_mod
+    with busca_mod.busca_agent.override(model=FunctionModel(espiar)):
+        _turno_com_busca("mostre outro", lead_id, deps)
+
+    assert "Já apresentados" in visto["prompt"]
+    assert "7" in visto["prompt"]
+
+
+def test_a_ficha_do_lead_chega_ao_agente_de_busca(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """O que já se sabe dela desempata o que o pedido não diz."""
+    LeadService().update_qualification(
+        lead_id, {"intencao": "aluguel", "orcamento_max": 5000}, db
     )
 
-    assert "sempre comercial" in retorno
+    visto = {}
+
+    def espiar(messages, info):
+        visto["prompt"] = "\n".join(
+            str(p.content) for m in messages for p in m.parts
+            if type(p).__name__ == "UserPromptPart"
+        )
+        return escolha_da_busca((6, "cabe no orçamento"))
+
+    from src.agent import busca_agent as busca_mod
+    with busca_mod.busca_agent.override(model=FunctionModel(espiar)):
+        _turno_com_busca("algo para a empresa", lead_id, deps)
+
+    assert "Quer: aluguel" in visto["prompt"]
+    assert "5.000" in visto["prompt"]
 
 
-# --- Operação: uma por busca -------------------------------------------------
+def test_a_agenda_do_lead_nao_vai_para_o_agente_de_busca(
+    catalogo, lead_id, deps, busca_fake
+):
+    """Compromisso e estágio no funil são assunto de quem conversa.
+
+    No contexto de quem procura imóvel seriam tokens gastos em nada, e a busca
+    roda dentro do turno — o que ela gasta, a pessoa espera.
+    """
+    visto = {}
+
+    def espiar(messages, info):
+        visto["prompt"] = "\n".join(
+            str(p.content) for m in messages for p in m.parts
+            if type(p).__name__ == "UserPromptPart"
+        )
+        return escolha_da_busca((7, "serve"))
+
+    from src.agent import busca_agent as busca_mod
+    with busca_mod.busca_agent.override(model=FunctionModel(espiar)):
+        _turno_com_busca("galpão", lead_id, deps)
+
+    assert "Compromissos marcados" not in visto["prompt"]
+    assert "Estágio no funil" not in visto["prompt"]
 
 
-def test_sem_operacao_a_lista_mista_vem_com_aviso(catalogo, lead_id, deps):
-    """Ordenada por preço, a lista mista esconde as vendas atrás dos aluguéis."""
-    retorno = _buscar({}, lead_id, deps)
-
-    assert "mistura venda e aluguel" in retorno
-    assert "uma busca para cada uma" in retorno
+# --- Quando o provider cai ---------------------------------------------------
 
 
-def test_com_operacao_nao_ha_aviso(catalogo, lead_id, deps):
-    retorno = _buscar({"operacao": "venda"}, lead_id, deps)
+def test_provider_fora_do_ar_ainda_devolve_imoveis(
+    catalogo, lead_id, deps, busca_fora_do_ar, db
+):
+    """A busca degrada em qualidade, não em disponibilidade.
 
-    assert "mistura venda e aluguel" not in retorno
-
-
-def test_a_operacao_sai_da_intencao_ja_registrada_do_lead(catalogo, lead_id, deps, db):
-    """O modelo não precisa repetir numa tool o que já gravou noutra."""
+    A pessoa está esperando imóvel na tela; um pedido de desculpas porque uma
+    chamada caiu é o pior resultado possível quando o catálogo está de pé.
+    """
     LeadService().update_qualification(lead_id, {"intencao": "aluguel"}, db)
 
-    retorno = _buscar({}, lead_id, deps)
+    with busca_fora_do_ar():
+        retorno = _turno_com_busca("algo para alugar na zona leste", lead_id, deps)
 
-    assert "mistura venda e aluguel" not in retorno
+    # Fichas de verdade, com ID — é o que `agendar_reuniao` vai precisar.
+    assert "(ID: " in retorno
+    assert "Nenhum imóvel encontrado" not in retorno
+
+
+def test_a_degradacao_usa_a_intencao_ja_gravada_do_lead(
+    catalogo, lead_id, deps, busca_fora_do_ar, db
+):
+    """Sem LLM para ler o pedido, quem restringe é o que ela já informou."""
+    LeadService().update_qualification(lead_id, {"intencao": "aluguel"}, db)
+
+    with busca_fora_do_ar():
+        retorno = _turno_com_busca("qualquer coisa", lead_id, deps)
+
     assert "Apartamento Bela Vista Compacto" not in retorno  # é venda
 
-# --- O agente lembra do que ja mostrou ---------------------------------------
 
-
-def test_o_imovel_mostrado_volta_no_historico_do_turno_seguinte(
-    catalogo, lead_id, deps, db
+def test_a_falha_da_busca_e_registrada_como_erro(
+    catalogo, lead_id, deps, busca_fora_do_ar, db
 ):
-    """O ponto todo da persistencia de tool: reconhecer o que ja apresentou.
+    """Falha que só existe no log não entra na taxa de erro do dashboard."""
+    with busca_fora_do_ar():
+        _turno_com_busca("qualquer coisa", lead_id, deps)
 
-    Numa conversa real ele buscou de novo, veio o mesmo apartamento, e ele o
-    apresentou como novidade — os IDs so existem no retorno da busca, que antes
-    era descartado entre um turno e outro.
+    linha = db.query(LLMUsage).filter(LLMUsage.operation == "busca").one()
+    assert linha.status == "erro"
+    assert linha.tokens_total == 0
+
+
+# --- Observabilidade ---------------------------------------------------------
+
+
+def test_o_custo_da_busca_e_separado_do_custo_de_conversar(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """`operation="busca"` é o que torna a recuperação mensurável.
+
+    Os tokens entram no orçamento do lead, mas não contam como turno de
+    conversa: os agentes auxiliares trabalham dentro de um turno, não no lugar
+    dele.
     """
-    _buscar({"tipo": "galpao"}, lead_id, deps)
+    with busca_fake(escolha_da_busca((7, "serve"))):
+        _turno_com_busca("galpão", lead_id, deps)
 
-    historico = build_message_history(
-        LeadService().get_history(lead_id, HISTORY_LIMIT, db)
-    )
+    busca = db.query(LLMUsage).filter(LLMUsage.operation == "busca").one()
+    assert busca.tokens_total > 0
+    assert busca.status == "ok"
 
-    tudo = "".join(
-        str(getattr(p, "content", "")) for msg in historico for p in msg.parts
-    )
-    assert "Galpao Belem Logistico" in tudo
+    assert LLMUsageService().get_conversation_turns(lead_id, db) == 1
 
 
-def test_a_chamada_fica_gravada_com_os_argumentos(catalogo, lead_id, deps, db):
-    """Saber o que ele buscou, e nao so o que achou, e o que evita repetir."""
-    _buscar({"tipo": "galpao"}, lead_id, deps)
+def test_as_consultas_ficam_no_rastro_da_mensagem(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """As consultas não viram mensagem — este é o único registro delas.
+
+    Sem isto não há como reconstruir depois de onde saíram os imóveis que a
+    pessoa viu, que é justamente o que a delegação torna invisível.
+    """
+    with busca_fake(
+        consulta_do_catalogo("SELECT id FROM imoveis WHERE tipo = 'galpao'"),
+        escolha_da_busca((7, "serve")),
+    ):
+        _turno_com_busca("galpão", lead_id, deps)
+
+    linha = db.query(Mensagem).filter(
+        Mensagem.lead_id == lead_id, Mensagem.role == "tool"
+    ).one()
+
+    rastro = linha.metadata_json["busca"]
+    assert rastro["consultas"] == [
+        "SELECT id FROM imoveis WHERE tipo = 'galpao' LIMIT 100"
+    ]
+    assert rastro["tokens_in"] > 0
+
+
+def test_a_chamada_fica_gravada_com_o_pedido(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """Saber o que ela buscou, e não só o que achou, é o que evita repetir."""
+    with busca_fake(escolha_da_busca((7, "serve"))):
+        _turno_com_busca("galpão com doca na zona leste", lead_id, deps)
 
     linha = db.query(Mensagem).filter(
         Mensagem.lead_id == lead_id, Mensagem.role == "tool"
     ).one()
 
     assert linha.metadata_json["tool_name"] == "buscar_imoveis"
-    assert linha.metadata_json["args"]["tipo"] == "galpao"
+    assert linha.metadata_json["args"]["pedido"] == "galpão com doca na zona leste"
 
 
-def test_o_banco_guarda_o_retorno_inteiro(catalogo, lead_id, deps, db):
-    """Abreviar e coisa do historico; a ficha do corretor fica com tudo."""
-    _buscar({"operacao": "venda"}, lead_id, deps)
+def test_o_imovel_mostrado_volta_no_historico_do_turno_seguinte(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """Os IDs só existem no retorno da busca: ela nunca os escreve à pessoa.
+
+    Sem persistir o retorno, `agendar_reuniao` fica sem `imovel_id` e o
+    corretor recebe um horário sem saber aonde ir.
+    """
+    with busca_fake(escolha_da_busca((7, "serve"))):
+        _turno_com_busca("galpão", lead_id, deps)
+
+    historico = build_message_history(
+        LeadService().get_history(lead_id, HISTORY_LIMIT, db)
+    )
+    tudo = "".join(
+        str(getattr(p, "content", "")) for msg in historico for p in msg.parts
+    )
+    assert "Galpao Belem Logistico" in tudo
+    assert "ID: 7" in tudo
+
+
+def test_o_banco_guarda_o_retorno_inteiro(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """Abreviar é coisa do histórico; a ficha do corretor fica com tudo."""
+    with busca_fake(escolha_da_busca(
+        (1, "primeira"), (2, "segunda"), (3, "terceira"), (4, "quarta"),
+    )):
+        _turno_com_busca("apartamentos à venda", lead_id, deps)
 
     linha = db.query(Mensagem).filter(
         Mensagem.lead_id == lead_id, Mensagem.role == "tool"

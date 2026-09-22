@@ -286,7 +286,7 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [x] Implementar agente principal com PydanticAI em `src/agent/sdr_agent.py`.
 - [ ] Definir output estruturado do agente para resposta + atualização de estado.
   > Feito de outro jeito: a resposta é texto e a atualização de estado acontece pelas tools.
-- [ ] Implementar agente de busca em `src/agent/busca_agent.py`, com role somente-leitura sobre `imoveis`.
+- [x] Implementar agente de busca em `src/agent/busca_agent.py`, com role somente-leitura sobre `imoveis`.
 - [x] Implementar tools tipadas:
   - [x] `buscar_imoveis` — pedido em texto livre, atendido pelo agente de busca
   - [x] `registrar_qualificacao`

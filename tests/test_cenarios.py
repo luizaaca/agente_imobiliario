@@ -19,6 +19,8 @@ from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 
+from .conftest import escolha_da_busca
+
 pytestmark = pytest.mark.cenario
 
 
@@ -50,7 +52,23 @@ def conversar(lead_id, texto, modelo, db, canal="teste"):
 # --- Cenário 1: compra residencial ------------------------------------------
 
 
-def test_cenario_1_compra_residencial(llm_fake, catalogo, db):
+def _retorno_da_busca(lead_id, db) -> str:
+    """O que a tool de busca devolveu neste cenario.
+
+    Um cenario chama varias tools, e todas gravam com `role="tool"`: o nome
+    fica no `metadata_json`, e e por ele que se acha a busca.
+    """
+    linhas = [
+        m for m in db.query(Mensagem).filter(
+            Mensagem.lead_id == lead_id, Mensagem.role == "tool"
+        ).order_by(Mensagem.id).all()
+        if (m.metadata_json or {}).get("tool_name") == "buscar_imoveis"
+    ]
+    assert len(linhas) == 1, f"esperava uma busca, achei {len(linhas)}"
+    return linhas[0].content
+
+
+def test_cenario_1_compra_residencial(llm_fake, busca_fake, catalogo, db):
     """Saudação → qualificação → busca no catálogo → agendamento de visita."""
     lead_service = LeadService()
     lead_id = lead_service.get_or_create_lead(
@@ -75,13 +93,19 @@ def test_cenario_1_compra_residencial(llm_fake, catalogo, db):
     assert (lead.bairro_interesse, lead.quartos) == ("Bela Vista", 2)
 
     # 3. Busca: os imóveis vêm do catálogo, não da imaginação do modelo
-    conversar(lead_id, "Pode me mostrar as opcoes?", llm_fake(
-        ("buscar_imoveis", {
-            "intencao": "compra", "bairro_interesse": "Bela Vista",
-            "orcamento_max": 700000, "quartos": 2,
-        }),
-        "Encontrei 2 opcoes na Bela Vista.",
-    ), db)
+    with busca_fake(escolha_da_busca(
+        (1, "2 quartos na Bela Vista, dentro do orçamento"),
+        (2, "mesma região, 62 m2"),
+    )):
+        conversar(lead_id, "Pode me mostrar as opcoes?", llm_fake(
+            ("buscar_imoveis", {
+                "pedido": "apartamento de 2 quartos na Bela Vista ate 700 mil",
+            }),
+            "Encontrei 2 opcoes na Bela Vista.",
+        ), db)
+
+    busca = _retorno_da_busca(lead_id, db)
+    assert "Apartamento Bela Vista Compacto" in busca
 
     # 4. Agendamento: handover operacional para o corretor
     conversar(lead_id, "Quero visitar a primeira.", llm_fake(
@@ -107,13 +131,14 @@ def test_cenario_1_compra_residencial(llm_fake, catalogo, db):
         .order_by(Mensagem.id).all()
     ]
     assert papeis.count("user") + papeis.count("assistant") == 8
-    assert papeis.count("tool") == 2
+    # Qualificacao, busca e agendamento: uma linha para cada.
+    assert papeis.count("tool") == 3
 
 
 # --- Cenário 2: investimento -------------------------------------------------
 
 
-def test_cenario_2_investimento(llm_fake, perfil_fake, catalogo, db):
+def test_cenario_2_investimento(llm_fake, perfil_fake, busca_fake, catalogo, db):
     """Perfil investidor → busca por ticket → resumo executivo ao corretor."""
     lead_service = LeadService()
     lead_id = lead_service.get_or_create_lead(
@@ -133,10 +158,16 @@ def test_cenario_2_investimento(llm_fake, perfil_fake, catalogo, db):
     assert lead.perfil == "investidor"
 
     # 2. Investimento busca imóveis à venda
-    conversar(lead_id, "O que cabe nesse ticket?", llm_fake(
-        ("buscar_imoveis", {"intencao": "investimento", "orcamento_max": 500000}),
-        "Separei opcoes com bom potencial de locacao.",
-    ), db)
+    with busca_fake(escolha_da_busca((4, "studio compacto, alta liquidez"))):
+        conversar(lead_id, "O que cabe nesse ticket?", llm_fake(
+            ("buscar_imoveis", {
+                "pedido": "studio para investir ate 500 mil na zona oeste",
+            }),
+            "Separei opcoes com bom potencial de locacao.",
+        ), db)
+
+    busca = _retorno_da_busca(lead_id, db)
+    assert "Studio Pinheiros Investidor" in busca
 
     # 3. O perfil narrativo acumula o contexto qualitativo: o SDR relata a
     #    novidade e o agente de consolidacao devolve o perfil inteiro.

@@ -12,22 +12,18 @@ from pydantic import Field
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 
+from src.agent import imoveis_mostrados
+from src.agent.busca_agent import buscar
 from src.agent.history import HISTORY_LIMIT, build_message_history
 from src.agent.perfil_agent import consolidar_perfil, juntar_sem_llm
 from src.agent.prompts import HANDOVER_MESSAGE, SYSTEM_PROMPT, UNAVAILABLE_MESSAGE
-from src.agent.provider import LLMConfigError, build_model
+from src.agent.provider import LLMConfigError, build_model, modelo_da_busca
 from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import (
     OPERACAO_POR_INTENCAO,
     CatalogService,
     FiltroInvalido,
-    Finalidade,
-    Operacao,
-    Ordenacao,
-    PerfilIndicado,
-    TipoImovel,
-    Zona,
     reais,
 )
 from src.services.lead_service import LeadService
@@ -53,6 +49,11 @@ class SDRDependencies:
     # mensagem, então um id por objeto é um id por turno. Quem quiser correlacionar
     # com um id externo (um update do Telegram, por exemplo) passa o seu.
     correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    # Rastro das consultas de cada busca do turno, por `tool_call_id`. As
+    # consultas do agente de busca não entram no histórico da conversa — é o
+    # que torna a delegação barata —, então elas são recolhidas aqui e gravadas
+    # no `metadata_json` da mensagem da ferramenta, para auditoria.
+    rastros_de_busca: dict[str, dict] = field(default_factory=dict)
 
 
 # Create the agent
@@ -162,142 +163,196 @@ def _formatar_imovel(imovel) -> str:
     return "\n".join(linhas)
 
 
-def _operacao_do_lead(ctx: RunContext[SDRDependencies]) -> Optional[str]:
-    """A operação que a intenção já registrada do lead implica, se houver.
-
-    Poupa o modelo de repetir numa tool o que ele já gravou noutra, e evita a
-    lista misturada quando ele simplesmente esquece de informar.
-    """
-    with get_db() as db:
-        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
-        intencao = lead.intencao if lead else None
-    return OPERACAO_POR_INTENCAO.get(intencao or "")
-
-
-# Aviso para quando a busca sai sem operação definida. A ordenação por preço
-# faria os aluguéis (a partir de R$ 1.500) enterrarem as vendas (a partir de
-# R$ 240 mil), e a pessoa veria só metade do que pediu.
-AVISO_DE_LISTA_MISTA = (
-    "\n---\n"
-    "Atenção: esta lista mistura venda e aluguel, porque a busca saiu sem "
-    "`operacao`. Se a pessoa aceita as duas, faça uma busca para cada uma e "
-    "apresente as duas separadamente — é o único jeito de ela ver as opções "
-    "de compra junto com as de aluguel."
-)
-
-
 @sdr_agent.tool
 @_instrumentada
 async def buscar_imoveis(
     ctx: RunContext[SDRDependencies],
-    operacao: Annotated[Optional[Operacao], Field(description=(
-        "Comprar ou investir é 'venda'. UMA POR BUSCA: se ela aceita as duas, "
-        "chame duas vezes. Sem isto a lista sai misturada e os aluguéis, mais "
-        "baratos, escondem as vendas."))] = None,
-    tipo: Annotated[Optional[TipoImovel], Field(description=(
-        "Tipo exato, quando ela nomeia um. NUNCA é afrouxado: quem pede galpão "
-        "não recebe sala comercial. Se ela falar genericamente ('um lugar para "
-        "minha empresa'), deixe vazio e use finalidade."))] = None,
-    finalidade: Annotated[Optional[Finalidade], Field(description=(
-        "Para quando ela não nomeia o tipo mas o uso está claro. Não informe "
-        "junto com `tipo`, que já define a finalidade."))] = None,
-    bairro: Annotated[Optional[str], Field(max_length=80, description=(
-        "Só o nome do bairro. NÃO use cidade nem estado: o catálogo inteiro é "
-        "da cidade de São Paulo, então 'São Paulo' ou 'SP' zera a busca. "
-        "'Paulista', 'Faria Lima' e 'Berrini' são referências, não bairros — "
-        "para elas use `termos_livres`."))] = None,
-    zona: Annotated[Optional[Zona], Field(description=(
-        "Região da cidade. Aceita também nome de bairro, se você não souber a "
-        "zona dele."))] = None,
-    preco_min: Annotated[Optional[float], Field(ge=0, description=(
-        "Piso de preço. Raro."))] = None,
-    preco_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Teto de preço. ESCALA: no aluguel é o valor MENSAL (mediana "
-        "R$ 6.200); na venda é o TOTAL (mediana R$ 1,35 milhão). Mandar 5000 "
-        "numa busca de venda não acha nada."))] = None,
-    custo_total_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Teto de aluguel MAIS condomínio ('até 5 mil tudo incluso'). Use no "
-        "lugar de `preco_max`, não junto."))] = None,
-    quartos_min: Annotated[Optional[int], Field(ge=0, description=(
-        "'2 quartos' é min=2 e max=2; 'pelo menos 2' é só min=2; '2 ou 3' é "
-        "min=2 e max=3."))] = None,
-    quartos_max: Annotated[Optional[int], Field(ge=0, description=(
-        "Ver quartos_min."))] = None,
-    suites_min: Annotated[Optional[int], Field(ge=0, description=(
-        "Mínimo de suítes."))] = None,
-    banheiros_min: Annotated[Optional[int], Field(ge=0, description=(
-        "Mínimo de banheiros."))] = None,
-    vagas_min: Annotated[Optional[int], Field(ge=0, description=(
-        "Mínimo de vagas."))] = None,
-    area_min: Annotated[Optional[float], Field(gt=0, description=(
-        "Metragem mínima. É o filtro que importa no comercial, onde quartos "
-        "não diz nada."))] = None,
-    area_max: Annotated[Optional[float], Field(gt=0, description=(
-        "Metragem máxima."))] = None,
-    perfil_indicado: Annotated[Optional[PerfilIndicado], Field(description=(
-        "Use quando ela revelar o uso e não o imóvel: abrir estacionamento é "
-        "logistica_industrial, comprar para alugar é investidor_renda."))] = None,
-    termos_livres: Annotated[Optional[str], Field(max_length=200, description=(
-        "Só amenidades: varanda gourmet, piscina, reformado, perto do metrô. "
-        "Valem como OU, entram no ranking e não como exigência. Não repita "
-        "aqui tipo, bairro, preço nem quartos — todos têm campo próprio."))] = None,
-    ordenar_por: Annotated[Optional[Ordenacao], Field(description=(
-        "Vazio escolhe sozinho: relevância se houver termos_livres, senão "
-        "preço crescente."))] = None,
-    limite_resultados: Annotated[int, Field(ge=1, le=10, description=(
-        "Quantos imóveis trazer. Peça 4 ou 5: você só vai mostrar dois ou três "
-        "à pessoa, e os extras te dão de onde escolher."))] = 5,
+    pedido: Annotated[str, Field(min_length=3, max_length=400, description=(
+        "O que a pessoa procura, com as palavras dela: o que quer, onde, por "
+        "quanto, para quê e o que já recusou. Escreva uma frase, não uma lista "
+        "de filtros — quem traduz isso em consulta é a ferramenta. Referências "
+        "como 'perto da Paulista' e usos como 'para uma contabilidade de 8 "
+        "pessoas' são úteis e podem entrar."))],
 ) -> str:
     """Buscar imóveis no catálogo de São Paulo.
 
     Use cedo e com pouca informação: mostrar imóvel é o que faz a pessoa
     revelar orçamento, tamanho e bairro sem você perguntar.
 
-    Se os filtros exatos não devolvem nada, a busca é refeita sozinha
-    afrouxando um critério por vez, e a resposta diz o que mudou. Operação,
-    tipo e finalidade nunca são afrouxados: quando o catálogo não tem o que
-    ela pediu, a resposta traz os números reais para você dizer a verdade.
+    A ferramenta conhece o catálogo, consulta quantas vezes precisar e amplia
+    sozinha quando o pedido exato não tem resposta — a resposta diz o que
+    mudou. Ela nunca troca o que foi pedido por outra coisa: quando o catálogo
+    não tem, ela devolve os números reais para você dizer a verdade.
+
+    Uma chamada basta mesmo quando a pessoa aceita comprar ou alugar: a
+    ferramenta separa as duas listas sozinha.
     """
-    filtros = dict(
-        operacao=operacao or _operacao_do_lead(ctx),
-        tipo=tipo,
-        finalidade=finalidade,
-        bairro=bairro,
-        zona=zona,
-        preco_min=preco_min,
-        preco_max=preco_max,
-        custo_total_max=custo_total_max,
-        quartos_min=quartos_min,
-        quartos_max=quartos_max,
-        suites_min=suites_min,
-        banheiros_min=banheiros_min,
-        vagas_min=vagas_min,
-        area_min=area_min,
-        area_max=area_max,
-        perfil_indicado=perfil_indicado,
-        termos_livres=termos_livres,
-        ordenar_por=ordenar_por,
-        limite=limite_resultados,
+    with get_db() as db:
+        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
+        ficha = ficha_para_a_busca(lead)
+        perfil = lead.perfil_narrativo if lead else None
+
+    ja_vistos = imoveis_mostrados.ja_mostrados(ctx.deps.lead_id)
+    comeco = time.monotonic()
+
+    try:
+        recomendacao = await buscar(
+            pedido=pedido,
+            contexto_do_lead=ficha,
+            perfil_narrativo=perfil,
+            ja_mostrados=ja_vistos,
+            correlation_id=ctx.deps.correlation_id,
+        )
+    except Exception as e:
+        # A busca não pode sumir junto com uma chamada que caiu: a pessoa está
+        # esperando imóvel na tela. Degrada para o caminho sem LLM, que monta
+        # filtros da ficha dela e usa a escada de relaxamento do catálogo.
+        logger.warning(
+            "event=busca_com_agente_falhou lead_id=%s tipo_erro=%s "
+            "acao=busca_estruturada",
+            ctx.deps.lead_id, type(e).__name__,
+        )
+        _registrar_custo_da_busca(
+            ctx, comeco, erro=type(e).__name__, tokens=(0, 0)
+        )
+        return _busca_sem_agente(ctx, pedido)
+
+    _registrar_custo_da_busca(
+        ctx, comeco, tokens=(recomendacao.tokens_in, recomendacao.tokens_out)
     )
+    _guardar_rastro(ctx, recomendacao)
 
     with get_db() as db:
+        # Os números saem do banco, sempre: o agente de busca devolve IDs e
+        # julgamento, e preço escrito por modelo é exatamente o que a persona
+        # promete à pessoa que nunca vai acontecer.
+        imoveis = ctx.deps.catalog_service.get_by_ids(recomendacao.ids, db)
+
+        if len(imoveis) < len(recomendacao.ids):
+            logger.warning(
+                "event=imovel_recomendado_sem_correspondencia lead_id=%s "
+                "pedidos=%s encontrados=%s",
+                ctx.deps.lead_id, recomendacao.ids, [i.id for i in imoveis],
+            )
+
+        if not imoveis:
+            # Ou o catálogo não tinha nada (e a observação explica), ou os IDs
+            # não existem. Nos dois casos a degradação é melhor que a mão
+            # vazia, e o que ela achar vem com a observação junto.
+            return _busca_sem_agente(ctx, pedido, recomendacao.observacao)
+
+        imoveis_mostrados.registrar(ctx.deps.lead_id, [i.id for i in imoveis])
+        # A formatação fica dentro da sessão: os objetos são do ORM e acessar
+        # um atributo depois do close levanta DetachedInstanceError.
+        return _texto_da_recomendacao(imoveis, recomendacao)
+
+
+def _texto_da_recomendacao(imoveis, recomendacao) -> str:
+    """A ficha de cada imóvel, com o porquê que o agente de busca escreveu."""
+    porque_de = {e.imovel_id: e.porque for e in recomendacao.escolhidos}
+
+    linhas = []
+    if recomendacao.observacao:
+        linhas.append(recomendacao.observacao)
+    linhas.append(f"Encontrei {len(imoveis)} imóvel(is):")
+
+    for imovel in imoveis:
+        linhas.append(_formatar_imovel(imovel))
+        if porque := porque_de.get(imovel.id):
+            linhas.append(f"  → {porque}")
+
+    linhas.append(FECHAMENTO_DA_BUSCA)
+    return "\n".join(linhas)
+
+
+def _registrar_custo_da_busca(
+    ctx: RunContext[SDRDependencies],
+    comeco: float,
+    tokens: tuple[int, int],
+    erro: Optional[str] = None,
+) -> None:
+    """Grava o consumo do agente de busca com `operation="busca"`.
+
+    Separado de `chat` de propósito: são tokens do mesmo lead, e entram no
+    orçamento dele, mas não contam como turno de conversa para o limite que
+    dispara o handover. Os agentes auxiliares trabalham dentro de um turno, não
+    no lugar dele.
+    """
+    with get_db() as db:
+        if erro:
+            ctx.deps.llm_usage_service.record_failure(
+                lead_id=ctx.deps.lead_id,
+                model=modelo_da_busca(),
+                operation="busca",
+                error_type=erro,
+                latency_ms=_decorrido_ms(comeco),
+                db=db,
+            )
+            return
+        entrada, saida = tokens
+        ctx.deps.llm_usage_service.record(
+            lead_id=ctx.deps.lead_id,
+            model=modelo_da_busca(),
+            tokens_in=entrada,
+            tokens_out=saida,
+            operation="busca",
+            latency_ms=_decorrido_ms(comeco),
+            db=db,
+        )
+
+
+def _guardar_rastro(ctx: RunContext[SDRDependencies], recomendacao) -> None:
+    """Anota as consultas da busca para irem ao `metadata_json` da mensagem.
+
+    As consultas intermediárias não entram no histórico da conversa — é o que
+    torna a delegação barata —, então este é o único lugar onde fica registrado
+    como o agente de busca chegou aos imóveis que escolheu.
+
+    Amarradas pelo `tool_call_id` porque um turno pode ter mais de uma busca, e
+    `_registrar_ferramentas_do_turno` precisa saber qual rastro é de qual
+    chamada.
+    """
+    ctx.deps.rastros_de_busca[ctx.tool_call_id] = {
+        "consultas": recomendacao.consultas,
+        "tokens_in": recomendacao.tokens_in,
+        "tokens_out": recomendacao.tokens_out,
+    }
+
+
+def _busca_sem_agente(
+    ctx: RunContext[SDRDependencies],
+    pedido: str,
+    observacao: str = "",
+) -> str:
+    """Busca estruturada a partir da ficha do lead, sem LLM nenhum.
+
+    O caminho de degradação. Os filtros vêm do que já está gravado sobre a
+    pessoa, o pedido inteiro vira termo livre e a escada de relaxamento do
+    `CatalogService` faz o resto. A busca degrada em qualidade, não em
+    disponibilidade: a pessoa recebe imóveis piores, não um pedido de
+    desculpas.
+    """
+    with get_db() as db:
+        lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
+        filtros = _filtros_da_ficha(lead, pedido)
+
         try:
             resultado = ctx.deps.catalog_service.search_relaxando(db, **filtros)
         except FiltroInvalido as e:
-            # Pedido impossível, não ausência de imóvel: o modelo consegue
-            # corrigir sozinho na retentativa se souber qual é a contradição.
-            logger.info(
-                "event=busca_com_filtro_invalido lead_id=%s motivo=%s",
+            # Contradição na própria ficha do lead (uma faixa de orçamento
+            # invertida, por exemplo). Sem preço é melhor que sem imóvel.
+            logger.warning(
+                "event=ficha_com_filtro_invalido lead_id=%s motivo=%s",
                 ctx.deps.lead_id, e,
             )
-            raise ModelRetry(str(e)) from e
+            filtros.pop("preco_min", None)
+            filtros.pop("preco_max", None)
+            resultado = ctx.deps.catalog_service.search_relaxando(db, **filtros)
 
-        # A formatação fica dentro da sessão: os objetos são do ORM e acessar
-        # um atributo depois do close levanta DetachedInstanceError.
         if not resultado.imoveis:
-            return _nada_encontrado(resultado)
+            return "\n".join(filter(None, [observacao, _nada_encontrado(resultado)]))
 
-        linhas = []
+        linhas = [observacao] if observacao else []
         if resultado.relaxamentos:
             # O agente precisa das palavras exatas do que mudou; sem isso ele
             # inventa que ampliou a busca sem ter ampliado.
@@ -310,11 +365,30 @@ async def buscar_imoveis(
         else:
             linhas.append(f"Encontrei {len(resultado.imoveis)} imóvel(is):")
 
+        imoveis_mostrados.registrar(
+            ctx.deps.lead_id, [i.id for i in resultado.imoveis]
+        )
         linhas.extend(_formatar_imovel(imovel) for imovel in resultado.imoveis)
         linhas.append(FECHAMENTO_DA_BUSCA)
-        if not filtros["operacao"]:
-            linhas.append(AVISO_DE_LISTA_MISTA)
         return "\n".join(linhas)
+
+
+def _filtros_da_ficha(lead, pedido: str) -> dict:
+    """Filtros do catálogo montados do que já está gravado sobre a pessoa.
+
+    É o que sobra quando não há LLM para interpretar o pedido: o texto inteiro
+    vira termo livre, e quem restringe são os campos que ela já informou.
+    """
+    return dict(
+        operacao=OPERACAO_POR_INTENCAO.get(getattr(lead, "intencao", None) or ""),
+        bairro=getattr(lead, "bairro_interesse", None),
+        zona=getattr(lead, "regiao_interesse", None),
+        preco_min=getattr(lead, "orcamento_min", None),
+        preco_max=getattr(lead, "orcamento_max", None),
+        quartos_min=getattr(lead, "quartos", None),
+        termos_livres=pedido,
+        limite=5,
+    )
 
 
 def _nada_encontrado(resultado) -> str:
@@ -829,16 +903,13 @@ LACUNAS = (
 )
 
 
-def montar_contexto_do_lead(lead) -> str:
-    """Resume o que já se sabe do lead para dentro do system prompt.
+def _o_que_se_sabe(lead) -> list[str]:
+    """Os dados estruturados já gravados do lead, em linguagem de gente.
 
     Lista só o que existe. Enumerar todos os campos, com "Não informado" ao
     lado dos vazios, entrega ao modelo um formulário em branco — e é assim que
     ele passa a conduzir a conversa, pedindo campo por campo.
     """
-    if lead is None:
-        return "Primeira mensagem desta pessoa. Você ainda não sabe nada sobre ela."
-
     sabido = []
     if lead.nome:
         sabido.append(f"Nome: {lead.nome}")
@@ -862,6 +933,27 @@ def montar_contexto_do_lead(lead) -> str:
         sabido.append(f"Motivo da busca: {lead.motivo_busca}")
     if lead.amenidades_desejadas:
         sabido.append(f"Quer que tenha: {lead.amenidades_desejadas}")
+    return sabido
+
+
+def ficha_para_a_busca(lead) -> str:
+    """O que se sabe da pessoa, para o agente de busca desempatar.
+
+    Só os dados dela. O estágio no funil, as lacunas de qualificação e a agenda
+    de compromissos ficam de fora: são assunto de quem conversa, e no contexto
+    de quem procura imóvel seriam tokens gastos em nada.
+    """
+    if lead is None:
+        return ""
+    return "\n".join(f"- {item}" for item in _o_que_se_sabe(lead))
+
+
+def montar_contexto_do_lead(lead) -> str:
+    """Resume o que já se sabe do lead para dentro das instruções do turno."""
+    if lead is None:
+        return "Primeira mensagem desta pessoa. Você ainda não sabe nada sobre ela."
+
+    sabido = _o_que_se_sabe(lead)
 
     preenchidos = {
         "intencao": lead.intencao is not None,
@@ -1071,11 +1163,17 @@ def _registrar_ferramentas_do_turno(
     for mensagem in result.new_messages():
         for parte in mensagem.parts:
             if isinstance(parte, ToolCallPart):
-                chamadas[parte.tool_call_id] = {
+                meta = {
                     "tool_name": parte.tool_name,
                     "args": parte.args_as_dict() if parte.args else {},
                     "tool_call_id": parte.tool_call_id,
                 }
+                # O rastro da busca só existe aqui: as consultas do agente de
+                # busca não viram mensagem, então sem isto não há como saber
+                # depois de onde saíram os imóveis que a pessoa viu.
+                if rastro := deps.rastros_de_busca.get(parte.tool_call_id):
+                    meta["busca"] = rastro
+                chamadas[parte.tool_call_id] = meta
             elif isinstance(parte, ToolReturnPart):
                 meta = chamadas.pop(parte.tool_call_id, None)
                 if meta is None:

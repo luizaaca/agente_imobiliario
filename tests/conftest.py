@@ -214,3 +214,103 @@ def perfil_fake():
             yield
 
     return usar
+
+
+# --- Agente de busca simulado ------------------------------------------------
+
+
+def consulta_do_catalogo(sql: str) -> ModelResponse:
+    """Uma ida do agente de busca ao catálogo."""
+    return ModelResponse(
+        parts=[ToolCallPart(tool_name="consultar", args={"sql": sql})]
+    )
+
+
+def escolha_da_busca(*pares, observacao: str = "") -> ModelResponse:
+    """A saída estruturada do agente de busca: `(imovel_id, porque)`.
+
+    O pydantic-ai entrega saída estruturada por uma tool chamada
+    `final_result`, e não como texto.
+    """
+    return ModelResponse(
+        parts=[ToolCallPart(
+            tool_name="final_result",
+            args={
+                "escolhidos": [
+                    {"imovel_id": id_, "porque": porque} for id_, porque in pares
+                ],
+                "observacao": observacao,
+            },
+        )]
+    )
+
+
+def modelo_de_busca(*respostas):
+    """FunctionModel que devolve as respostas na ordem, repetindo a última."""
+    passo = {"n": 0}
+
+    def responder(messages, info):
+        resposta = respostas[min(passo["n"], len(respostas) - 1)]
+        passo["n"] += 1
+        return resposta
+
+    return FunctionModel(responder)
+
+
+@pytest.fixture
+def busca_fake():
+    """Simula o agente que recupera imóveis.
+
+    `buscar_imoveis` aciona um segundo LLM, separado do SDR. Sem este override
+    o teste sairia para o provider real e cairia no caminho de degradação da
+    tool — que funciona, mas não é o que a maior parte dos testes quer exercer.
+
+    Usa-se como contexto em volta do turno:
+    `with busca_fake(escolha_da_busca((1, "serve"))): conversar(...)`
+    """
+    from contextlib import contextmanager
+
+    from src.agent import busca_agent as busca_mod
+
+    @contextmanager
+    def usar(*respostas):
+        with busca_mod.busca_agent.override(model=modelo_de_busca(*respostas)):
+            yield
+
+    return usar
+
+
+@pytest.fixture
+def busca_fora_do_ar():
+    """Simula o provider indisponível durante a busca.
+
+    Exercita o caminho de degradação: a tool monta filtros da ficha do lead e
+    consulta o catálogo sem LLM nenhum.
+    """
+    from contextlib import contextmanager
+
+    from src.agent import busca_agent as busca_mod
+
+    def explodir(messages, info):
+        raise RuntimeError("provider indisponivel")
+
+    @contextmanager
+    def usar():
+        with busca_mod.busca_agent.override(model=FunctionModel(explodir)):
+            yield
+
+    return usar
+
+
+@pytest.fixture(autouse=True)
+def sem_memoria_de_imoveis():
+    """Zera o que cada lead 'já viu' entre um teste e outro.
+
+    O cache vive no processo, não no banco, então o `TRUNCATE` das tabelas não
+    o alcança — e um teste herdaria as exclusões do anterior.
+    """
+    from src.agent import imoveis_mostrados
+
+    imoveis_mostrados._por_lead.clear()
+    yield
+    imoveis_mostrados._por_lead.clear()

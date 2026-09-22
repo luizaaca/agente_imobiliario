@@ -21,6 +21,8 @@ from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 
+from .conftest import escolha_da_busca
+
 
 @pytest.fixture
 def lead_id(db):
@@ -125,27 +127,7 @@ def test_registrar_qualificacao_descarta_urgencia_invalida(llm_fake, lead_id, de
     assert LeadService().get_lead(lead_id, db).urgencia is None
 
 
-def test_buscar_imoveis_devolve_itens_do_catalogo(llm_fake, catalogo, lead_id, deps):
-    achados = {}
-
-    def capturar(messages, info):
-        from pydantic_ai.messages import ModelResponse, ToolCallPart
-        if not achados:
-            achados["chamou"] = True
-            return ModelResponse(parts=[ToolCallPart(
-                tool_name="buscar_imoveis",
-                args={"bairro": "Bela Vista", "limite_resultados": 5},
-            )])
-        achados["retorno"] = str(messages[-1].parts[0].content)
-        return ModelResponse(parts=[TextPart(content="Seguem as opcoes")])
-
-    from pydantic_ai.models.function import FunctionModel
-    conversar("o que tem na Bela Vista?", lead_id, deps, FunctionModel(capturar))
-
-    assert "Apartamento Bela Vista Compacto" in achados["retorno"]
-
-
-def _retorno_da_busca(args, lead_id, deps, texto_final="ok") -> str:
+def _retorno_da_busca(pedido, lead_id, deps, texto_final="ok") -> str:
     """Roda um turno em que o modelo chama `buscar_imoveis` e devolve o que a tool respondeu."""
     from pydantic_ai.messages import ModelResponse, ToolCallPart
     from pydantic_ai.models.function import FunctionModel
@@ -155,7 +137,9 @@ def _retorno_da_busca(args, lead_id, deps, texto_final="ok") -> str:
     def capturar(messages, info):
         if not capturado:
             capturado["chamou"] = True
-            return ModelResponse(parts=[ToolCallPart(tool_name="buscar_imoveis", args=args)])
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="buscar_imoveis", args={"pedido": pedido}
+            )])
         capturado["retorno"] = str(messages[-1].parts[0].content)
         return ModelResponse(parts=[TextPart(content=texto_final)])
 
@@ -163,33 +147,44 @@ def _retorno_da_busca(args, lead_id, deps, texto_final="ok") -> str:
     return capturado["retorno"]
 
 
-def test_busca_sem_resultado_exato_e_refeita_e_o_agente_sabe_o_que_mudou(
-    llm_fake, catalogo, lead_id, deps
+def test_buscar_imoveis_devolve_itens_do_catalogo(
+    llm_fake, catalogo, lead_id, deps, busca_fake
 ):
-    """O agente so pode dizer que ampliou a busca se a tool tiver ampliado de fato."""
-    retorno = _retorno_da_busca({"bairro": "Inexistente"}, lead_id, deps)
+    with busca_fake(escolha_da_busca((1, "2 quartos na Bela Vista"))):
+        retorno = _retorno_da_busca("o que tem na Bela Vista?", lead_id, deps)
 
-    assert "Com os filtros exatos não havia nada" in retorno
-    assert "olhando a região toda, não só o bairro" in retorno
     assert "Apartamento Bela Vista Compacto" in retorno
 
 
-def test_busca_sem_nada_em_lugar_nenhum_avisa_e_lista_o_que_tentou(
-    llm_fake, catalogo, lead_id, deps
+def test_busca_degradada_avisa_o_que_precisou_afrouxar(
+    llm_fake, catalogo, lead_id, deps, busca_fora_do_ar, db
 ):
-    retorno = _retorno_da_busca(
-        {"bairro": "Inexistente", "preco_max": 1}, lead_id, deps
+    """Sem LLM, quem amplia e a escada do catalogo — e ela diz o que mudou.
+
+    O agente so pode contar a pessoa que ampliou a busca se ela tiver sido
+    ampliada de fato.
+    """
+    LeadService().update_qualification(lead_id, {"bairro_interesse": "Inexistente"}, db)
+
+    with busca_fora_do_ar():
+        retorno = _retorno_da_busca("qualquer apartamento", lead_id, deps)
+
+    assert "Com os filtros exatos não havia nada" in retorno
+    assert "olhando a região toda, não só o bairro" in retorno
+
+
+def test_busca_degradada_sem_nada_lista_o_que_tentou(
+    llm_fake, catalogo, lead_id, deps, busca_fora_do_ar, db
+):
+    LeadService().update_qualification(
+        lead_id, {"bairro_interesse": "Inexistente", "orcamento_max": 1}, db
     )
+
+    with busca_fora_do_ar():
+        retorno = _retorno_da_busca("qualquer coisa", lead_id, deps)
 
     assert "Nenhum imóvel encontrado" in retorno
     assert "Já tentei, sem sucesso:" in retorno
-
-
-def test_finalidade_chega_ao_filtro_estruturado(llm_fake, catalogo, lead_id, deps):
-    retorno = _retorno_da_busca({"finalidade": "comercial"}, lead_id, deps)
-
-    assert "Sala Comercial Paulista" in retorno
-    assert "Cobertura Moema Alto Padrao" not in retorno
 
 
 def test_agendar_reuniao_cria_agendamento(llm_fake, catalogo, lead_id, deps, db):

@@ -150,6 +150,7 @@ tests/
 │   # Serviços de domínio
 ├── test_catalog_service.py            # filtros, escada de relaxamento, diagnóstico, FTS
 ├── test_busca_e_ordem.py              # ordenação e desempate
+├── test_consulta_catalogo.py          # contenção do SQL gerado por LLM e a role somente-leitura
 ├── test_lead_service.py               # qualificação, status, histórico
 ├── test_lead_crud.py                  # operações da ficha
 ├── test_scheduling_service.py
@@ -158,7 +159,8 @@ tests/
 │
 │   # Agente e tools, com modelo falso
 ├── test_agent_tools.py                # contrato de cada tool
-├── test_busca_pela_conversa.py        # busca acionada pelo agente
+├── test_busca_agent.py                # agente de busca e memória do que já mostrou
+├── test_busca_pela_conversa.py        # busca acionada pelo agente, e os números do banco
 ├── test_agendamento_pela_conversa.py  # marcar, confirmar, cancelar pela conversa
 ├── test_contato_do_lead.py
 ├── test_contexto_do_lead.py

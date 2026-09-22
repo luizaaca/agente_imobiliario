@@ -532,6 +532,29 @@ class CatalogService:
         """Busca um imóvel pelo ID."""
         return db.query(Imovel).filter(Imovel.id == imovel_id).first()
 
+    def get_by_ids(self, ids: list[int], db: Session) -> list[Imovel]:
+        """Os imóveis destes IDs, disponíveis, na ordem em que foram pedidos.
+
+        É por aqui que os números de uma recomendação voltam do banco: quem
+        escolhe os imóveis é o agente de busca, e o que ele devolve são IDs. O
+        preço que a pessoa lê sai daqui, e não do texto de um modelo.
+
+        A ordem é a de quem pediu, porque ela carrega o ranking da escolha —
+        um `IN` devolveria por ordem de página do índice.
+
+        ID inexistente ou indisponível simplesmente não aparece na lista. Quem
+        chamou compara os tamanhos se precisar saber que faltou alguém.
+        """
+        if not ids:
+            return []
+        achados = {
+            imovel.id: imovel
+            for imovel in db.query(Imovel)
+            .filter(Imovel.id.in_(ids), Imovel.disponivel.is_(True))
+            .all()
+        }
+        return [achados[id_] for id_ in ids if id_ in achados]
+
     def count_available(self, db: Session) -> int:
         """Retorna a quantidade de imóveis disponíveis."""
         return (
