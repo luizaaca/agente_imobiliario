@@ -42,7 +42,25 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 | QP-02 | Tempo de resposta do Telegram | mensagem de retorno em até **10s p95** |
 | QP-03 | Consulta ao catálogo | cada `SELECT` sobre `imoveis` em até **2s p95**, com teto de 3s no `statement_timeout` |
 | QP-04 | Dashboard | carregamento inicial em até **3s p95** com volume de dados da POC |
-| QP-05 | Turno com busca | resposta em até **20s p95**, incluindo as requisições do agente de busca |
+| QP-05 | Turno com busca | resposta em até **45s p95**, incluindo as requisições do agente de busca |
+
+Os dois tempos de resposta medem coisas diferentes, e é por isso que são
+metas separadas.
+
+Um turno de conversa é uma ida ao provider, e cabe nos 8 segundos. Um turno com
+busca são três idas do agente conversacional mais as do agente de busca, que
+investiga o catálogo antes de responder — e cada consulta dele é uma ida a mais.
+Medido em conversas reais: 28, 28, 36 e 40 segundos, dos quais 18 a 30 só na
+busca.
+
+O número é alto e é o que esta arquitetura entrega. A troca está registrada no
+[ADR 0007](../06-decisoes/adr/0007-agente-de-busca-dedicado.md): a busca deixou
+de ser uma consulta e passou a ser uma investigação, e é ela que produz "não há
+varanda gourmet em zona sul até 900 mil, mas há três com varanda e
+churrasqueira" em vez de uma lista vazia.
+
+`LLM_MODEL_BUSCA` é a alavanca de quem precisar do tempo menor: a busca pode
+rodar num modelo mais rápido sem tocar no que escreve para o cliente.
 
 ### 3.2 Confiabilidade
 
@@ -98,7 +116,7 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 - **Estímulo:** envia mensagem de qualificação inicial
 - **Ambiente:** ambiente local de demonstração com banco populado
 - **Resposta esperada:** sistema persiste a mensagem, consulta contexto e responde
-- **Métrica:** resposta em até **8s p95**
+- **Métrica:** resposta em até **8s p95** num turno de conversa; turno com busca segue o QP-05
 
 ### CQ-02 — Falha do provider LLM
 - **Fonte:** provider OpenAI-compatible indisponível
