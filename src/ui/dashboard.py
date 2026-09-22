@@ -5,6 +5,7 @@ canal, disparar follow-up, excluir — mora no menu **Leads**; aqui a carteira
 existe para ordenar e escolher, e a lupa de cada linha abre a ficha la.
 """
 
+from collections.abc import Mapping
 from typing import Optional
 
 import altair as alt
@@ -15,7 +16,7 @@ from sqlalchemy import func
 from src.db.models import Agendamento, FollowUpAttempt, Lead
 from src.db.session import get_db
 from src.services.llm_usage_service import LLMUsageService
-from src.ui.leads import COR_DO_STATUS, abrir_ficha
+from src.ui.leads import abrir_ficha, coluna_de_status, situacoes_de_agendamento
 from src.ui.papeis import e_admin, papeis_da_sessao
 from src.ui.tabela import (
     Acao,
@@ -324,25 +325,22 @@ def _distribuicao(db) -> None:
         )
 
 
-COLUNAS_DA_CARTEIRA = (
-    Coluna("#", 1, lambda lead: f"`{lead.id}`"),
-    Coluna(
-        "Nome", 3,
-        lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—",
-    ),
-    # Folga suficiente para `em qualificacao` nao truncar.
-    Coluna(
-        "Status", 3,
-        lambda lead: f":{COR_DO_STATUS.get(lead.status, 'gray')}-badge"
-                     f"[{lead.status.replace('_', ' ')}]",
-    ),
-    Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
-    Coluna(
-        "Região", 3,
-        lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse),
-    ),
-    Coluna("Score", 3, selo_de_score),
-)
+def _colunas_da_carteira(situacoes: Mapping[int, str]) -> tuple[Coluna, ...]:
+    return (
+        Coluna("#", 1, lambda lead: f"`{lead.id}`"),
+        Coluna(
+            "Nome", 3,
+            lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—",
+        ),
+        # Folga suficiente para `em qualificacao` nao truncar.
+        coluna_de_status(situacoes, peso=3),
+        Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
+        Coluna(
+            "Região", 3,
+            lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse),
+        ),
+        Coluna("Score", 3, selo_de_score),
+    )
 
 ACOES_DA_CARTEIRA = (
     Acao(
@@ -356,7 +354,9 @@ def _tabela_de_leads(db) -> None:
     """Carteira do corretor, com a lupa levando a ficha no menu Leads.
 
     Mesmas linhas e mesmos selos da listagem de Leads, so que sem as acoes de
-    escrita: aqui e tela de leitura. Montada com colunas, e nao com
+    escrita: aqui e tela de leitura. O selo de status vem de `coluna_de_status`,
+    de `ui.leads`, e nao de uma copia — as duas telas mostram os mesmos leads,
+    e a cor precisa querer dizer a mesma coisa nas duas. Montada com colunas, e nao com
     `st.dataframe`, porque a celula do dataframe e desenhada em canvas e nao
     comporta um botao — a lupa como link de celula chegou a ser tentada e nao
     registrava o clique.
@@ -373,7 +373,12 @@ def _tabela_de_leads(db) -> None:
         return
 
     st.caption("A lupa abre a ficha do lead no menu Leads.")
-    tabela_de_leads(leads, COLUNAS_DA_CARTEIRA, ACOES_DA_CARTEIRA, peso_das_acoes=1)
+    tabela_de_leads(
+        leads,
+        _colunas_da_carteira(situacoes_de_agendamento(leads, db)),
+        ACOES_DA_CARTEIRA,
+        peso_das_acoes=1,
+    )
 
 
 def render_dashboard():

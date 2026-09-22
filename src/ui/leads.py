@@ -13,7 +13,7 @@ O dashboard manda para ca: a lupa da carteira abre a ficha daquele lead.
 """
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Optional
@@ -176,28 +176,24 @@ def _filtros(db):
     return aplicar_ordem(query, campo, decrescente).limit(200).all()
 
 
-COLUNAS_DA_LISTA = (
-    # O numero do lead ganha coluna propria: e o identificador que existe no
-    # banco, o que a busca encontra e o que sobra quando nao ha nome.
-    Coluna("#", 1, lambda lead: f"`{lead.id}`"),
-    Coluna("Nome", 3, lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—"),
-    # `em qualificacao` e a faixa fechada de orcamento sao os textos mais
-    # longos da tabela: sem folga, um trunca e o outro quebra em duas linhas.
-    Coluna("Status", 3, lambda lead: _selo_de_status(lead)),
-    Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
-    Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
-    Coluna("Orçamento", 4, lambda lead: texto(faixa_de_orcamento(lead))),
-    Coluna("Telefone", 2, lambda lead: texto(lead.telefone)),
-    Coluna("Score", 2, selo_de_score),
-)
+def _colunas_da_lista(situacoes: Mapping[int, str]) -> tuple[Coluna, ...]:
+    return (
+        # O numero do lead ganha coluna propria: e o identificador que existe
+        # no banco, o que a busca encontra e o que sobra quando nao ha nome.
+        Coluna("#", 1, lambda lead: f"`{lead.id}`"),
+        Coluna("Nome", 3, lambda lead: f"**{markdown_seguro(lead.nome)}**" if lead.nome else "—"),
+        # `em qualificacao` e a faixa fechada de orcamento sao os textos mais
+        # longos da tabela: sem folga, um trunca e o outro quebra em duas linhas.
+        coluna_de_status(situacoes, peso=3),
+        Coluna("Intenção", 2, lambda lead: texto(lead.intencao)),
+        Coluna("Região", 2, lambda lead: texto(lead.regiao_interesse or lead.bairro_interesse)),
+        Coluna("Orçamento", 4, lambda lead: texto(faixa_de_orcamento(lead))),
+        Coluna("Telefone", 2, lambda lead: texto(lead.telefone)),
+        Coluna("Score", 2, selo_de_score),
+    )
 
 
-# Preenchido a cada desenho da lista, antes da tabela. Evita uma consulta por
-# linha: sao os compromissos de pe de todos os leads da pagina de uma vez.
-_situacao_por_lead: dict[int, str] = {}
-
-
-def _situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
+def situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
     """Situação do compromisso mais próximo de cada lead, numa consulta só."""
     ids = [lead.id for lead in leads if lead.status == "agendado"]
     if not ids:
@@ -218,7 +214,7 @@ def _situacoes_de_agendamento(leads: Sequence[Lead], db) -> dict[int, str]:
     return situacoes
 
 
-def _selo_de_status(lead: Lead) -> str:
+def selo_de_status(lead: Lead, situacoes: Mapping[int, str]) -> str:
     """O estágio do lead, colorido pela situação da visita quando há uma.
 
     A situação entra como cor do próprio selo, e não como um segundo selo ao
@@ -228,12 +224,25 @@ def _selo_de_status(lead: Lead) -> str:
     laranja para pendente. Um segundo vocabulário de cores para a mesma coisa
     obrigaria a reaprender a leitura ao trocar de tela.
     """
-    situacao = _situacao_por_lead.get(lead.id)
     cor = (
-        COR_DO_STATUS_DE_AGENDAMENTO.get(situacao)
+        COR_DO_STATUS_DE_AGENDAMENTO.get(situacoes.get(lead.id))
         or COR_DO_STATUS.get(lead.status, "gray")
     )
     return f":{cor}-badge[{lead.status.replace('_', ' ')}]"
+
+
+def coluna_de_status(situacoes: Mapping[int, str], peso: int) -> Coluna:
+    """A coluna Status, para qualquer tabela de leads.
+
+    As situações vêm por parâmetro, e não de uma consulta por linha: são os
+    compromissos de pé de todos os leads da página de uma vez. E vêm por
+    parâmetro em vez de um global do módulo porque a carteira do dashboard
+    desenha a mesma coluna — com o global, bastava uma tela esquecer de
+    preenchê-lo para o selo mudar de significado de uma página para a outra.
+    """
+    return Coluna(
+        "Status", peso, lambda lead: selo_de_status(lead, situacoes)
+    )
 
 
 def _pedir_exclusao(lead: Lead) -> None:
@@ -304,13 +313,10 @@ def _lista(db) -> None:
         st.info("Nenhum lead encontrado com os filtros selecionados.")
         return
 
-    # Uma consulta só para a página inteira, antes de desenhar: o selo de
-    # status lê daqui em vez de ir ao banco linha a linha.
-    global _situacao_por_lead
-    _situacao_por_lead = _situacoes_de_agendamento(leads, db)
-
     tabela_de_leads(
-        leads, COLUNAS_DA_LISTA, ACOES_DA_LISTA,
+        leads,
+        _colunas_da_lista(situacoes_de_agendamento(leads, db)),
+        ACOES_DA_LISTA,
         depois_da_linha=_confirmacao_na_lista,
     )
 
