@@ -150,8 +150,9 @@ FECHAMENTO_DA_BUSCA = (
 def _formatar_imovel(imovel) -> str:
     """Uma ficha por imóvel, com o que decide uma escolha.
 
-    O condomínio só aparece no aluguel, onde entra na conta do mês; na venda
-    ele seria ruído ao lado de um preço seis vezes maior.
+    No aluguel o condomínio entra na conta do mês, que é o número que a pessoa
+    compara. Na venda ele fica ao lado do preço, sem somar: uma parcela mensal
+    e um valor à vista não se somam, mas quem compra decide com os dois.
     """
     descricao = (imovel.descricao or "")[:160]
     linhas = [
@@ -163,6 +164,11 @@ def _formatar_imovel(imovel) -> str:
         linhas.append(
             f"  Aluguel {reais(imovel.preco)} + condomínio "
             f"{reais(imovel.condominio)} = {reais(total)}/mês"
+        )
+    elif imovel.condominio:
+        linhas.append(
+            f"  Preço: {reais(imovel.preco)} | condomínio "
+            f"{reais(imovel.condominio)}/mês"
         )
     else:
         linhas.append(f"  Preço: {reais(imovel.preco)}")

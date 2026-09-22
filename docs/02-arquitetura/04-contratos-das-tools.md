@@ -43,7 +43,8 @@ quem busca, tomadas com o catálogo à vista.
 
 ### Output esperado
 - a ficha de cada imóvel escolhido, com ID, preço, metragem, quartos, suítes,
-  banheiros e vagas; no aluguel, também aluguel + condomínio = total do mês;
+  banheiros e vagas; o condomínio, quando cadastrado, somado ao aluguel para
+  virar o custo do mês e posto ao lado do preço de venda, onde não se soma;
 - uma linha de justificativa por imóvel, escrita pelo agente de busca;
 - quando o pedido exato não tinha resposta, a frase em português do que
   precisou mudar;

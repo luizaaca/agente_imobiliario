@@ -154,6 +154,20 @@ def test_aluguel_mostra_o_custo_total_do_mes(catalogo, lead_id, deps, busca_fake
     assert "R$ 4.500 + condomínio R$ 900 = R$ 5.400/mês" in retorno
 
 
+def test_venda_mostra_o_condominio_ao_lado_do_preco(
+    catalogo, lead_id, deps, busca_fake
+):
+    """Quem compra também paga condomínio todo mês, e pergunta por ele.
+
+    Ao lado do preço, e não somado: R$ 510.000 mais R$ 600 não é um número que
+    signifique coisa alguma — um é à vista, o outro é mensal.
+    """
+    with busca_fake(escolha_da_busca((1, "compacto e reformado"))):
+        retorno = _turno_com_busca("apartamento na Bela Vista", lead_id, deps)
+
+    assert "Preço: R$ 510.000 | condomínio R$ 600/mês" in retorno
+
+
 def test_metragem_sai_sem_casa_decimal(catalogo, lead_id, deps, busca_fake):
     """`Decimal` com escala 2 imprime "780.00m²" mesmo com :g."""
     with busca_fake(escolha_da_busca((7, "cabe a operação inteira"))):
