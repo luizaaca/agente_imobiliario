@@ -24,7 +24,7 @@ def configuracao_limpa(monkeypatch):
     monkeypatch.setattr(provider_mod.settings, "LLM_MODEL", "modelo-de-teste")
     monkeypatch.setattr(provider_mod.settings, "LLM_API_KEY", "sk-teste")
     monkeypatch.setattr(provider_mod.settings, "LLM_BASE_URL", "")
-    monkeypatch.setattr(provider_mod, "_modelo_sem_loop", None)
+    provider_mod._modelos_sem_loop.clear()
     provider_mod._modelos_por_loop.clear()
 
 

@@ -98,42 +98,62 @@ def _resolve_base_url(provider: str) -> str | None:
     return base_url
 
 
+def modelo_da_busca() -> str:
+    """Nome do modelo do agente de busca.
+
+    `LLM_MODEL_BUSCA` vazia cai no `LLM_MODEL`: a decisão de qual imóvel
+    mostrar é tão sensível quanto a de como falar dele. A variável existe para
+    poder trocar só a busca por um modelo mais rápido, já que ela roda dentro
+    do turno e a latência dela se soma à da resposta que a pessoa espera.
+    """
+    return (settings.LLM_MODEL_BUSCA or "").strip() or settings.LLM_MODEL
+
+
 # O cliente HTTP do modelo fica preso ao event loop que o criou. O Streamlit
 # abre um loop novo a cada mensagem (asyncio.run), então um cache global único
 # quebraria da segunda mensagem em diante com "Event loop is closed". Cachear
 # por loop preserva o pooling onde o loop é longevo (bot do Telegram) e entrega
 # um cliente válido a cada loop efêmero; a entrada morre junto com o loop.
+#
+# A segunda chave é o nome do modelo: conversa e busca podem rodar em modelos
+# diferentes, e um cache só pelo loop devolveria o primeiro que fosse criado
+# para as duas.
 _modelos_por_loop: WeakKeyDictionary = WeakKeyDictionary()
-_modelo_sem_loop: Optional[OpenAIChatModel] = None
+_modelos_sem_loop: dict[str, OpenAIChatModel] = {}
 
 
-def build_model() -> OpenAIChatModel:
-    """Devolve o modelo configurado, válido para o event loop corrente.
+def build_model(nome: Optional[str] = None) -> OpenAIChatModel:
+    """Devolve o modelo pedido, válido para o event loop corrente.
+
+    Sem `nome`, usa o `LLM_MODEL` — o modelo da conversa.
 
     Raises:
         LLMConfigError: provider desconhecido ou configuração incompleta.
     """
-    global _modelo_sem_loop
+    nome = (nome or "").strip() or settings.LLM_MODEL
 
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
 
-    if loop is None:
-        if _modelo_sem_loop is None:
-            _modelo_sem_loop = _construir_modelo()
-        return _modelo_sem_loop
+    cache = _modelos_sem_loop if loop is None else _modelos_por_loop.setdefault(loop, {})
 
-    modelo = _modelos_por_loop.get(loop)
+    modelo = cache.get(nome)
     if modelo is None:
-        modelo = _construir_modelo()
-        _modelos_por_loop[loop] = modelo
+        modelo = _construir_modelo(nome)
+        cache[nome] = modelo
     return modelo
 
 
-def _construir_modelo() -> OpenAIChatModel:
-    """Constrói o modelo configurado, validando a configuração."""
+def build_model_busca() -> OpenAIChatModel:
+    """O modelo do agente de busca, pelo mesmo cache de `build_model`."""
+    return build_model(modelo_da_busca())
+
+
+def _construir_modelo(nome: Optional[str] = None) -> OpenAIChatModel:
+    """Constrói o modelo pedido, validando a configuração."""
+    nome = (nome or "").strip() or settings.LLM_MODEL
     provider = (settings.LLM_PROVIDER or "openai").strip().lower()
 
     if provider not in DEFAULT_BASE_URLS:
@@ -165,10 +185,10 @@ def _construir_modelo() -> OpenAIChatModel:
     logger.info(
         "event=llm_configurado provider=%s model=%s base_url=%s",
         provider,
-        settings.LLM_MODEL,
+        nome,
         base_url,
     )
     return OpenAIChatModel(
-        settings.LLM_MODEL,
+        nome,
         provider=OpenAIProvider(**provider_kwargs),
     )
