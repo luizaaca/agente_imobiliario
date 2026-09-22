@@ -12,3 +12,18 @@ def markdown_seguro(texto: str) -> str:
     intacto no banco e no historico enviado ao modelo.
     """
     return texto.replace("$", r"\$")
+
+
+def mensagem_para_markdown(texto: str) -> str:
+    """Fala de conversa pronta para `st.markdown`, com as quebras preservadas.
+
+    O agente escreve para o WhatsApp, onde uma quebra de linha e uma quebra de
+    linha — a persona diz isso a ele. O markdown colapsa quebra simples em
+    espaco, entao a lista de tres imoveis que ele mandou em tres linhas chegava
+    a tela como um paragrafo unico, com os marcadores no meio do texto corrido.
+
+    Dois espacos no fim da linha sao a quebra forte do markdown: preservam a
+    linha sem precisar de HTML — que aqui seria abrir a tela para o que o
+    modelo escrever — e a linha em branco continua separando paragrafo.
+    """
+    return markdown_seguro(texto).replace("\n", "  \n")

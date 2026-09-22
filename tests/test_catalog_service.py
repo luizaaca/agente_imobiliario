@@ -519,3 +519,32 @@ def test_catalogo_sem_o_tipo_diz_isso_e_nao_um_numero(catalog, catalogo, db):
     assert resultado.diagnostico == [
         "O catálogo não tem nenhum terreno_comercial."
     ]
+
+
+def test_vocabulario_de_tags_vem_ordenado_por_frequencia(catalog, catalogo, db):
+    """É o que o agente de busca lê para traduzir o pedido da pessoa.
+
+    "Varanda gourmet" e `churrasqueira` são a mesma coisa para quem procura, e
+    só a lista do que o catálogo de fato escreve permite ligar as duas.
+    """
+    etiquetas = catalog.vocabulario_de_tags(db)
+
+    assert "metro (3)" == etiquetas[0]
+    assert "varanda gourmet (2)" in etiquetas
+    assert all("(" in e for e in etiquetas)
+
+
+def test_vocabulario_de_tags_respeita_o_limite(catalog, catalogo, db):
+    assert len(catalog.vocabulario_de_tags(db, limite=2)) == 2
+
+
+def test_vocabulario_de_tags_ignora_indisponivel(catalog, catalogo, db):
+    """Amenidade que só existe em imóvel fora do ar não é vocabulário útil."""
+    from src.db.models import Imovel
+
+    db.query(Imovel).filter(Imovel.id == 7).update(
+        {Imovel.tags: "doca_exclusiva", Imovel.disponivel: False}
+    )
+    db.commit()
+
+    assert not any("doca_exclusiva" in e for e in catalog.vocabulario_de_tags(db))

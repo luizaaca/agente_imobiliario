@@ -27,7 +27,13 @@ from pydantic_ai.usage import UsageLimits
 
 from src.agent.prompts import BUSCA_SYSTEM_PROMPT
 from src.agent.provider import build_model_busca
-from src.services.catalog_service import PERFIS_INDICADOS, TIPOS, ZONAS
+from src.db.session import get_db
+from src.services.catalog_service import (
+    PERFIS_INDICADOS,
+    TIPOS,
+    ZONAS,
+    CatalogService,
+)
 from src.services.consulta_catalogo import ConsultaRecusada, executar
 
 logger = logging.getLogger(__name__)
@@ -98,6 +104,32 @@ busca_agent = Agent(
     ),
     retries=2,
 )
+
+
+@busca_agent.instructions
+def amenidades_do_catalogo() -> str:
+    """As amenidades mais frequentes, lidas do banco a cada busca.
+
+    Vão nas instruções, e não no prompt fixo, porque são dado e não regra: uma
+    lista escrita à mão envelheceria na primeira carga de catálogo nova. É o
+    mesmo motivo pelo qual tipos, zonas e perfis vêm das constantes que os
+    testes comparam com o `SELECT DISTINCT` das colunas.
+
+    Sem cache de propósito. A consulta é um `GROUP BY` sobre algumas centenas
+    de linhas, insignificante ao lado dos segundos que a busca leva no
+    provider — e um cache de processo congelaria o vocabulário do primeiro
+    catálogo que fosse visto.
+    """
+    with get_db() as db:
+        etiquetas = CatalogService().vocabulario_de_tags(db)
+    if not etiquetas:
+        return ""
+    return (
+        "## Amenidades mais frequentes agora, com quantos imóveis as têm\n"
+        + ", ".join(etiquetas)
+        + "\n\nÉ o vocabulário que os anúncios usam. Traduza o pedido da "
+        "pessoa para ele antes de procurar."
+    )
 
 
 @busca_agent.tool

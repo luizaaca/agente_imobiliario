@@ -41,7 +41,7 @@ from src.ui.tabela import (
     temperatura,
     texto,
 )
-from src.ui.texto import markdown_seguro
+from src.ui.texto import markdown_seguro, mensagem_para_markdown
 
 # Lead cuja ficha esta aberta. Zero significa "ficha em branco", porque nenhum
 # lead tem id 0. Ausente na pagina da ficha significa que se chegou nela sem
@@ -578,7 +578,7 @@ def _conversa(lead: Lead) -> None:
                 rotulo = ROTULO_DO_TIPO.get(tipo)
                 if rotulo:
                     st.caption(rotulo)
-                st.markdown(markdown_seguro(conteudo))
+                st.markdown(mensagem_para_markdown(conteudo))
 
 
 def _resumo_para_o_corretor(lead: Lead) -> None:

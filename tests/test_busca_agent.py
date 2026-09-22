@@ -314,3 +314,57 @@ def test_esquecer_zera_a_conversa():
     imoveis_mostrados.registrar(1, [10])
     imoveis_mostrados.esquecer(1)
     assert imoveis_mostrados.ja_mostrados(1) == []
+
+
+# --- O vocabulário do catálogo -----------------------------------------------
+
+def test_as_amenidades_do_catalogo_chegam_as_instrucoes(catalogo):
+    """Sem elas, ele conclui que "varanda gourmet" não existe.
+
+    As palavras do anúncio raramente são as da pessoa: quem pede varanda
+    gourmet quer o que o catálogo cadastrou como `churrasqueira`. Conhecer o
+    vocabulário é o que permite traduzir um pelo outro.
+    """
+    visto = {}
+
+    def espiar(messages, info):
+        visto["instrucoes"] = info.instructions or ""
+        return _resposta([(1, "serve")])
+
+    async def principal():
+        with busca_mod.busca_agent.override(model=FunctionModel(espiar)):
+            return await buscar(pedido="apartamento com churrasqueira")
+
+    asyncio.run(principal())
+
+    # A frequência vai junto: é ela que diz qual palavra o catálogo prefere.
+    assert "metro (3)" in visto["instrucoes"]
+    assert "varanda gourmet (2)" in visto["instrucoes"]
+
+
+def test_o_vocabulario_vem_do_banco_e_nao_de_uma_lista_fixa(catalogo, db):
+    """Uma lista escrita à mão envelhece na primeira carga de catálogo nova."""
+    from src.db.models import Imovel
+
+    db.query(Imovel).update({Imovel.tags: "heliponto_exclusivo"})
+    db.commit()
+
+    visto = {}
+
+    def espiar(messages, info):
+        visto["instrucoes"] = info.instructions or ""
+        return _resposta([(1, "serve")])
+
+    async def principal():
+        with busca_mod.busca_agent.override(model=FunctionModel(espiar)):
+            return await buscar(pedido="qualquer coisa")
+
+    asyncio.run(principal())
+
+    assert "heliponto_exclusivo" in visto["instrucoes"]
+    assert "varanda gourmet" not in visto["instrucoes"]
+
+
+def test_catalogo_vazio_nao_inventa_secao_de_amenidades():
+    """Cabeçalho sem conteúdo é ruído que o modelo tenta interpretar."""
+    assert busca_mod.amenidades_do_catalogo() == ""

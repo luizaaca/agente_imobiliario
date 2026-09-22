@@ -555,6 +555,35 @@ class CatalogService:
         }
         return [achados[id_] for id_ in ids if id_ in achados]
 
+    def vocabulario_de_tags(self, db: Session, limite: int = 40) -> list[str]:
+        """As amenidades mais frequentes do catálogo, da mais comum à menos.
+
+        `tags` é texto livre separado por vírgula, e o que há nele são as
+        palavras que os anúncios usaram — nem sempre as que a pessoa usa. Quem
+        procura "varanda gourmet" quer o que o catálogo chama de
+        `churrasqueira`, e sem ver a lista não há como saber disso.
+
+        Vai para as instruções do agente de busca a cada busca, em vez de
+        ficar numa constante: o vocabulário é do dado, e uma lista escrita à
+        mão envelheceria na primeira carga de catálogo nova.
+        """
+        tag = func.trim(
+            func.unnest(func.string_to_array(Imovel.tags, ","))
+        ).label("tag")
+        etiquetas = (
+            db.query(tag)
+            .filter(Imovel.disponivel.is_(True), Imovel.tags.isnot(None))
+            .subquery()
+        )
+        linhas = (
+            db.query(etiquetas.c.tag, func.count().label("quantos"))
+            .group_by(etiquetas.c.tag)
+            .order_by(func.count().desc(), etiquetas.c.tag.asc())
+            .limit(limite)
+            .all()
+        )
+        return [f"{etiqueta} ({quantos})" for etiqueta, quantos in linhas if etiqueta]
+
     def count_available(self, db: Session) -> int:
         """Retorna a quantidade de imóveis disponíveis."""
         return (

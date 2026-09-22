@@ -184,6 +184,21 @@ Use `or` entre os termos. Exigir todas as palavras zera o resultado quase sempre
 
 NÃO estão no vetor: `zona`, `finalidade`, `operacao`, `perfil_indicado`, preço, área e número de cômodos. Procurar "zona norte" ou "comercial" como texto não funciona — todos esses têm coluna própria e se filtram com `WHERE`.
 
+Aspas delimitam frase exata, não ênfase: `websearch_to_tsquery('portuguese', 'varanda gourmet')` exige as duas palavras adjacentes. Serve para confirmar se uma expressão existe assim no catálogo, e é o oposto do `or`.
+
+## O vocabulário do catálogo
+
+As amenidades estão em `tags` e na `descricao`, escritas com as palavras do anúncio — que raramente são as palavras da pessoa. Quem pede "varanda gourmet" quer o que o anúncio pode ter cadastrado como `churrasqueira`; "perto do metrô" costuma estar como `metro_proximo`.
+
+**Não conclua que uma amenidade não existe sem antes ver como o catálogo a escreve.** Esta consulta mostra:
+
+    SELECT tag, count(*) FROM (
+      SELECT trim(unnest(string_to_array(tags, ','))) AS tag
+      FROM imoveis WHERE disponivel = true
+    ) t GROUP BY tag ORDER BY 2 DESC LIMIT 40
+
+E nem toda característica virou tag: quando a tag não bastar, procure na `descricao` com `ILIKE`, ou jogue os sinônimos todos no mesmo `websearch_to_tsquery` com `or`.
+
 ## Regras do SQL
 
 - só `SELECT`, um comando por chamada;
