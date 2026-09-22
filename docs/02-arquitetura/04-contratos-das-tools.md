@@ -45,6 +45,11 @@ quem busca, tomadas com o catálogo à vista.
 - a ficha de cada imóvel escolhido, com ID, preço, metragem, quartos, suítes,
   banheiros e vagas; o condomínio, quando cadastrado, somado ao aluguel para
   virar o custo do mês e posto ao lado do preço de venda, onde não se soma;
+- **a descrição inteira**, sem abreviar. É ali que estão o lazer do condomínio,
+  o acabamento e a distância da estação — o que faz alguém querer ver o imóvel,
+  e o que responde a pergunta seguinte. As 300 descrições do catálogo têm entre
+  284 e 515 caracteres; qualquer corte cabível deixaria de fora a parte que
+  vende;
 - uma linha de justificativa por imóvel, escrita pelo agente de busca;
 - quando o pedido exato não tinha resposta, a frase em português do que
   precisou mudar;
@@ -144,7 +149,7 @@ Quando nenhum imóvel foi apresentado ainda, a resposta manda usar `buscar_imove
 Nenhum. Uma leitura indexada por chave primária, sem LLM.
 
 ### Regras
-- é esta a ferramenta para qualquer pergunta sobre imóvel já mostrado: preço, vaga, metragem, suíte, condomínio;
+- é esta a ferramenta para qualquer pergunta sobre imóvel já mostrado: preço, vaga, metragem, suíte, condomínio, lazer do prédio, acabamento — a ficha volta completa, com a descrição inteira;
 - `buscar_imoveis` só quando o que a pessoa procura mudou;
 - no máximo dez fichas quando chamada sem IDs — a lista inteira de uma conversa longa seriam milhares de tokens para responder "quantas vagas tem".
 

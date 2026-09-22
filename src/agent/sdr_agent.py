@@ -153,8 +153,12 @@ def _formatar_imovel(imovel) -> str:
     No aluguel o condomínio entra na conta do mês, que é o número que a pessoa
     compara. Na venda ele fica ao lado do preço, sem somar: uma parcela mensal
     e um valor à vista não se somam, mas quem compra decide com os dois.
+
+    A descrição vai inteira. É nela que estão o lazer do condomínio, o
+    acabamento e a distância da estação — o que faz alguém querer ver o imóvel,
+    e o que ele responde quando a pessoa pergunta. Abreviada, o agente
+    respondia "não consta no catálogo" a um dado que estava no banco.
     """
-    descricao = (imovel.descricao or "")[:160]
     linhas = [
         f"\n- **{imovel.titulo}** (ID: {imovel.id})",
         f"  {imovel.tipo} | {imovel.operacao} | {imovel.bairro} ({imovel.zona})",
@@ -179,7 +183,8 @@ def _formatar_imovel(imovel) -> str:
     )
     if imovel.perfil_indicado:
         linhas.append(f"  Indicado para: {imovel.perfil_indicado}")
-    linhas.append(f"  {descricao}...")
+    if imovel.descricao:
+        linhas.append(f"  {imovel.descricao}")
     return "\n".join(linhas)
 
 

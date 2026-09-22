@@ -20,7 +20,7 @@ from src.agent.history import (
     build_message_history,
 )
 from src.agent.sdr_agent import SDRDependencies, process_message
-from src.db.models import LLMUsage, Mensagem
+from src.db.models import Imovel, LLMUsage, Mensagem
 from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
@@ -166,6 +166,34 @@ def test_venda_mostra_o_condominio_ao_lado_do_preco(
         retorno = _turno_com_busca("apartamento na Bela Vista", lead_id, deps)
 
     assert "Preço: R$ 510.000 | condomínio R$ 600/mês" in retorno
+
+
+DESCRICAO_LONGA = (
+    "Belo apartamento pronto para morar com excelente incidencia de luz solar. "
+    "Living para dois ambientes integrado a varanda envidracada e cozinha "
+    "moderna com armarios embutidos. Condominio com piscina adulto e infantil, "
+    "churrasqueira, salao de jogos e playground. A curta caminhada da estacao."
+)
+
+
+def test_a_ficha_traz_a_descricao_inteira(catalogo, lead_id, deps, busca_fake, db):
+    """Abreviada em 160 caracteres, ela cortava antes do que a pessoa pergunta.
+
+    Numa conversa real o lead pediu o que o condominio oferece. A resposta —
+    piscina, churrasqueira, salao de jogos e playground — estava a 24
+    caracteres do corte, e a Marina respondeu que nao constava no catalogo.
+    Todas as 300 descricoes do catalogo passam dos 160.
+    """
+    assert len(DESCRICAO_LONGA) > 160
+    db.query(Imovel).filter(Imovel.id == 1).update({"descricao": DESCRICAO_LONGA})
+    db.commit()
+
+    with busca_fake(escolha_da_busca((1, "cabe no orcamento"))):
+        retorno = _turno_com_busca("apartamento na Bela Vista", lead_id, deps)
+
+    assert DESCRICAO_LONGA in retorno
+    assert "playground" in retorno
+    assert DESCRICAO_LONGA[:160] + "..." not in retorno
 
 
 def test_metragem_sai_sem_casa_decimal(catalogo, lead_id, deps, busca_fake):
