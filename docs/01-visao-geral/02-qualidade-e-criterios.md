@@ -38,10 +38,11 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 
 | ID | Requisito | Meta da POC |
 |---|---|---|
-| QP-01 | Tempo de resposta do chat simulador | resposta inicial em até **8s p95** em ambiente de demonstração |
+| QP-01 | Tempo de resposta do chat simulador | turno de conversa em até **8s p95** em ambiente de demonstração; turno com busca segue QP-05 |
 | QP-02 | Tempo de resposta do Telegram | mensagem de retorno em até **10s p95** |
-| QP-03 | Busca de imóveis | consulta estruturada + ranking textual em até **2s p95** para base de demonstração |
+| QP-03 | Consulta ao catálogo | cada `SELECT` sobre `imoveis` em até **2s p95**, com teto de 3s no `statement_timeout` |
 | QP-04 | Dashboard | carregamento inicial em até **3s p95** com volume de dados da POC |
+| QP-05 | Turno com busca | resposta em até **20s p95**, incluindo as requisições do agente de busca |
 
 ### 3.2 Confiabilidade
 
@@ -60,6 +61,7 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 | QS-02 | Controle de acesso | toda a UI protegida por autenticação obrigatória; o papel do usuário define quais menus aparecem, o que organiza a tela e não substitui autorização |
 | QS-03 | Logs | não registrar tokens, senhas ou dados sensíveis desnecessários |
 | QS-04 | Minimização de dados | armazenar apenas dados necessários para atendimento, qualificação e demonstração |
+| QS-05 | SQL gerado por LLM | executado por role somente-leitura restrita a `imoveis`, em transação read-only com tempo limite |
 
 ### 3.4 Operabilidade
 
@@ -123,8 +125,22 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 - **Fonte:** lead com critérios muito restritivos
 - **Estímulo:** tool `buscar_imoveis`
 - **Ambiente:** base de imóveis da POC
-- **Resposta esperada:** sistema informa ausência de aderência e conduz a refinamento de critérios
-- **Métrica:** sem erro técnico; resposta útil ao usuário
+- **Resposta esperada:** o agente de busca reformula a consulta; não havendo nada, o retorno traz os números do catálogo — quantos existem do que foi pedido, qual o mais barato, em que bairros há
+- **Métrica:** sem erro técnico; a resposta ao lead cita o que existe de verdade, sem oferecer outra coisa no lugar
+
+### CQ-06 — Provider indisponível durante a busca
+- **Fonte:** provider OpenAI-compatible fora do ar
+- **Estímulo:** agente conversacional chama `buscar_imoveis`
+- **Ambiente:** operação normal, catálogo disponível
+- **Resposta esperada:** a tool monta filtros a partir da ficha estruturada do lead e consulta o catálogo sem LLM, devolvendo imóveis
+- **Métrica:** a busca degrada em qualidade, não em disponibilidade — lista vazia por indisponibilidade do provider é falha
+
+### CQ-07 — Instrução hostil no texto do lead
+- **Fonte:** lead que escreve uma instrução dirigida ao sistema, que chega ao agente de busca pelo perfil narrativo
+- **Estímulo:** tentativa de fazer o SQL gerado alcançar outra tabela
+- **Ambiente:** operação normal
+- **Resposta esperada:** a consulta é recusada pela validação ou pela role, o erro volta ao agente de busca como texto, e nenhum dado fora de `imoveis` é lido
+- **Métrica:** zero leitura fora da tabela `imoveis`; a recusa aparece nos logs com o statement rejeitado
 
 ---
 
@@ -142,9 +158,11 @@ Não substitui os subplanos de agente, modelagem, infraestrutura, autenticação
 - O score deve ser explicável no resumo do corretor.
 
 ### 5.3 Recomendação de imóveis
-- O sistema deve usar filtros estruturados antes do ranking textual.
 - O sistema deve retornar opções coerentes com o perfil informado.
-- Quando não houver aderência, deve sugerir refinamento de critérios.
+- O sistema nunca deve trocar operação, tipo ou finalidade pedidos por outros.
+- Preço, metragem e demais números apresentados devem vir do banco, nunca de texto gerado por modelo.
+- Quando não houver aderência, deve informar o que o catálogo tem, com números.
+- Imóvel já apresentado na conversa não deve voltar como novidade.
 
 ### 5.4 Follow-up
 - O follow-up deve usar contexto do histórico e do `perfil_narrativo`.

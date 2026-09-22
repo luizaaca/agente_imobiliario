@@ -19,13 +19,13 @@ Cada interação com o agente SDR consome tokens de um provedor pago. Sem contro
 
 | Modelo | Input (1M tokens) | Output (1M tokens) | Custo estimado por conversa (20 turnos) |
 |---|---|---|---|
-| `gpt-4o-mini` | $0.15 | $0.60 | ~$0.01-0.03 |
-| `gpt-4o` | $2.50 | $10.00 | ~$0.10-0.30 |
-| `gemini-2.5-flash` | $0.15 | $0.60 | ~$0.01-0.03 |
-| `gemini-2.5-pro` | $1.25 | $10.00 | ~$0.08-0.25 |
-| `claude-sonnet-4` | $3.00 | $15.00 | ~$0.15-0.40 |
+| `gpt-4o-mini` | $0.15 | $0.60 | ~$0.03-0.06 |
+| `gpt-4o` | $2.50 | $10.00 | ~$0.20-0.60 |
+| `gemini-2.5-flash` | $0.15 | $0.60 | ~$0.03-0.06 |
+| `gemini-2.5-pro` | $1.25 | $10.00 | ~$0.16-0.50 |
+| `claude-sonnet-4` | $3.00 | $15.00 | ~$0.30-0.80 |
 
-> **Estimativa para a POC:** 100 conversas × 20 turnos com `gpt-4o-mini` ≈ **$1 a $3 total**.
+> **Estimativa para a POC:** 100 conversas × 20 turnos com `gpt-4o-mini` ≈ **$3 a $6 total**, contando os turnos com busca, que custam o dobro de um turno de conversa simples.
 
 ---
 
@@ -38,7 +38,13 @@ Evita que uma única conversa consuma tokens desproporcionalmente.
 | Limite | Valor Padrão | Variável de Ambiente | Comportamento ao atingir |
 |---|---|---|---|
 | Máximo de turnos | 30 | `LLM_MAX_TURNS_PER_CONVERSATION` | Agente faz handover para corretor humano |
-| Máximo de tokens acumulados | 150.000 | `LLM_MAX_TOKENS_PER_CONVERSATION` | Handover + gera resumo final automaticamente |
+| Máximo de tokens acumulados | 400.000 | `LLM_MAX_TOKENS_PER_CONVERSATION` | Handover + gera resumo final automaticamente |
+
+O teto em tokens acompanha o teto em turnos: 30 turnos em que a pessoa peça
+busca com frequência passam de 400 mil tokens, e um teto mais baixo faria o
+handover disparar por causa da qualidade da busca, e não por causa do tamanho
+da conversa. Quem deve encerrar um atendimento longo é o limite de turnos, que
+mede o que interessa.
 
 **Mensagem de handover:**
 > "Obrigado por todas as informações! Para dar continuidade com o melhor atendimento, vou direcionar você para um dos nossos corretores especialistas. Ele já terá todo o seu perfil e preferências. 😊"
@@ -49,8 +55,8 @@ Evita que o custo total saia do controle.
 
 | Limite | Valor Padrão | Variável de Ambiente | Comportamento ao atingir |
 |---|---|---|---|
-| Budget diário (tokens) | 500.000 | `LLM_DAILY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno, inclusive nas conversas já em andamento |
-| Budget mensal (tokens) | 3.000.000 | `LLM_MONTHLY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno |
+| Budget diário (tokens) | 1.500.000 | `LLM_DAILY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno, inclusive nas conversas já em andamento |
+| Budget mensal (tokens) | 10.000.000 | `LLM_MONTHLY_TOKEN_BUDGET` | Alerta no dashboard + mensagem de indisponibilidade em qualquer turno |
 
 O teto vale para todo turno, e não só para conversas novas: um limite que só
 barra quem chega deixa o custo depender de quantas conversas estavam abertas
@@ -65,11 +71,27 @@ tenha visto o limite chegar. Quando ele age, a conversa guarda um
 e nada depois, o que se lê como um agente que parou de funcionar.
 
 ### Quanto custa um turno
-Medido nas conversas reais: a base reenviada em toda requisição (instruções,
-schemas das tools e histórico) dá cerca de 5.100 tokens, e um turno em que o
-agente busca imóveis são três requisições — pedido, resultado da tool, resposta
-—, cada uma carregando a base inteira. Na prática, 10 a 15 mil tokens por turno
-com busca, e cerca de 5 mil num turno de conversa simples.
+
+A base reenviada em toda requisição — instruções, schemas das tools e histórico
+— dá cerca de 4.000 tokens, dos quais aproximadamente 2.000 são os schemas das
+oito ferramentas. Um turno é no mínimo uma requisição; com tool, são três
+(pedido, resultado da tool, resposta), cada uma carregando a base inteira.
+
+Um turno de conversa simples fica perto de 4 mil tokens. Um turno com busca
+soma a isso o agente de busca, que roda de uma a três requisições com prompt
+próprio e as linhas que ele leu do catálogo: cerca de 185 caracteres por imóvel,
+o que põe 50 imóveis em torno de 2.300 tokens. Na prática, **15 a 20 mil tokens
+por turno com busca**.
+
+O teto do que o agente de busca pode ler é conhecido: o catálogo inteiro, 286
+imóveis disponíveis em linha compacta, são cerca de 13 mil tokens. A
+investigação dele é cara mas limitada, e o que chega ao histórico da conversa é
+só a seleção final.
+
+Um parâmetro de texto livre no lugar de um contrato de filtros é o que mantém a
+conta nesse patamar. Uma tool de busca com dezenove filtros tipados e descrições
+úteis ocupa sozinha cerca de 1.300 tokens de schema — reenviados em toda
+requisição de todo turno, inclusive nos turnos em que ninguém busca nada.
 
 **Mensagem de indisponibilidade:**
 > "Nosso atendimento digital está temporariamente indisponível. Um corretor entrará em contato em breve pelo número cadastrado."
@@ -96,21 +118,33 @@ class LLMUsage(Base):
     tokens_output = Column(Integer, nullable=False)
     tokens_total = Column(Integer, nullable=False)
     estimated_cost_usd = Column(Float, nullable=True)
-    operation = Column(String, nullable=False)  # chat, followup, resumo, busca
+    operation = Column(String, nullable=False)  # chat, followup, perfil, busca
     created_at = Column(DateTime, server_default=func.now())
 ```
 
 ### Valores de `operation`
 
-| Valor | Quando é gravado |
-|---|---|
-| `chat` | resposta conversacional ao lead, em qualquer canal |
-| `followup` | mensagem de follow-up, automática ou disparada pelo corretor |
+| Valor | Quando é gravado | Conta como turno? |
+|---|---|---|
+| `chat` | resposta conversacional ao lead, em qualquer canal | sim |
+| `followup` | mensagem de follow-up, automática ou disparada pelo corretor | não |
+| `perfil` | consolidação do perfil narrativo, pelo agente dedicado | não |
+| `busca` | investigação do catálogo, pelo agente de busca | não |
 
-São os dois únicos, porque são as duas únicas chamadas ao provider que
-existem. O resumo do corretor é montado por template a partir do que já está
-no banco, o perfil narrativo é escrito pelo próprio turno de chat via tool, e
-o ranking da busca é do PostgreSQL — nenhum dos três chama LLM por fora.
+São as quatro chamadas ao provider que existem. O resumo do corretor é montado
+por template a partir do que já está no banco, e não chama LLM.
+
+A coluna da direita separa duas contas diferentes. **Todos** os tokens do lead
+entram no orçamento dele, que é o que dispara o handover por
+`LLM_MAX_TOKENS_PER_CONVERSATION`. Mas só `chat` conta como **turno**: os
+agentes auxiliares trabalham dentro de um turno, não no lugar dele, e contá-los
+empurraria a pessoa para o corretor humano mais cedo a cada busca que ela
+pedisse.
+
+Separar `busca` de `chat` é o que torna a recuperação de imóveis mensurável. O
+consumo do agente de busca **não** é propagado para o run principal: se fosse,
+entraria no `usage` do turno e seria gravado como `chat`, misturando o custo de
+buscar com o de conversar.
 
 ### Status de cada chamada
 
@@ -291,12 +325,26 @@ está tudo bem quando nada foi exercitado.
 ```env
 # Limites por conversa
 LLM_MAX_TURNS_PER_CONVERSATION=30
-LLM_MAX_TOKENS_PER_CONVERSATION=150000
+LLM_MAX_TOKENS_PER_CONVERSATION=400000
 
 # Limites globais
-LLM_DAILY_TOKEN_BUDGET=500000
-LLM_MONTHLY_TOKEN_BUDGET=3000000
+LLM_DAILY_TOKEN_BUDGET=1500000
+LLM_MONTHLY_TOKEN_BUDGET=10000000
+
+# Modelo do agente de busca. Vazio usa LLM_MODEL.
+LLM_MODEL_BUSCA=
 ```
+
+### `LLM_MODEL_BUSCA`
+
+O agente de busca roda de uma a três requisições **dentro** da chamada da tool,
+antes de a pessoa ver qualquer coisa. Essa latência se soma à do turno, e num
+canal de mensagem ela é percebida.
+
+A variável existe para poder trocar esse agente por um modelo mais rápido sem
+tocar no modelo da conversa, onde a qualidade do texto é o que importa. Vazia,
+os dois usam `LLM_MODEL` — que é o padrão, porque a decisão de qual imóvel
+mostrar é tão sensível quanto a de como falar dele.
 
 ---
 

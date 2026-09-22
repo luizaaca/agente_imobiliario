@@ -24,6 +24,8 @@ As variáveis esperadas incluem:
 - `LLM_MODEL`
 - `LLM_API_KEY`
 - `LLM_BASE_URL` (opcional; obrigatoria no `LLM_PROVIDER=custom`)
+- `LLM_MODEL_BUSCA` (opcional; vazio usa o `LLM_MODEL`)
+- `DB_PASSWORD_BUSCA` (senha da role somente-leitura do agente de busca)
 - `TELEGRAM_BOT_TOKEN`
 - `AUTH_COOKIE_KEY`
 

@@ -28,85 +28,97 @@ expressável. O mesmo vale para o canal.
 ## 2. `buscar_imoveis`
 
 ### Objetivo
-Consultar o catálogo com filtros estruturados e ranking textual. É o
-instrumento de qualificação do agente: mostrar imóvel é o que faz a pessoa
-revelar orçamento, tamanho e bairro sem que ninguém pergunte.
+Entregar ao agente de busca o que a pessoa procura e devolver os imóveis
+escolhidos. É o instrumento de qualificação do agente: mostrar imóvel é o que
+faz a pessoa revelar orçamento, tamanho e bairro sem que ninguém pergunte.
 
 ### Input esperado
-O que a pessoa procura (nunca afrouxado):
-- `operacao` — `venda` ou `aluguel`;
-- `tipo` — um dos 16 tipos do catálogo;
-- `finalidade` — `residencial` ou `comercial`, quando ela não nomeia o tipo.
+- `pedido` — até 400 caracteres, em texto livre, na linguagem em que a pessoa
+  pediu. Tudo cabe aqui: o que ela quer, onde, por quanto, para quê, e o que
+  ela já recusou.
 
-Onde:
-- `bairro` — só o nome do bairro;
-- `zona` — uma das 5 regiões, e também aceita nome de bairro.
-
-Quanto:
-- `preco_min`, `preco_max` — preço do imóvel;
-- `custo_total_max` — aluguel mais condomínio.
-
-Como é:
-- `quartos_min`, `quartos_max`, `suites_min`, `banheiros_min`, `vagas_min`;
-- `area_min`, `area_max`;
-- `perfil_indicado` — um dos 12 perfis de uso;
-- `termos_livres` — só amenidades, em texto livre.
-
-Apresentação:
-- `ordenar_por` — `preco_asc`, `preco_desc`, `area_desc` ou `relevancia`;
-- `limite_resultados` — 1 a 10, default 5.
-
-`operacao`, `tipo`, `finalidade`, `zona`, `perfil_indicado` e `ordenar_por` são
-`Literal` na assinatura, então viram `enum` no schema da tool: o valor inválido
-é rejeitado pelo provider antes de chegar ao banco. `tests/test_catalog_service.py`
-compara cada lista com o `SELECT DISTINCT` da coluna, para não envelhecerem.
+É o único parâmetro. O agente conversacional não traduz o pedido para filtros,
+não escolhe ordenação e não decide quantos imóveis quer — essas são decisões de
+quem busca, tomadas com o catálogo à vista.
 
 ### Output esperado
-- lista de imóveis aderentes, com preço, metragem, quartos, suítes, banheiros e
-  vagas; no aluguel, também aluguel + condomínio = total do mês;
-- quando houve afrouxamento, a frase em português do que mudou;
-- quando não houve resultado, o diagnóstico (ver abaixo).
+- a ficha de cada imóvel escolhido, com ID, preço, metragem, quartos, suítes,
+  banheiros e vagas; no aluguel, também aluguel + condomínio = total do mês;
+- uma linha de justificativa por imóvel, escrita pelo agente de busca;
+- quando o pedido exato não tinha resposta, a frase em português do que
+  precisou mudar;
+- quando não há nada, o diagnóstico do catálogo (ver abaixo).
+
+Os números vêm do banco, relidos por ID e formatados em código. A justificativa
+é do agente de busca. Nenhum valor monetário no retorno foi escrito por um
+modelo.
 
 ### Efeitos colaterais
-Nenhum efeito de escrita obrigatório.
+- uma ou mais chamadas ao provider, registradas em `llm_usage` com
+  `operation="busca"`;
+- os IDs apresentados entram no cache da conversa (ver abaixo);
+- o rastro das consultas do agente de busca é gravado no `metadata_json` da
+  mensagem da tool, para auditoria.
+
+Nenhuma escrita no catálogo. A role usada pelo agente de busca não teria
+permissão para isso.
 
 ### Regras
-- aplicar filtros estruturados antes do ranking textual;
 - nunca retornar imóveis incompatíveis de forma gritante apenas para “preencher lista”;
-- ausência de resultado deve ser tratada como resposta válida;
-- uma operação por busca (ver abaixo).
+- ausência de resultado é resposta válida, não erro;
+- imóvel já apresentado nesta conversa não volta como novidade;
+- o que a pessoa procura não é trocado por outra coisa (ver abaixo).
 
 ### Erros tratáveis
+- provider fora do ar ou resposta vazia — degrada para a busca estruturada, sem LLM;
+- SQL inválido gerado pelo agente de busca — volta a ele como texto, para reescrever;
 - falha de banco;
-- parâmetros inválidos;
 - catálogo indisponível.
 
 ### O que a busca nunca troca
-`operacao`, `tipo` e `finalidade` ficam fora da escada de relaxamento. A escada
-existe para dar flexibilidade de **lugar e condição** — outro bairro, teto 30%
-maior, sem exigir a vaga —, não para trocar a coisa procurada por outra.
+`operacao`, `tipo` e `finalidade` não são negociáveis. A flexibilidade da busca
+é de **lugar e condição** — outro bairro, teto 30% maior, sem exigir a vaga —,
+nunca de trocar a coisa procurada por outra.
 
-Isto veio de uma falha real: a pessoa pediu galpão, a escada derrubou o termo
-antes de derrubar um filtro de região que não filtrava nada, e o agente
-apresentou salas comerciais como se fossem o que ela tinha pedido.
+Isto veio de uma falha real: a pessoa pediu galpão e recebeu salas comerciais
+apresentadas como se fossem o que ela tinha pedido.
 
-Como `tipo` determina `finalidade` (não existe galpão residencial), a
-finalidade é deduzida quando só o tipo vem, e o par contraditório é recusado
-com `ModelRetry` — sem isso ele daria lista vazia para sempre, já que nenhum
-dos dois é afrouxado.
+Como `tipo` determina `finalidade` (não existe galpão residencial), pedir um
+par contraditório não devolve lista vazia: devolve a contradição, para o agente
+se corrigir.
+
+A regra vale tanto para o agente de busca, nas instruções dele, quanto para o
+caminho de degradação, onde é o `CatalogService` que a garante mantendo os três
+fora da escada de relaxamento.
 
 ### Lista vazia é resposta, não erro
-Quando nada resta depois da escada, o retorno traz os números do catálogo:
-quantos existem do que foi pedido, qual o mais barato, em que bairros há. É com
-eles que o agente diz o que existe de verdade, em vez de pedir desculpa no
-vazio ou oferecer outra coisa.
+Quando não há nada, o retorno traz os números do catálogo: quantos existem do
+que foi pedido, qual o mais barato, em que bairros há. É com eles que o agente
+diz o que existe de verdade, em vez de pedir desculpa no vazio ou oferecer
+outra coisa.
 
-### Uma operação por busca
-Sem `operacao`, a busca mistura venda e aluguel e a ordenação por preço faz os
-aluguéis (a partir de R$ 1.500) enterrarem as vendas (a partir de R$ 240 mil).
-Quando a pessoa aceita as duas, o agente busca duas vezes, uma por operação. O
-retorno avisa disso quando a operação não foi informada, e a tool usa a
-`intencao` já gravada do lead antes de cair na lista mista.
+### Uma operação por lista
+Venda e aluguel não se misturam numa lista só: ordenada por preço, os aluguéis
+(a partir de R$ 1.500) enterram as vendas (a partir de R$ 240 mil) e a pessoa
+vê metade do que pediu. Quando ela aceita as duas, quem consulta duas vezes e
+apresenta separado é o agente de busca — o agente conversacional escreve um
+pedido só.
+
+Na falta de indicação no pedido, vale a `intencao` já gravada do lead.
+
+### O que não se repete
+Os IDs apresentados ficam num cache em memória, por conversa, com validade de
+uma hora, e são entregues ao agente de busca como o que ele não deve reoferecer.
+
+O cache é deliberadamente volátil: dura o tempo de uma conversa, e é por
+processo — Streamlit e bot do Telegram rodam separados. Uma conversa retomada no
+dia seguinte pode rever os mesmos imóveis, o que é aceitável; o que não era
+aceitável é a pessoa receber o mesmo apartamento três vezes no mesmo
+atendimento.
+
+Isso vale para o que é oferecido como novidade. Perguntar sobre um imóvel já
+mostrado — *"aquele da Mooca, quanto era mesmo?"* — é outra coisa, e continua
+funcionando.
 
 ---
 

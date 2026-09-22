@@ -165,6 +165,11 @@ flowchart LR
         FollowUp["gerar_followup"]
     end
 
+    subgraph Auxiliares ["Agentes Auxiliares"]
+        BuscaAgent["Agente de Busca"]
+        PerfilAgent["Consolidador de Perfil"]
+    end
+
     subgraph Services ["Serviços de Domínio"]
         CatalogService["Catalog Service"]
         LeadService["Lead Service"]
@@ -184,11 +189,16 @@ flowchart LR
     SDRAgent <--> Prompt
     SDRAgent <--> State
     SDRAgent --> Tools
-    Buscar --> CatalogService
+    Buscar --> BuscaAgent
+    Buscar -.->|"degradação, sem LLM"| CatalogService
+    BuscaAgent -->|"SQL somente-leitura"| DB
+    BuscaAgent -.->|"consulta e seleciona"| LLM
     Qualificar --> LeadService
+    PerfilTool --> PerfilAgent
+    PerfilAgent -.->|"consolidação textual"| LLM
     PerfilTool --> LeadService
     Agendar --> SchedulingService
-    Resumo --> SummaryService
+    Encerrar --> SummaryService
     FollowUp --> SummaryService
     FollowUpService -.->|"composição textual via LLM"| LLM["LLM Provider"]
     CatalogService <--> DB
@@ -276,8 +286,9 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [x] Implementar agente principal com PydanticAI em `src/agent/sdr_agent.py`.
 - [ ] Definir output estruturado do agente para resposta + atualização de estado.
   > Feito de outro jeito: a resposta é texto e a atualização de estado acontece pelas tools.
+- [ ] Implementar agente de busca em `src/agent/busca_agent.py`, com role somente-leitura sobre `imoveis`.
 - [x] Implementar tools tipadas:
-  - [x] `buscar_imoveis`
+  - [x] `buscar_imoveis` — pedido em texto livre, atendido pelo agente de busca
   - [x] `registrar_qualificacao`
   - [x] `atualizar_perfil_lead` — acréscimo ao perfil narrativo, consolidado por agente dedicado
   - [x] `agendar_reuniao`

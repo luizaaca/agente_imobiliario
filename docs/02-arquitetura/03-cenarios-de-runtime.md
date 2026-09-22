@@ -63,25 +63,56 @@ sequenceDiagram
 ## 3. Cenário R2 — Busca e recomendação de imóveis
 
 ### Descrição
-Após obter contexto mínimo, o agente busca imóveis aderentes e recomenda opções.
+O agente conversacional descreve o que a pessoa procura e um agente de busca
+dedicado investiga o catálogo para responder.
 
 ### Pré-condições
-- intenção conhecida;
-- ao menos parte dos filtros principais disponível (ex.: orçamento, região, quartos).
+- qualquer indicação do que a pessoa procura. A busca é instrumento de
+  qualificação, não consequência dela: ela acontece cedo e com pouca informação.
 
 ### Fluxo
-1. Agente identifica contexto suficiente para busca.
-2. Chama `buscar_imoveis`.
-3. A tool delega a consulta ao `CatalogService`.
-4. `CatalogService` aplica filtros estruturados.
-5. Os resultados restantes são ranqueados por FTS.
-6. A tool retorna imóveis aderentes ou ausência de aderência.
-7. O agente responde com recomendações ou conduz refinamento.
+1. O agente conversacional escreve o pedido em texto livre e chama `buscar_imoveis`.
+2. A tool reúne o contexto: ficha estruturada do lead, perfil narrativo e IDs já apresentados nesta conversa.
+3. O agente de busca consulta o catálogo por SQL, contra a role somente-leitura.
+4. Ele reformula e consulta de novo até ter o que responder, ou até o teto de requisições.
+5. Devolve os IDs escolhidos e uma justificativa para cada.
+6. A camada de código relê os imóveis por ID, monta as fichas com os números do banco e intercala as justificativas.
+7. Os IDs entram no cache da conversa; o consumo é registrado com `operation="busca"`.
+8. O agente conversacional apresenta no máximo três deles à pessoa.
 
 ### Regras importantes
-- filtros estruturados vêm antes do ranking textual;
-- ausência de resultado não é erro técnico;
+- operação, tipo e finalidade não são trocados por outra coisa;
+- ausência de resultado não é erro técnico: o retorno traz os números do catálogo;
+- os números apresentados vêm do banco, nunca do texto gerado pelo agente de busca;
+- as consultas intermediárias não entram no histórico da conversa, só em observabilidade;
+- com o provider fora do ar, a tool consulta o catálogo sem LLM, a partir da ficha estruturada;
 - rejeições do lead devem alimentar o `perfil_narrativo`.
+
+```mermaid
+sequenceDiagram
+    participant Lead
+    participant SDR as Agente SDR
+    participant Tool as buscar_imoveis
+    participant Busca as Agente de busca
+    participant DB as PostgreSQL
+
+    Lead->>SDR: "queria algo perto do metrô, até 5 mil"
+    SDR->>Tool: pedido em texto livre
+    Tool->>Tool: reunir ficha, perfil e IDs já mostrados
+    Tool->>Busca: pedido + contexto do lead
+
+    loop até responder, com teto de requisições
+        Busca->>DB: SELECT ... FROM imoveis (role somente-leitura)
+        DB-->>Busca: linhas
+    end
+
+    Busca-->>Tool: IDs escolhidos + porquê de cada um
+    Tool->>DB: reler os IDs escolhidos
+    DB-->>Tool: dados do catálogo
+    Tool->>Tool: formatar fichas e registrar IDs no cache
+    Tool-->>SDR: fichas com números do banco
+    SDR-->>Lead: no máximo três imóveis, uma linha cada
+```
 
 ---
 

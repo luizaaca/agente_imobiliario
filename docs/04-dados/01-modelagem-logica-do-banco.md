@@ -629,6 +629,43 @@ Responsabilidades do script de seed:
 
 > Os índices e a estratégia de FTS são suficientes para todos os cenários acima.
 
+### 8.9 Acesso somente-leitura para o agente de busca
+
+O agente de busca (ver [estratégia de agente e tools](../02-arquitetura/02-estrategia-de-agente-e-tools.md))
+consulta o catálogo por SQL que ele mesmo escreve. Este banco é o mesmo que
+guarda leads, telefones e o histórico das conversas, e o contexto desse agente
+inclui o perfil narrativo — texto derivado do que o lead digitou. Uma instrução
+escondida numa mensagem de lead é, portanto, um caminho até `SELECT telefone
+FROM leads` se nada o barrar.
+
+São quatro camadas. A primeira é o limite de verdade; as outras três são
+profundidade.
+
+| Camada | O que faz |
+|---|---|
+| Role `busca_ro` | `GRANT SELECT` apenas em `imoveis`. Sem acesso às demais tabelas, sem escrita em nenhuma |
+| Transação | `SET TRANSACTION READ ONLY` e `statement_timeout` de 3 segundos |
+| Validação do statement | exatamente um comando, iniciado por `SELECT` ou `WITH`; recusa `pg_*`, `information_schema` e qualquer tabela fora de `imoveis` |
+| Teto de linhas | `LIMIT` injetado quando ausente |
+
+A role é criada por migration, com a aplicação e o catálogo. Duas cautelas:
+
+- **role no PostgreSQL é global ao cluster**, não ao banco. A migration precisa
+  ser idempotente (`DO $$ ... IF NOT EXISTS`), senão falha ao rodar no segundo
+  banco — que é exatamente o que a suíte de testes faz ao criar o seu;
+- a senha vem de `DB_PASSWORD_BUSCA`, nunca do arquivo da migration.
+
+O timeout de 3 segundos é generoso para o volume da POC: a busca mais pesada
+hoje é um `Bitmap Index Scan` sobre o índice GIN, na casa do milissegundo. Ele
+existe para o caso que ninguém previu — um `CROSS JOIN` acidental, um `ORDER BY`
+sobre expressão não indexada — e não para o caso normal.
+
+### 8.10 Permissões da aplicação
+
+A aplicação continua usando a role principal, com leitura e escrita. A
+separação vale apenas para o SQL gerado por LLM: é o único código do sistema
+que ninguém revisou antes de executar.
+
 ---
 
 ## 9. Convenções transversais

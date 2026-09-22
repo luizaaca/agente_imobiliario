@@ -152,9 +152,11 @@ LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
 LLM_API_KEY=sk-...
 LLM_BASE_URL=  # vazio usa o endpoint padrao do LLM_PROVIDER
+LLM_MODEL_BUSCA=  # vazio usa o LLM_MODEL
 
 # === Banco de Dados ===
 DB_PASSWORD=sdr_dev_pass
+DB_PASSWORD_BUSCA=busca_ro_dev_pass  # role somente-leitura do agente de busca
 DATABASE_URL=postgresql://sdr:sdr_dev_pass@localhost:5432/agente_sdr
 
 # === Telegram ===
@@ -164,10 +166,10 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 AUTH_COOKIE_KEY=gerar_uma_chave_aleatoria_aqui
 
 # === LLM Custos ===
-LLM_DAILY_TOKEN_BUDGET=100000
-LLM_MONTHLY_TOKEN_BUDGET=3000000
+LLM_DAILY_TOKEN_BUDGET=1500000
+LLM_MONTHLY_TOKEN_BUDGET=10000000
 LLM_MAX_TURNS_PER_CONVERSATION=30
-LLM_MAX_TOKENS_PER_CONVERSATION=50000
+LLM_MAX_TOKENS_PER_CONVERSATION=400000
 
 # === Observabilidade (opcional) ===
 LOGFIRE_TOKEN=

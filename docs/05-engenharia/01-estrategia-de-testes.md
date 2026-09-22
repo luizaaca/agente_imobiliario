@@ -53,6 +53,15 @@ Cobrem os 3 cenários obrigatórios do desafio.
 - ranking textual básico;
 - comportamento sem resultados.
 
+### 3.1b Agente de busca
+- pedido em texto livre que resulta em imóveis aderentes;
+- o que foi pedido não é trocado por outra coisa: galpão não volta como sala comercial;
+- imóvel já apresentado na conversa não volta como novidade;
+- provider fora do ar: a busca degrada para o caminho sem LLM e ainda devolve imóveis;
+- os números do retorno conferem com o banco, e não com o texto do modelo;
+- contenção do SQL: comando que não é `SELECT`, tabela fora de `imoveis`, múltiplos statements e consulta sem `LIMIT`;
+- o consumo é registrado com `operation="busca"`, separado do turno de conversa.
+
 ### 3.2 Qualificação e score
 - atualização de campos estruturados;
 - transição de status;

@@ -53,7 +53,7 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 
 | Tool | Responsabilidade |
 |---|---|
-| `buscar_imoveis` | Consulta catálogo com filtros e ranking textual |
+| `buscar_imoveis` | Entrega o pedido, em texto livre, ao agente de busca, e devolve os imóveis escolhidos |
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
@@ -74,23 +74,84 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 
 ## 6. Estratégia de Busca de Imóveis
 
-Com a adoção do PostgreSQL e um volume maior de dados no catálogo sintético, a abordagem de busca acontecerá diretamente no banco de dados em camadas:
+### Quem busca
 
-### Camada 1 — Filtros estruturados (SQL)
-Filtros diretos via `WHERE` clause:
-- intenção/finalidade
-- faixa de preço (`BETWEEN`)
-- região ou bairro (`IN` ou `=`)
-- quantidade de quartos (`>=`)
+O agente conversacional **não** monta a consulta. Ele descreve o que a pessoa
+procura, na linguagem em que ela pediu, e entrega esse texto ao **agente de
+busca** (`src/agent/busca_agent.py`), que conhece o catálogo em detalhe e
+investiga o banco até ter o que responder.
 
-### Camada 2 — Ranking textual (FTS)
-Ordenar os resultados restantes por aderência textual usando o Full-Text Search do PostgreSQL.
+A separação resolve duas coisas que puxam em direções opostas. O que a pessoa
+diz raramente se traduz em filtros sem perda — "algo novo, em região nobre,
+entre a Paulista e a Faria Lima, para uma contabilidade de 8 pessoas" mistura
+estado de conservação, julgamento de valor, duas referências que não são
+bairros e um uso que implica metragem. E o contrato que aceitaria tudo isso em
+campos tipados pesaria em toda requisição do agente conversacional, inclusive
+nos turnos em que ninguém busca nada. Com a delegação, as instruções longas de
+busca ficam onde só são lidas quando há busca.
+
+O agente de busca recebe, além do pedido:
+- a ficha estruturada do lead e o perfil narrativo, para desempatar o que o
+  pedido não diz;
+- os IDs dos imóveis já apresentados nesta conversa, para não reoferecer os
+  mesmos.
+
+### Como ele consulta
+
+Por SQL, escrito por ele, contra uma **role somente-leitura restrita à tabela
+`imoveis`**. As camadas de contenção estão em
+[`04-dados/01-modelagem-logica-do-banco.md`](../04-dados/01-modelagem-logica-do-banco.md).
+
+Consultar por SQL é o que torna a busca uma investigação em vez de uma consulta
+única. As perguntas que decidem uma recomendação — quantos existem nesta faixa,
+em que bairros se concentram, o que aparece se o teto subir 30% — não cabem num
+conjunto fechado de filtros, e são elas que separam "não achei" de "não existe".
+
+Um erro de SQL volta ao agente de busca como texto, para ele reescrever a
+consulta. O limite de linhas é do statement, não da resposta: ele pode ler
+dezenas de imóveis e devolver três.
+
+**O que ele nunca troca:** operação, tipo e finalidade. Quem pede galpão não
+recebe sala comercial. Bairro, preço, metragem e amenidades são negociáveis e
+podem ser afrouxados — desde que a resposta diga, em português, o que precisou
+mudar.
+
+### O que o PostgreSQL oferece a ele
 
 A coluna `imoveis.search_vector` é **gerada pelo banco** (`GENERATED ALWAYS AS ... STORED`) a partir de título, descrição, tags, bairro e tipo, com índice GIN. Sem trigger nem código de aplicação para manter o vetor, ele não tem como ficar defasado.
 
-A consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata acentos e pontuação do texto cru sem risco de erro de sintaxe, e combina os termos com **OU** — exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira". Quem separa relevância é o `ts_rank`, que ordena o resultado. Se sobrarem apenas stopwords, a camada textual é ignorada em vez de zerar a busca.
+Para texto, a consulta usa `websearch_to_tsquery('portuguese', ...)`, que trata acentos e pontuação do texto cru sem risco de erro de sintaxe. Os termos são combinados com **OU** — exigir todas as palavras zeraria buscas como "varanda gourmet churrasqueira". Quem separa relevância é o `ts_rank`, que ordena o resultado.
 
-As aspas do texto que o modelo manda são removidas antes de montar a consulta, pela mesma razão do OU: para o `websearch_to_tsquery` um par de aspas delimita frase exata, e intercalar `or` entre as palavras de dentro dele transformaria `"varanda gourmet"` na frase `varand <-> or <-> gourmet`, que não casa imóvel nenhum. Busca livre aqui é OU com ranking, não frase.
+Aspas ali dentro delimitam frase exata, não ênfase: `"varanda gourmet"` vira a
+sequência `varand <-> gourmet`, que exige as duas palavras adjacentes. É o
+oposto do OU, e serve para quando a adjacência é mesmo o que se procura.
+
+**O que não está no vetor:** zona, finalidade, perfil indicado, preço, área e
+número de cômodos. Todos têm coluna própria e se filtram com `WHERE`. Procurar
+"comercial" no texto traz apartamento que usa a palavra na descrição e perde
+sala que não a usa; procurar "zona norte" não traz nada, porque a palavra só
+existe numa coluna que o vetor não cobre.
+
+### Quem escreve a resposta
+
+O agente de busca devolve os IDs escolhidos e **uma linha de porquê para cada**.
+Preço, condomínio, metragem e cômodos são relidos do banco e formatados pela
+camada de código.
+
+A divisão é deliberada: o julgamento é do agente, os números são do PostgreSQL.
+O agente SDR promete à pessoa que nunca inventa preço nem disponibilidade, e
+essa promessa não sobrevive a números escritos por um modelo.
+
+### Quando o provider falha
+
+A tool monta filtros a partir da ficha estruturada do lead, usa o pedido como
+termo livre e consulta o catálogo sem LLM nenhum, com a escada de relaxamento
+determinística do `CatalogService`. A busca degrada em qualidade, não em
+disponibilidade — a pessoa recebe imóveis piores, não um pedido de desculpas.
+
+Aqui o pedido é prosa, não uma consulta escrita para o PostgreSQL: as aspas que
+vierem no meio dele são removidas, porque a adjacência que elas exigiriam não
+foi pedida por ninguém e zeraria a busca inteira.
 
 ### Evolução opcional
 Adicionar colunas `pgvector` para armazenar embeddings da descrição do imóvel, permitindo busca semântica real (cosine similarity). Isso deve ser tratado como **incremento** para a POC.
