@@ -141,11 +141,14 @@ busca, e como nenhum anúncio contém essas palavras, escrevê-los zera a consul
 inteira. A camada de execução avisa quando isso aparece, porque o erro é
 silencioso — a consulta roda, não dá erro e devolve nada.
 
-**A configuração `portuguese` radicaliza mas não dobra acento.** `varanda` e
-`varandas` viram o mesmo `varand`, mas `metro` vira `metr` e `metrô` vira
-`metrô`: são lexemas diferentes, e só `metro or metrô` alcança os 102 imóveis
-que falam de metrô de algum jeito. Palavra com duas grafias usuais precisa das
-duas.
+**A configuração `portuguese` radicaliza mas não dobra acento**, e tirar o
+acento pode dar outra palavra. `varanda` e `varandas` viram o mesmo `varand`,
+mas `metrô` continua `metrô` enquanto `metro` vira `metr` — que é também o
+radical de *metros*, a unidade de comprimento. Procurar `metro` casa 109
+imóveis, 38 deles falando de "a 300 metros da praça" e "600 metros quadrados".
+A grafia acentuada é a que significa estação: `metrô or estação` chega a 86 com
+ruído próximo de zero. Somar grafias com `or` só ajuda quando a segunda grafia
+é mesmo a mesma palavra.
 
 **Nome de tag com underscore não entra no vetor.** O tokenizador quebra no
 underscore, então `metro_proximo` vira a adjacência `metr <-> proxim` e exige as

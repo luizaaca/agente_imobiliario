@@ -193,12 +193,12 @@ Dentro das aspas vale a sintaxe de busca web, e só ela:
 |---|---|---|
 | `varanda gourmet` | `varand & gourmet` | as duas palavras, em qualquer lugar |
 | `"varanda gourmet"` | `varand <-> gourmet` | as duas **coladas**, nessa ordem |
-| `varanda or piscina` | `varand \| piscin` | qualquer uma |
+| `varanda or piscina` | `varand \\| piscin` | qualquer uma |
 | `varanda -térreo` | `varand & !terre` | com varanda, sem térreo |
 
 **O espaço já significa E.** `and` e `not` NÃO são operadores: viram termos de busca. `'varanda gourmet and metro'` procura a palavra "and" no anúncio e devolve **zero**, sempre. Para E use o espaço, para OU use `or`, para NÃO use `-` colado na palavra.
 
-**Acento conta.** A configuração `portuguese` radicaliza mas não dobra acento: `metro` vira `metr` e casa 90 imóveis, `metrô` vira `metrô` e casa 63, e só `metro or metrô` alcança os 102. Sempre que a palavra tiver duas grafias usuais, procure as duas com `or`. Radicalização, essa, funciona: `varanda` e `varandas` viram o mesmo `varand`.
+**Acento conta — e a palavra sem acento pode ser outra palavra.** A configuração `portuguese` radicaliza mas não dobra acento. `metrô` continua `metrô`; `metro` vira `metr`, que é também o radical de *metros*, a unidade de comprimento. Procurar `'metro'` traz "a 300 metros da praça" e "600 metros quadrados": 109 imóveis, 38 deles sem estação nenhuma por perto. Antes de somar duas grafias com `or`, confira se a segunda é mesmo a mesma palavra. Para estação o que funciona é `'metrô or estação'` — 86 imóveis, quase sem ruído. Radicalização, essa, funciona sem ressalva: `varanda` e `varandas` viram o mesmo `varand`.
 
 **Nome de tag com underscore não vai aqui.** O tokenizador quebra no underscore e vira adjacência: `metro_proximo` exige "metro" e "proximo" colados nessa ordem. Dentro do `search_vector`, use a palavra simples; o nome da tag serve para `tags ILIKE '%metro_proximo%'`, quando você quiser exatamente a tag e nada além dela.
 
@@ -210,9 +210,10 @@ O `search_vector` é o instrumento principal para amenidade. Ele cobre título, 
 
 Exemplo, para "varanda gourmet e perto do metrô":
 
-    -- a frase exata e metrô, nas duas grafias
+    -- a frase exata, e a estação sem a unidade de medida junto
     AND search_vector @@ websearch_to_tsquery('portuguese', '"varanda gourmet"')
-    AND search_vector @@ websearch_to_tsquery('portuguese', 'metro or metrô')
+    AND (search_vector @@ websearch_to_tsquery('portuguese', 'metrô or estação')
+         OR tags ILIKE '%metro_proximo%')
 
 Duas condições separadas, e não uma só, porque cada uma é uma exigência diferente — e assim dá para afrouxar uma sem perder a outra. Se "varanda gourmet" exata não devolver nada, troque só a primeira por `'"varanda gourmet" or churrasqueira'` e mantenha a segunda.
 
