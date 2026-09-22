@@ -122,14 +122,28 @@ def _instrumentada(funcao):
 # `inspect.signature` enxergar a original através do wrapper.
 
 # Vai no fim do retorno da busca, e nao so no system prompt: o resultado da
-# tool e o texto mais recente antes da geracao, e e ali que a instrucao
-# segura o modelo de listar opcoes de proximo passo em vez de escolher uma.
+# tool e o texto mais recente antes da geracao, e e ali que a instrucao pega.
+#
+# A regra de abrir pelo que existe nasceu de uma resposta real. A busca anotou
+# "nao encontrei a combinacao exata de varanda gourmet e metro", o agente
+# comecou a mensagem por isso, e os tres imoveis que ele mostrou logo abaixo
+# tinham churrasqueira E metro — a pessoa leu uma recusa antes de ler o que
+# servia para ela. O texto da busca descreve a BUSCA; a mensagem tem que
+# descrever os IMOVEIS.
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
     "Ao responder: no máximo três destes imóveis, uma linha de porquê para "
-    "cada, até seis linhas no total. Não ofereça um menu de próximos passos "
-    "('posso ampliar a busca, ou...') — a busca já foi refeita sozinha. "
-    "Escolha você o próximo passo e termine com UMA pergunta só."
+    "cada, até seis linhas no total.\n"
+    "Abra pelo que você TEM, nunca pelo que faltou. Antes de escrever, leia as "
+    "fichas acima e veja o que elas atendem do que ela pediu — muitas vezes "
+    "atendem, e de outro jeito. Só diga que algo não existe depois de conferir "
+    "que os imóveis realmente não têm.\n"
+    "A observação da busca é anotação para você, não frase para repetir. "
+    "Vire frase apenas quando a diferença mudar a decisão dela — nunca como "
+    "primeira linha.\n"
+    "Não ofereça um menu de próximos passos ('posso ampliar a busca, ou...') — "
+    "a busca já foi refeita sozinha. Escolha você o próximo passo e termine "
+    "com UMA pergunta só."
 )
 
 
@@ -248,21 +262,39 @@ async def buscar_imoveis(
 
 
 def _texto_da_recomendacao(imoveis, recomendacao) -> str:
-    """A ficha de cada imóvel, com o porquê que o agente de busca escreveu."""
+    """A ficha de cada imóvel, com o porquê que o agente de busca escreveu.
+
+    Os imóveis vêm primeiro e a observação da busca vem depois deles, de
+    propósito. A ordem em que o modelo lê é a ordem em que ele tende a
+    escrever: com a observação no topo, uma anotação como "não achei a
+    combinação exata" virava a primeira linha da mensagem, antes de três
+    imóveis que atendiam ao pedido por outro caminho.
+    """
     porque_de = {e.imovel_id: e.porque for e in recomendacao.escolhidos}
 
-    linhas = []
-    if recomendacao.observacao:
-        linhas.append(recomendacao.observacao)
-    linhas.append(f"Encontrei {len(imoveis)} imóvel(is):")
-
+    linhas = [f"Encontrei {len(imoveis)} imóvel(is):"]
     for imovel in imoveis:
         linhas.append(_formatar_imovel(imovel))
         if porque := porque_de.get(imovel.id):
             linhas.append(f"  → {porque}")
 
+    if recomendacao.observacao:
+        linhas.append(_nota_da_busca(recomendacao.observacao))
+
     linhas.append(FECHAMENTO_DA_BUSCA)
     return "\n".join(linhas)
+
+
+def _nota_da_busca(texto: str) -> str:
+    """Rotula o que a busca anotou como contexto, e não como frase pronta.
+
+    Sem o rótulo o modelo copia a anotação para a mensagem, e ela está escrita
+    do ponto de vista de quem procurou — descreve a busca, não os imóveis.
+    """
+    return (
+        "\n---\n"
+        f"Nota da busca, para o seu entendimento e não para copiar: {texto}"
+    )
 
 
 def _registrar_custo_da_busca(
@@ -352,23 +384,26 @@ def _busca_sem_agente(
         if not resultado.imoveis:
             return "\n".join(filter(None, [observacao, _nada_encontrado(resultado)]))
 
-        linhas = [observacao] if observacao else []
-        if resultado.relaxamentos:
-            # O agente precisa das palavras exatas do que mudou; sem isso ele
-            # inventa que ampliou a busca sem ter ampliado.
-            linhas.append(
-                "Com os filtros exatos não havia nada. Esta busca foi refeita "
-                + " e ".join(resultado.relaxamentos)
-                + f". Achei {len(resultado.imoveis)} assim — conte à pessoa, "
-                "em uma frase, o que precisou mudar:"
-            )
-        else:
-            linhas.append(f"Encontrei {len(resultado.imoveis)} imóvel(is):")
-
         imoveis_mostrados.registrar(
             ctx.deps.lead_id, [i.id for i in resultado.imoveis]
         )
+
+        linhas = [f"Encontrei {len(resultado.imoveis)} imóvel(is):"]
         linhas.extend(_formatar_imovel(imovel) for imovel in resultado.imoveis)
+
+        # Depois das fichas, e rotulado: o agente precisa das palavras exatas
+        # do que mudou — sem elas ele inventa que ampliou a busca sem ter
+        # ampliado —, mas lendo isso antes dos imóveis ele abre a mensagem
+        # pelo que faltou.
+        notas = [observacao] if observacao else []
+        if resultado.relaxamentos:
+            notas.append(
+                "com os filtros exatos não havia nada, então a busca foi "
+                "refeita " + " e ".join(resultado.relaxamentos) + "."
+            )
+        if notas:
+            linhas.append(_nota_da_busca(" ".join(notas)))
+
         linhas.append(FECHAMENTO_DA_BUSCA)
         return "\n".join(linhas)
 

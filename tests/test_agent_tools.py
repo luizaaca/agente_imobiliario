@@ -169,8 +169,10 @@ def test_busca_degradada_avisa_o_que_precisou_afrouxar(
     with busca_fora_do_ar():
         retorno = _retorno_da_busca("qualquer apartamento", lead_id, deps)
 
-    assert "Com os filtros exatos não havia nada" in retorno
+    assert "com os filtros exatos não havia nada" in retorno
     assert "olhando a região toda, não só o bairro" in retorno
+    # Depois das fichas e rotulada: lida antes, ela vira a abertura da mensagem.
+    assert retorno.index("Encontrei") < retorno.index("Nota da busca")
 
 
 def test_busca_degradada_sem_nada_lista_o_que_tentou(

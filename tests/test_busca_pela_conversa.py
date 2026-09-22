@@ -169,12 +169,14 @@ def test_id_inventado_nao_vira_ficha(catalogo, lead_id, deps, busca_fake):
     O ID vai para `agendar_reuniao` e de lá para a agenda do corretor: um
     número inventado poria uma visita a um imóvel inexistente na agenda dele.
     """
-    with busca_fake(escolha_da_busca((7, "existe"), (9999, "não existe"))):
+    with busca_fake(escolha_da_busca(
+        (7, "existe de verdade"), (9999, "fantasma inventado pelo modelo"),
+    )):
         retorno = _turno_com_busca("galpão", lead_id, deps)
 
     assert "Galpao Belem Logistico" in retorno
     assert "9999" not in retorno
-    assert "não existe" not in retorno
+    assert "fantasma inventado" not in retorno
 
 
 # --- A observação da busca ---------------------------------------------------
@@ -189,6 +191,28 @@ def test_o_que_foi_afrouxado_chega_a_marina(catalogo, lead_id, deps, busca_fake)
         retorno = _turno_com_busca("cobertura em Pinheiros", lead_id, deps)
 
     assert "ampliei para a zona sul" in retorno
+
+
+def test_a_observacao_vem_depois_das_fichas_e_rotulada(
+    catalogo, lead_id, deps, busca_fake
+):
+    """A ordem em que o modelo lê é a ordem em que ele tende a escrever.
+
+    Aconteceu numa conversa real: a busca anotou "não encontrei a combinação
+    exata de varanda gourmet e metrô", a Marina abriu a mensagem por isso, e os
+    três imóveis logo abaixo tinham churrasqueira E metrô. A pessoa leu uma
+    recusa antes de ler o que servia para ela.
+    """
+    with busca_fake(escolha_da_busca(
+        (7, "serve"), observacao="Não havia a combinação exata.",
+    )):
+        retorno = _turno_com_busca("galpão", lead_id, deps)
+
+    assert retorno.index("Galpao Belem Logistico") < retorno.index(
+        "Não havia a combinação exata"
+    )
+    assert "não para copiar" in retorno
+    assert "Abra pelo que você TEM" in retorno
 
 
 def test_catalogo_sem_nada_ainda_traz_os_numeros(

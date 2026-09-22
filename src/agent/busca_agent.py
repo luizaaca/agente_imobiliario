@@ -38,11 +38,18 @@ from src.services.consulta_catalogo import ConsultaRecusada, executar
 
 logger = logging.getLogger(__name__)
 
-# Teto de idas ao provider por busca. Cada uma é uma consulta ao catálogo mais
-# o raciocínio em cima do que veio; quatro cobrem "tentei, não achei, entendi
-# por quê, tentei de novo". Sem teto, um modelo indeciso ficaria refinando a
+# Teto de idas ao provider por busca. Cada uma é uma ou mais consultas ao
+# catálogo mais o raciocínio em cima do que veio.
+#
+# Dez porque a investigação de verdade é mais longa do que parecia: numa busca
+# real ele tentou o pedido exato, contou o universo, levantou o vocabulário das
+# amenidades daquela fatia, refez com os sinônimos e ainda conferiu o resultado
+# — cinco consultas. Estourar o teto derruba a busca no caminho de degradação,
+# que devolve imóveis piores que uma consulta a mais.
+#
+# O teto continua existindo porque sem ele um modelo indeciso refinaria a
 # consulta enquanto alguém espera resposta no WhatsApp.
-LIMITE_DE_REQUISICOES = 5
+LIMITE_DE_REQUISICOES = 10
 
 
 class ImovelEscolhido(BaseModel):
