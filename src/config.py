@@ -4,6 +4,7 @@ import logging
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -57,12 +58,22 @@ class Settings:
     LLM_MODEL: str = os.getenv("LLM_MODEL", "")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
+    # Modelo do agente de busca. Vazio usa o LLM_MODEL: a decisão de qual
+    # imóvel mostrar é tão sensível quanto a de como falar dele. A variável
+    # existe para poder trocar só a busca por um modelo mais rápido, já que ela
+    # roda dentro do turno e a latência dela se soma à da resposta.
+    LLM_MODEL_BUSCA: str = os.getenv("LLM_MODEL_BUSCA", "")
 
     # Banco de Dados
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "postgresql://sdr:sdr_dev_pass@localhost:5432/agente_sdr",
     )
+    # Credencial da role somente-leitura usada para executar o SQL que o agente
+    # de busca escreve. É o único código do sistema que ninguém revisou antes
+    # de rodar, e este banco guarda leads, telefones e conversas.
+    DB_USER_BUSCA: str = "busca_ro"
+    DB_PASSWORD_BUSCA: str = os.getenv("DB_PASSWORD_BUSCA", "busca_ro_dev_pass")
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -71,10 +82,13 @@ class Settings:
     AUTH_COOKIE_KEY, AUTH_COOKIE_KEY_GERADA = _resolver_chave_do_cookie()
 
     # Limites de custo LLM
-    LLM_DAILY_TOKEN_BUDGET: int = int(os.getenv("LLM_DAILY_TOKEN_BUDGET", "500000"))
-    LLM_MONTHLY_TOKEN_BUDGET: int = int(os.getenv("LLM_MONTHLY_TOKEN_BUDGET", "3000000"))
+    LLM_DAILY_TOKEN_BUDGET: int = int(os.getenv("LLM_DAILY_TOKEN_BUDGET", "1500000"))
+    LLM_MONTHLY_TOKEN_BUDGET: int = int(os.getenv("LLM_MONTHLY_TOKEN_BUDGET", "10000000"))
     LLM_MAX_TURNS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TURNS_PER_CONVERSATION", "30"))
-    LLM_MAX_TOKENS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TOKENS_PER_CONVERSATION", "150000"))
+    # Acompanha o teto de turnos: 30 turnos com busca frequente passam de 400
+    # mil tokens, e um teto menor faria o handover disparar por causa da
+    # busca, e nao por causa do tamanho da conversa.
+    LLM_MAX_TOKENS_PER_CONVERSATION: int = int(os.getenv("LLM_MAX_TOKENS_PER_CONVERSATION", "400000"))
 
     # Observabilidade
     LOGFIRE_TOKEN: str = os.getenv("LOGFIRE_TOKEN", "")
@@ -92,6 +106,22 @@ class Settings:
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
+
+    @property
+    def database_url_busca(self) -> str:
+        """Mesma instância e mesmo banco, com a credencial somente-leitura.
+
+        Derivada da `DATABASE_URL` em vez de configurada à parte: host, porta e
+        nome do banco são os mesmos, e duas URLs completas dariam duas chances
+        de apontar para lugares diferentes — inclusive na suíte de testes, que
+        troca o nome do banco em tempo de execução.
+        """
+        partes = urlsplit(self.database_url_safe)
+        porta = f":{partes.port}" if partes.port else ""
+        credencial = f"{quote(self.DB_USER_BUSCA)}:{quote(self.DB_PASSWORD_BUSCA)}"
+        return urlunsplit(
+            partes._replace(netloc=f"{credencial}@{partes.hostname}{porta}")
+        )
 
 
 settings = Settings()

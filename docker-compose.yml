@@ -20,19 +20,24 @@
 
 x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+  # Role somente-leitura que executa o SQL do agente de busca. Precisa bater
+  # com a senha que a migration usou ao criar a role, no servico `migrate`.
+  DB_PASSWORD_BUSCA: ${DB_PASSWORD_BUSCA:-busca_ro_dev_pass}
   LLM_PROVIDER: ${LLM_PROVIDER:-openai}
   # Sem default: o nome do modelo e especifico do deployment de quem roda.
   # Vazia, a aplicacao lista LLM_MODEL entre as variaveis ausentes.
   LLM_MODEL: ${LLM_MODEL:-}
+  # Vazio usa o LLM_MODEL. Ver .env.example.
+  LLM_MODEL_BUSCA: ${LLM_MODEL_BUSCA:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   # Sem default: um valor fixo aqui seria publico e daria para forjar cookie
   # de admin. Vazia, a aplicacao sorteia uma chave por processo e avisa.
   AUTH_COOKIE_KEY: ${AUTH_COOKIE_KEY:-}
-  LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-500000}
-  LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-3000000}
+  LLM_DAILY_TOKEN_BUDGET: ${LLM_DAILY_TOKEN_BUDGET:-1500000}
+  LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-10000000}
   LLM_MAX_TURNS_PER_CONVERSATION: ${LLM_MAX_TURNS_PER_CONVERSATION:-30}
-  LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-150000}
+  LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-400000}
   LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
 
 services:
@@ -63,6 +68,9 @@ services:
     command: sh -c "alembic upgrade head && python -m scripts.seed_imoveis"
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
+      # A migration cria a role `busca_ro` com esta senha. Se ela divergir da
+      # que `app` usa, a busca sobe e so falha na primeira consulta.
+      DB_PASSWORD_BUSCA: ${DB_PASSWORD_BUSCA:-busca_ro_dev_pass}
     depends_on:
       postgres:
         condition: service_healthy
