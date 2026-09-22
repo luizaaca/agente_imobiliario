@@ -150,7 +150,16 @@ dezenas de imóveis e devolver cinco.
 **O que ele nunca troca:** operação, tipo e finalidade. Quem pede galpão não
 recebe sala comercial. Bairro, preço, metragem e amenidades são negociáveis e
 podem ser afrouxados — desde que a resposta diga, em português, o que precisou
-mudar.
+mudar. E a lista vem com quantos servirem: oito é teto, não meta, e completá-la
+com imóvel de outra finalidade seria devolver o que ninguém pode mostrar. Uma
+recomendação que mistura residencial e comercial é recusada em código, pelo
+validador de saída do agente de busca.
+
+**A palavra da pessoa não é o valor da coluna.** "Casa" abrange `casa`,
+`casa_condominio` e `sobrado`; "apartamento" abrange `apartamento`, `cobertura`,
+`flat`, `loft` e `studio`. Consultar a família inteira com `IN (...)` não é
+trocar o tipo — é entender o pedido. Trocar seria oferecer sala comercial a quem
+quer morar.
 
 ### O que o PostgreSQL oferece a ele
 

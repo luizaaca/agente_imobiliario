@@ -17,7 +17,11 @@ from pydantic_ai.usage import UsageLimitExceeded
 
 from src.agent import busca_agent as busca_mod
 from src.agent import imoveis_mostrados
-from src.agent.busca_agent import LIMITE_DE_REQUISICOES, build_busca_prompt, buscar
+from src.agent.busca_agent import (
+    LIMITE_DE_REQUISICOES,
+    build_busca_prompt,
+    buscar,
+)
 from src.services.catalog_service import PERFIS_INDICADOS, TIPOS, ZONAS
 
 
@@ -368,3 +372,71 @@ def test_o_vocabulario_vem_do_banco_e_nao_de_uma_lista_fixa(catalogo, db):
 def test_catalogo_vazio_nao_inventa_secao_de_amenidades():
     """Cabeçalho sem conteúdo é ruído que o modelo tenta interpretar."""
     assert busca_mod.amenidades_do_catalogo() == ""
+
+
+# --- Completar a lista com o que nao serve ----------------------------------
+
+def test_lista_que_mistura_residencial_e_comercial_volta_para_o_agente(catalogo):
+    """Numa busca real por casa de aluguel, tres de cinco eram comerciais.
+
+    O catalogo tem uma casa so na zona leste para alugar, e o agente completou
+    a cota com predio comercial de R$ 38 mil e andar corporativo. A Marina nao
+    podia mostrar nenhum deles.
+    """
+    modelo = modelo_de_busca(
+        _resposta([(1, "apartamento na Bela Vista"), (6, "sala comercial")]),
+        _resposta([(1, "apartamento na Bela Vista")], "so um serve"),
+    )
+
+    with busca_mod.busca_agent.override(model=modelo):
+        resultado = asyncio.run(buscar("apartamento para morar"))
+
+    assert resultado.ids == [1]
+    assert resultado.observacao == "so um serve"
+
+
+def test_a_recusa_chega_ao_modelo_dizendo_o_que_fazer(catalogo):
+    """Retentativa sem instrucao vira a mesma resposta de novo."""
+    vistas = []
+
+    def responder(messages, info):
+        vistas.append(messages)
+        if len(vistas) == 1:
+            return _resposta([(1, "residencial"), (6, "comercial")])
+        return _resposta([(1, "residencial")])
+
+    with busca_mod.busca_agent.override(model=FunctionModel(responder)):
+        asyncio.run(buscar("apartamento"))
+
+    texto_da_retentativa = chr(10).join(
+        str(parte.content)
+        for mensagem in vistas[-1]
+        for parte in mensagem.parts
+        if hasattr(parte, "content")
+    )
+    assert "residencial e comercial" in texto_da_retentativa
+    assert "devolver menos" in texto_da_retentativa
+
+
+def test_lista_de_uma_finalidade_so_passa_direto(catalogo):
+    """O guard nao pode atrapalhar a busca correta."""
+    modelo = modelo_de_busca(
+        _resposta([(1, "compacto"), (2, "vista livre"), (3, "cobertura")])
+    )
+
+    with busca_mod.busca_agent.override(model=modelo):
+        resultado = asyncio.run(buscar("apartamento na zona sul"))
+
+    assert resultado.ids == [1, 2, 3]
+
+
+def test_um_imovel_so_nunca_e_recusado(catalogo):
+    """Devolver um quando so um serve e exatamente o comportamento pedido."""
+    modelo = modelo_de_busca(
+        _resposta([(6, "a unica sala comercial que serve")], "o catalogo tem uma so")
+    )
+
+    with busca_mod.busca_agent.override(model=modelo):
+        resultado = asyncio.run(buscar("sala comercial para alugar"))
+
+    assert resultado.ids == [6]

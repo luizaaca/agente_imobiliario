@@ -66,7 +66,8 @@ class Recomendacao(BaseModel):
     """O que a busca concluiu."""
 
     escolhidos: Annotated[list[ImovelEscolhido], Field(description=(
-        "De 5 a 8 imóveis, do mais aderente ao menos. Vazio quando o catálogo "
+        "Até 8 imóveis, do mais aderente ao menos — oito é teto, não meta: "
+        "devolva só os que servem mesmo. Vazio quando o catálogo "
         "não tem o que foi pedido — nesse caso a `observacao` explica."))]
     observacao: Annotated[str, Field(max_length=600, description=(
         "O que precisou ser afrouxado em relação ao pedido, ou o que o "
@@ -111,6 +112,47 @@ busca_agent = Agent(
     ),
     retries=2,
 )
+
+
+@busca_agent.output_validator
+def uma_finalidade_por_busca(recomendacao: Recomendacao) -> Recomendacao:
+    """Recusa a lista que mistura imóvel residencial e comercial.
+
+    A cota de imóveis é teto, não meta, e o prompt diz que `operacao`, `tipo`
+    e `finalidade` nunca se trocam. Ainda assim, numa busca real por casa de
+    aluguel na zona leste — onde o catálogo tem uma casa só — o agente
+    completou a lista com prédio comercial de R$ 38 mil e andar corporativo.
+    Três dos cinco devolvidos eram comerciais.
+
+    A checagem não precisa conhecer o pedido: uma recomendação que mistura as
+    duas finalidades se contradiz sozinha, porque nenhuma pessoa procura as
+    duas coisas no mesmo pedido. Estourada a retentativa, quem chama degrada
+    para a busca estruturada, que filtra por finalidade sem LLM nenhum.
+    """
+    with get_db() as db:
+        # Materializado dentro da sessão: ler o atributo depois do `close`
+        # levanta `DetachedInstanceError`.
+        finalidades = {
+            imovel.finalidade
+            for imovel in CatalogService().get_by_ids(
+                [escolhido.imovel_id for escolhido in recomendacao.escolhidos], db
+            )
+        }
+
+    if len(finalidades) > 1:
+        logger.info(
+            "event=busca_com_finalidades_misturadas finalidades=%s acao=retentativa",
+            sorted(finalidades),
+        )
+        raise ModelRetry(
+            "Esta lista mistura imóvel residencial e comercial, e a Marina não "
+            "pode mostrar os dois para o mesmo pedido. Devolva só os da "
+            "finalidade que responde ao pedido — ainda que sobre um único "
+            "imóvel — e diga na `observacao` quantos o catálogo tem de "
+            "verdade. Completar a lista com o que não serve é pior do que "
+            "devolver menos: são imóveis que ninguém vai poder ver."
+        )
+    return recomendacao
 
 
 @busca_agent.instructions

@@ -51,6 +51,12 @@ quem busca, tomadas com o catálogo à vista.
   284 e 515 caracteres; qualquer corte cabível deixaria de fora a parte que
   vende;
 - uma linha de justificativa por imóvel, escrita pelo agente de busca;
+- no máximo oito imóveis, e oito é teto e não meta: a lista traz quantos
+  realmente servem, ainda que seja um só. Completar a lista com imóvel de
+  outra `operacao`, `tipo` ou `finalidade` seria pior que devolvê-la curta —
+  são imóveis que o agente conversacional não pode mostrar. Uma recomendação
+  que mistura residencial e comercial é recusada em código, pelo validador de
+  saída do agente de busca, e volta a ele como retentativa;
 - quando o pedido exato não tinha resposta, a frase em português do que
   precisou mudar;
 - quando não há nada, o diagnóstico do catálogo (ver abaixo).
