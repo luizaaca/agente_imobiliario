@@ -446,3 +446,86 @@ def test_o_banco_guarda_o_retorno_inteiro(
     ).one()
 
     assert len(linha.content) > LIMITE_DO_RETORNO_DE_TOOL
+
+
+# --- Reler o que já foi apresentado ------------------------------------------
+
+
+def _turno_com_detalhe(args, lead_id, deps) -> str:
+    """Turno em que a Marina chama `detalhar_imoveis` e devolve o que veio."""
+    capturado = {}
+
+    def modelo(messages, info):
+        if not capturado:
+            capturado["chamou"] = True
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="detalhar_imoveis", args=args
+            )])
+        capturado["retorno"] = str(messages[-1].parts[0].content)
+        return ModelResponse(parts=[TextPart(content="ok")])
+
+    with agent_mod.sdr_agent.override(model=FunctionModel(modelo)):
+        asyncio.run(process_message(lead_id, "quantas vagas?", "teste", deps()))
+    return capturado["retorno"]
+
+
+def test_os_ids_apresentados_ficam_gravados(catalogo, lead_id, deps, busca_fake, db):
+    """O histórico abrevia em 900 caracteres e derruba metade dos IDs.
+
+    Numa conversa real sobraram três de seis, e o que caiu incluía o imóvel
+    sobre o qual a pessoa perguntou em seguida.
+    """
+    with busca_fake(escolha_da_busca((1, "a"), (2, "b"), (3, "c"))):
+        _turno_com_busca("apartamentos à venda", lead_id, deps)
+
+    assert LeadService().imoveis_apresentados(lead_id, db) == [1, 2, 3]
+
+
+def test_detalhar_sem_ids_devolve_o_que_foi_apresentado(
+    catalogo, lead_id, deps, busca_fake
+):
+    """É o caso comum: a Marina não tem os IDs, e não precisa ter."""
+    with busca_fake(escolha_da_busca((7, "galpão"), (6, "sala"))):
+        _turno_com_busca("algo comercial", lead_id, deps)
+
+    retorno = _turno_com_detalhe({}, lead_id, deps)
+
+    assert "Galpao Belem Logistico" in retorno
+    assert "Sala Comercial Paulista" in retorno
+    assert "4 vagas" in retorno  # dado que não estava na mensagem ao lead
+
+
+def test_detalhar_com_ids_traz_so_aqueles(catalogo, lead_id, deps, busca_fake):
+    with busca_fake(escolha_da_busca((7, "galpão"), (6, "sala"))):
+        _turno_com_busca("algo comercial", lead_id, deps)
+
+    retorno = _turno_com_detalhe({"imovel_ids": [6]}, lead_id, deps)
+
+    assert "Sala Comercial Paulista" in retorno
+    assert "Galpao Belem Logistico" not in retorno
+
+
+def test_detalhar_sem_busca_anterior_manda_buscar(catalogo, lead_id, deps):
+    """Sem imóvel apresentado, a saída é a busca — e a tool diz isso."""
+    retorno = _turno_com_detalhe({}, lead_id, deps)
+
+    assert "ainda não apresentou" in retorno
+    assert "buscar_imoveis" in retorno
+
+
+def test_detalhar_avisa_quando_um_id_nao_existe(catalogo, lead_id, deps):
+    """ID inventado não pode virar ficha, nem sumir em silêncio."""
+    retorno = _turno_com_detalhe({"imovel_ids": [7, 9999]}, lead_id, deps)
+
+    assert "Galpao Belem Logistico" in retorno
+    assert "Não fale deles com a pessoa" in retorno
+
+
+def test_a_degradacao_tambem_grava_o_que_apresentou(
+    catalogo, lead_id, deps, busca_fora_do_ar, db
+):
+    """O caminho sem LLM mostra imóveis como qualquer outro."""
+    with busca_fora_do_ar():
+        _turno_com_busca("qualquer coisa", lead_id, deps)
+
+    assert LeadService().imoveis_apresentados(lead_id, db) != []

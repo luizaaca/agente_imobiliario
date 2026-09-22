@@ -54,6 +54,7 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | Tool | Responsabilidade |
 |---|---|
 | `buscar_imoveis` | Entrega o pedido, em texto livre, ao agente de busca, e devolve os imóveis escolhidos |
+| `detalhar_imoveis` | Relê do catálogo a ficha completa do que já foi apresentado |
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
@@ -149,6 +150,26 @@ camada de código.
 A divisão é deliberada: o julgamento é do agente, os números são do PostgreSQL.
 O agente SDR promete à pessoa que nunca inventa preço nem disponibilidade, e
 essa promessa não sobrevive a números escritos por um modelo.
+
+### O que já foi mostrado
+
+Os IDs apresentados a cada lead são gravados no `metadata_json` da mensagem da
+ferramenta, e `detalhar_imoveis` os relê do catálogo quando a pessoa pergunta
+mais sobre um imóvel que já está na conversa.
+
+A gravação existe porque o histórico não basta. O retorno da busca é abreviado
+em 900 caracteres ao ser reidratado, e medido numa conversa real isso derrubou
+**metade dos IDs — três de seis**, incluindo o do imóvel sobre o qual a pessoa
+perguntou em seguida. Sem registro durável, responder "quantas vagas tem o de
+66 m²" custava uma busca inteira: dezenas de milhares de tokens, meio minuto, e
+imóveis diferentes dos que ela tinha visto.
+
+É o mesmo registro que sustenta o agendamento. `agendar_reuniao` exige
+`imovel_id`, e um ID perdido no truncamento deixaria a visita sem imóvel.
+
+No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
+separados (ADR 0004), e nada aqui pode depender de qual deles atendeu o turno
+anterior.
 
 ### Quando o provider falha
 

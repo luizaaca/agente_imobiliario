@@ -56,9 +56,10 @@ modelo.
 ### Efeitos colaterais
 - uma ou mais chamadas ao provider, registradas em `llm_usage` com
   `operation="busca"`;
-- os IDs apresentados entram no cache da conversa (ver abaixo);
-- o rastro das consultas do agente de busca é gravado no `metadata_json` da
-  mensagem da tool, para auditoria.
+- os IDs apresentados são gravados no `metadata_json` da mensagem da tool, de
+  onde `detalhar_imoveis` os relê, e entram também no cache da conversa (ver abaixo);
+- o rastro das consultas do agente de busca vai para o mesmo `metadata_json`,
+  para auditoria.
 
 Nenhuma escrita no catálogo. A role usada pelo agente de busca não teria
 permissão para isso.
@@ -119,6 +120,53 @@ atendimento.
 Isso vale para o que é oferecido como novidade. Perguntar sobre um imóvel já
 mostrado — *"aquele da Mooca, quanto era mesmo?"* — é outra coisa, e continua
 funcionando.
+
+---
+
+## 2a. `detalhar_imoveis`
+
+### Objetivo
+Reler do catálogo a ficha completa dos imóveis já apresentados nesta conversa.
+
+### Input esperado
+- `imovel_ids` — opcional. Vazio devolve os últimos apresentados a este lead; com IDs, devolve apenas aqueles.
+
+O caso comum é chamar **sem** IDs. O agente conversacional frequentemente não os tem: o retorno da busca é abreviado em 900 caracteres ao voltar ao histórico, e numa conversa real isso derrubou três dos seis IDs mostrados.
+
+### Output esperado
+A mesma ficha de `buscar_imoveis` — preço, metragem, cômodos, vagas e, no aluguel, o custo total do mês. Sem justificativa, porque não houve escolha a justificar.
+
+Quando nenhum imóvel foi apresentado ainda, a resposta manda usar `buscar_imoveis`. Quando um ID pedido não existe ou está indisponível, o retorno diz quais falharam e proíbe falar deles com a pessoa.
+
+### Efeitos colaterais
+Nenhum. Uma leitura indexada por chave primária, sem LLM.
+
+### Regras
+- é esta a ferramenta para qualquer pergunta sobre imóvel já mostrado: preço, vaga, metragem, suíte, condomínio;
+- `buscar_imoveis` só quando o que a pessoa procura mudou;
+- no máximo dez fichas quando chamada sem IDs — a lista inteira de uma conversa longa seriam milhares de tokens para responder "quantas vagas tem".
+
+### Erros tratáveis
+- nenhum imóvel apresentado ainda;
+- ID inexistente ou indisponível;
+- falha de banco.
+
+### Por que ela existe
+Sem ela, uma pergunta sobre a lista recém-apresentada só se respondia buscando
+tudo de novo. Medido numa conversa real: *"o que os condomínios oferecem,
+piscina, vagas?"* disparou uma busca completa de **25.523 tokens de entrada e
+29 segundos**, que ainda trouxe imóveis diferentes dos que a pessoa tinha visto.
+
+É também por aqui que o `imovel_id` de `agendar_reuniao` é recuperado quando o
+truncamento do histórico o levou embora.
+
+### De onde vêm os IDs
+Do `metadata_json` das mensagens de ferramenta, onde cada busca grava o que
+apresentou — inclusive a busca do caminho de degradação, que não usa LLM.
+
+No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
+separados (ADR 0004), e o registro precisa sobreviver a restart e valer para os
+dois.
 
 ---
 

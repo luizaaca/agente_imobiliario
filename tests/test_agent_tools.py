@@ -70,6 +70,7 @@ def test_todas_as_tools_estao_expostas(llm_fake, lead_id, deps):
         "buscar_imoveis",
         "cancelar_agendamento",
         "confirmar_agendamento",
+        "detalhar_imoveis",
         "encerrar_atendimento",
         "listar_agendamentos",
         "registrar_qualificacao",

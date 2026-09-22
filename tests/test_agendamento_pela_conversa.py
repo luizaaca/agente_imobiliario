@@ -349,7 +349,9 @@ def test_a_recusa_diz_as_duas_saidas(catalogo, lead_id, deps, db):
         {"tipo": "visita", "data_hora": "2027-03-10 15:00"},
         lead_id, deps, db)
 
-    assert "buscar_imoveis" in retorno
+    # `detalhar_imoveis` e nao `buscar_imoveis`: o ID que falta e de um imovel
+    # ja apresentado, e buscar de novo custa dezenas de milhares de tokens.
+    assert "detalhar_imoveis" in retorno
     assert "reuniao" in retorno
 
 

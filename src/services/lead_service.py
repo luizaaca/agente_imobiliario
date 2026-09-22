@@ -507,6 +507,34 @@ class LeadService:
     # As de `tool` entram de carona na janela que estas delimitam.
     PAPEIS_DA_CONVERSA = ("user", "assistant")
 
+    def imoveis_apresentados(self, lead_id: int, db: Session) -> list[int]:
+        """IDs dos imóveis já mostrados a este lead, do mais antigo ao recente.
+
+        Lidos do `metadata_json` das mensagens de ferramenta, e não do texto
+        delas: o retorno da busca é abreviado em 900 caracteres ao voltar ao
+        histórico, e numa conversa real isso derrubou metade dos IDs — três de
+        seis. O que a pessoa viu na tela precisa de um registro que não dependa
+        de caber numa janela de contexto.
+
+        No banco, e não em memória, porque disto dependem duas coisas que não
+        podem sumir num restart: responder sobre um imóvel já apresentado e
+        marcar visita nele. Streamlit e bot rodam em processos separados
+        (ADR 0004), e memória de processo não atravessa essa fronteira.
+        """
+        linhas = (
+            db.query(Mensagem.metadata_json)
+            .filter(Mensagem.lead_id == lead_id, Mensagem.role == "tool")
+            .order_by(Mensagem.id)
+            .all()
+        )
+        # Dict em vez de set: preserva a ordem de apresentação, que é o que faz
+        # "o último que você me mostrou" significar alguma coisa.
+        vistos: dict[int, None] = {}
+        for (meta,) in linhas:
+            for imovel_id in ((meta or {}).get("busca") or {}).get("imovel_ids") or []:
+                vistos[imovel_id] = None
+        return list(vistos)
+
     def get_history(
         self, lead_id: int, limit: int, db: Session
     ) -> list[Mensagem]:

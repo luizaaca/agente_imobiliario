@@ -234,7 +234,6 @@ async def buscar_imoveis(
     _registrar_custo_da_busca(
         ctx, comeco, tokens=(recomendacao.tokens_in, recomendacao.tokens_out)
     )
-    _guardar_rastro(ctx, recomendacao)
 
     with get_db() as db:
         # Os números saem do banco, sempre: o agente de busca devolve IDs e
@@ -255,10 +254,69 @@ async def buscar_imoveis(
             # vazia, e o que ela achar vem com a observação junto.
             return _busca_sem_agente(ctx, pedido, recomendacao.observacao)
 
-        imoveis_mostrados.registrar(ctx.deps.lead_id, [i.id for i in imoveis])
+        apresentados = [i.id for i in imoveis]
+        imoveis_mostrados.registrar(ctx.deps.lead_id, apresentados)
+        _guardar_rastro(ctx, apresentados, recomendacao)
         # A formatação fica dentro da sessão: os objetos são do ORM e acessar
         # um atributo depois do close levanta DetachedInstanceError.
         return _texto_da_recomendacao(imoveis, recomendacao)
+
+
+# Quantas fichas `detalhar_imoveis` devolve quando não recebe IDs. Dez cobre
+# as últimas buscas da conversa com folga; a lista inteira de uma conversa
+# longa seriam alguns milhares de tokens para responder "quantas vagas tem".
+TETO_DO_DETALHAMENTO = 10
+
+
+@sdr_agent.tool
+@_instrumentada
+async def detalhar_imoveis(
+    ctx: RunContext[SDRDependencies],
+    imovel_ids: Annotated[Optional[list[int]], Field(description=(
+        "IDs específicos, quando você os tem. Deixe vazio para receber os "
+        "últimos que você apresentou a esta pessoa — é o caso comum, porque o "
+        "histórico da conversa não guarda todos."))] = None,
+) -> str:
+    """Reler a ficha completa de imóveis que você já apresentou.
+
+    Use para qualquer pergunta sobre um imóvel que já está na conversa: preço,
+    metragem, quartos, suítes, vagas, condomínio, bairro. A resposta vem do
+    catálogo na hora, sem custo e sem demora.
+
+    É esta a ferramenta, e não `buscar_imoveis`, quando o que ela quer é saber
+    mais sobre o que você mostrou. Buscar de novo custa dezenas de milhares de
+    tokens e traz imóveis diferentes, que não é o que ela perguntou.
+
+    Também é por aqui que você recupera o `imovel_id` para `agendar_reuniao`.
+    """
+    with get_db() as db:
+        pedidos = imovel_ids or ctx.deps.lead_service.imoveis_apresentados(
+            ctx.deps.lead_id, db
+        )[-TETO_DO_DETALHAMENTO:]
+
+        if not pedidos:
+            return (
+                "Você ainda não apresentou imóvel nenhum a esta pessoa. Use "
+                "`buscar_imoveis` descrevendo o que ela procura."
+            )
+
+        imoveis = ctx.deps.catalog_service.get_by_ids(pedidos, db)
+        if not imoveis:
+            return (
+                f"Nenhum dos IDs {pedidos} existe no catálogo ou está "
+                f"disponível. Chame de novo sem informar IDs para receber o "
+                f"que você de fato apresentou."
+            )
+
+        faltaram = [i for i in pedidos if i not in {im.id for im in imoveis}]
+        linhas = [f"{len(imoveis)} imóvel(is) que você já apresentou:"]
+        linhas.extend(_formatar_imovel(imovel) for imovel in imoveis)
+        if faltaram:
+            linhas.append(
+                f"\nSem correspondência no catálogo: {faltaram}. Não fale "
+                f"deles com a pessoa."
+            )
+        return "\n".join(linhas)
 
 
 def _texto_da_recomendacao(imoveis, recomendacao) -> str:
@@ -333,22 +391,35 @@ def _registrar_custo_da_busca(
         )
 
 
-def _guardar_rastro(ctx: RunContext[SDRDependencies], recomendacao) -> None:
-    """Anota as consultas da busca para irem ao `metadata_json` da mensagem.
+def _guardar_rastro(
+    ctx: RunContext[SDRDependencies],
+    imovel_ids: list[int],
+    recomendacao=None,
+) -> None:
+    """Anota no `metadata_json` da mensagem o que esta busca apresentou.
 
-    As consultas intermediárias não entram no histórico da conversa — é o que
-    torna a delegação barata —, então este é o único lugar onde fica registrado
-    como o agente de busca chegou aos imóveis que escolheu.
+    Duas coisas, com donos diferentes.
 
-    Amarradas pelo `tool_call_id` porque um turno pode ter mais de uma busca, e
+    `imovel_ids` é o registro durável do que a pessoa viu. O retorno da busca é
+    abreviado em 900 caracteres ao voltar ao histórico, e medido numa conversa
+    real isso derrubou metade dos IDs — três de seis. Sem este registro, uma
+    pergunta sobre o terceiro imóvel da lista, ou um pedido de visita a ele,
+    só se resolveria buscando tudo de novo. É daqui que `detalhar_imoveis` lê.
+
+    `consultas` é o rastro de como o agente de busca chegou lá. Elas não viram
+    mensagem — é o que torna a delegação barata —, então este é o único lugar
+    onde ficam. Ausentes no caminho de degradação, que não usa LLM.
+
+    Tudo amarrado pelo `tool_call_id`: um turno pode ter mais de uma busca, e
     `_registrar_ferramentas_do_turno` precisa saber qual rastro é de qual
     chamada.
     """
-    ctx.deps.rastros_de_busca[ctx.tool_call_id] = {
-        "consultas": recomendacao.consultas,
-        "tokens_in": recomendacao.tokens_in,
-        "tokens_out": recomendacao.tokens_out,
-    }
+    rastro: dict = {"imovel_ids": imovel_ids}
+    if recomendacao is not None:
+        rastro["consultas"] = recomendacao.consultas
+        rastro["tokens_in"] = recomendacao.tokens_in
+        rastro["tokens_out"] = recomendacao.tokens_out
+    ctx.deps.rastros_de_busca[ctx.tool_call_id] = rastro
 
 
 def _busca_sem_agente(
@@ -384,9 +455,9 @@ def _busca_sem_agente(
         if not resultado.imoveis:
             return "\n".join(filter(None, [observacao, _nada_encontrado(resultado)]))
 
-        imoveis_mostrados.registrar(
-            ctx.deps.lead_id, [i.id for i in resultado.imoveis]
-        )
+        apresentados = [i.id for i in resultado.imoveis]
+        imoveis_mostrados.registrar(ctx.deps.lead_id, apresentados)
+        _guardar_rastro(ctx, apresentados)
 
         linhas = [f"Encontrei {len(resultado.imoveis)} imóvel(is):"]
         linhas.extend(_formatar_imovel(imovel) for imovel in resultado.imoveis)
@@ -629,7 +700,8 @@ async def agendar_reuniao(
             "Uma visita é sempre a um imóvel, e este agendamento veio sem "
             "`imovel_id` — o corretor receberia um horário sem saber aonde ir. "
             "Chame de novo com o ID do imóvel que a pessoa escolheu; se você "
-            "não o tiver, use `buscar_imoveis` para recuperá-lo. Se o encontro "
+            "não o tiver, use `detalhar_imoveis` para recuperá-lo — ele "
+            "devolve na hora tudo que você já apresentou. Se o encontro "
             "não for num imóvel do catálogo, use tipo='reuniao'."
         )
 
