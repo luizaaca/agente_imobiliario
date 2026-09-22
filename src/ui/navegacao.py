@@ -43,6 +43,30 @@ def abrir_pagina_da_ficha() -> None:
     st.switch_page(_paginas["ficha"])
 
 
+# Página que o rerun anterior desenhou, e se este rerun é a chegada a uma
+# página nova. O Streamlit não tem evento de entrada em página: o script
+# inteiro roda de novo a cada clique, e de dentro da tela um rerun por botão é
+# indistinguível de uma chegada pelo menu.
+CHAVE_PAGINA_ANTERIOR = "pagina_anterior"
+CHAVE_ENTROU_AGORA = "entrou_na_pagina_agora"
+
+
+def marcar_pagina_em_execucao(pagina: Any) -> None:
+    """Registra qual página este rerun vai desenhar.
+
+    Chamada em `app.py`, antes de `navegacao.run()`: é o único ponto que sabe
+    qual página o `st.navigation` escolheu.
+    """
+    anterior = st.session_state.get(CHAVE_PAGINA_ANTERIOR)
+    st.session_state[CHAVE_PAGINA_ANTERIOR] = pagina.url_path
+    st.session_state[CHAVE_ENTROU_AGORA] = anterior != pagina.url_path
+
+
+def entrou_na_pagina_agora() -> bool:
+    """Verdadeiro quando a navegação acabou de chegar à página deste rerun."""
+    return bool(st.session_state.get(CHAVE_ENTROU_AGORA))
+
+
 # Marca que o balão da chave de cookie já foi mostrado nesta sessão.
 CHAVE_AVISO_COOKIE = "aviso_cookie_visto"
 

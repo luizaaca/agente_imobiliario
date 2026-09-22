@@ -44,6 +44,23 @@ _RAIL_CSS = f"""
   border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
 }}
 
+/* O mesmo risco tenue, agora cortando o menu antes da ajuda e antes do
+   simulador: o trabalho do dia em cima, o apoio embaixo.
+
+   E CSS, e nao secao nomeada do `st.navigation`, porque uma chave nomeada
+   desenha cabecalho com rotulo e seta de recolher — vira um grupo que se
+   fecha, nao um risco.
+
+   Os itens sao escolhidos pelo `href`, e nao pela posicao: o simulador so
+   existe no menu do admin, entao a ajuda muda de indice conforme o papel de
+   quem entrou. */
+[data-testid="stSidebarNavItems"] > li:has(a[href$="/ajuda"]),
+[data-testid="stSidebarNavItems"] > li:has(a[href$="/chat"]) {{
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  margin-top: 8px;
+  padding-top: 8px;
+}}
+
 section[data-testid="stSidebar"][aria-expanded="false"] {{
   width: {_RAIL}px !important;
   min-width: {_RAIL}px !important;

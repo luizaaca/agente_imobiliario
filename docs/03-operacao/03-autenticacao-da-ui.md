@@ -117,7 +117,10 @@ if authentication_status is None:
 # Páginas de verdade, não abas: cada uma tem URL própria e monta só o seu
 # conteúdo. O menu depende do papel (seção 5).
 navegacao = st.navigation(
-    menu_do_papel(pagina_dashboard, pagina_leads, pagina_chat, papeis_da_sessao())
+    menu_do_papel(
+        pagina_dashboard, pagina_leads, pagina_chat, pagina_ajuda,
+        papeis_da_sessao(), pagina_ficha,
+    )
 )
 navegacao.run()
 ```
@@ -140,8 +143,8 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 |---|:---:|:---:|
 | **Dashboard** — KPIs, distribuição da carteira | sim | sim |
 | **Leads** — ficha, canal, follow-up, conversa, exclusão | sim | sim |
-| **Chat Simulador** | sim | não |
 | **Ajuda** | sim | sim |
+| **Simulador de Chat** | sim | não |
 | Painel **Consumo de LLM**, dentro do dashboard | sim | não |
 | Alerta de orçamento de LLM estourado | sim | sim |
 
@@ -172,7 +175,7 @@ Serve para **organizar a tela**, e não para proteger dado de quem já entrou. U
 | **Dashboard** | Renderizado apenas após autenticação bem-sucedida |
 | **Leads** e **Ficha do lead** | Renderizados apenas após autenticação bem-sucedida |
 | **Ajuda** | Renderizado apenas após autenticação bem-sucedida |
-| **Chat Simulador** | Após autenticação, e apenas para o papel `admin` |
+| **Simulador de Chat** | Após autenticação, e apenas para o papel `admin` |
 | **Bot Telegram** | Independente — identidade via `chat_id` |
 | **Banco de dados** | Acesso interno — não exposto via HTTP |
 

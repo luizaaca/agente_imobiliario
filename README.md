@@ -64,7 +64,7 @@ docker compose --profile telegram up --build
 
 Toda a aplicação está atrás de login. O repositório já traz usuários prontos em `config/credentials.yaml` — só os hashes bcrypt, nunca a senha em texto:
 
-| Usuário | Senha | Papel (`roles`) | Vê o Chat Simulador e o custo de LLM? |
+| Usuário | Senha | Papel (`roles`) | Vê o Simulador de Chat e o custo de LLM? |
 |---|---|---|---|
 | `admin` | `admin123` | `admin` | sim |
 | `corretor1` | `corretor123` | `corretor` | não |

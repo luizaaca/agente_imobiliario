@@ -11,6 +11,7 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+from src.ui.navegacao import entrou_na_pagina_agora
 from src.ui.texto import markdown_seguro
 
 CANAL = "streamlit"
@@ -51,19 +52,6 @@ def nova_conversa() -> None:
     """
     st.session_state.lead_id = None
     st.session_state.messages = []
-
-
-def _retomar_ultima_conversa() -> None:
-    """Reabre a conversa mais recente deste usuario (ex.: apos um refresh)."""
-    with get_db() as db:
-        identidade = LeadService().get_latest_identity_by_prefix(
-            CANAL, _prefixo_do_usuario(), db
-        )
-        if identidade is None:
-            nova_conversa()
-            return
-        st.session_state.lead_id = identidade.lead_id
-        st.session_state.messages = _historico_visivel(identidade.lead_id, db)
 
 
 def _garantir_lead() -> int:
@@ -133,7 +121,7 @@ def _painel_da_conversa() -> None:
     ids = [lead_id for lead_id, _ in opcoes]
     rotulos = dict(opcoes)
 
-    col_sel, col_nova, col_info = st.columns([5, 2, 4], vertical_alignment="bottom")
+    col_sel, col_nova, col_info = st.columns([5, 1, 5], vertical_alignment="bottom")
 
     with col_sel:
         # A chave carrega o lead aberto de proposito. Um selectbox mantem o
@@ -150,8 +138,12 @@ def _painel_da_conversa() -> None:
         )
 
     with col_nova:
+        # Só o ícone, como o "novo lead" da lista: o rótulo escrito ocupava
+        # mais largura que o seletor de conversa ao lado, que é o controle
+        # que de fato se usa aqui.
         nova = st.button(
-            "Nova conversa", icon=":material/add:", width="stretch"
+            "", icon=":material/add:", key="nova_conversa",
+            help="Começar uma conversa nova",
         )
 
     with col_info:
@@ -198,8 +190,12 @@ def render_chat():
     st.caption("Simule uma conversa como lead imobiliário")
     faltando = _aviso_de_configuracao()
 
-    if "lead_id" not in st.session_state:
-        _retomar_ultima_conversa()
+    # Entrar pelo menu abre uma conversa em branco. O simulador existe para
+    # experimentar um atendimento do começo, e cair no meio de uma conversa
+    # antiga obrigava a limpar a tela antes de poder testar qualquer coisa.
+    # As conversas anteriores continuam todas no seletor do painel.
+    if entrou_na_pagina_agora() or "lead_id" not in st.session_state:
+        nova_conversa()
 
     _painel_da_conversa()
 

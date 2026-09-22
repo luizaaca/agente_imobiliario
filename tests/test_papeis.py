@@ -29,7 +29,7 @@ def _secoes(papeis, ficha=None):
 
 
 def test_admin_ve_o_simulador():
-    assert _menu([PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT, AJUDA]
+    assert _menu([PAPEL_ADMIN]) == [DASHBOARD, LEADS, AJUDA, CHAT]
 
 
 def test_corretor_nao_ve_o_simulador():
@@ -51,12 +51,24 @@ def test_dashboard_e_sempre_a_primeira_pagina():
 
 
 def test_papel_extra_junto_do_admin_continua_valendo():
-    assert _menu([PAPEL_CORRETOR, PAPEL_ADMIN]) == [DASHBOARD, LEADS, CHAT, AJUDA]
+    assert _menu([PAPEL_CORRETOR, PAPEL_ADMIN]) == [DASHBOARD, LEADS, AJUDA, CHAT]
 
 
 def test_ajuda_aparece_para_todo_papel():
     """Quem mais precisa dela é justamente quem tem menos acesso."""
     for papeis in ([PAPEL_ADMIN], [PAPEL_CORRETOR], None):
+        assert AJUDA in _menu(papeis)
+
+
+def test_simulador_fica_depois_da_ajuda():
+    """A ordem do menu: trabalho, ajuda, e o simulador por último."""
+    menu = _menu([PAPEL_ADMIN])
+    assert menu[-1] == CHAT
+    assert menu[-2] == AJUDA
+
+
+def test_sem_o_simulador_a_ajuda_e_a_ultima():
+    for papeis in ([PAPEL_CORRETOR], None):
         assert _menu(papeis)[-1] == AJUDA
 
 
@@ -70,23 +82,20 @@ def test_credenciais_versionadas_declaram_os_papeis():
     assert usuarios["corretor1"]["roles"] == [PAPEL_CORRETOR]
 
 
-def test_ficha_vai_junto_mas_fora_dos_links_de_trabalho():
+def test_ficha_vai_junto_mas_no_fim():
     """Ela precisa estar registrada para ter URL, e `visibility="hidden"` em
     `app.py` é o que a mantém fora do menu."""
-    secoes = _secoes([PAPEL_ADMIN], FICHA)
-
-    assert FICHA not in secoes[""]
-    assert FICHA in secoes["Apoio"]
+    assert _secoes([PAPEL_ADMIN], FICHA)[""][-1] == FICHA
 
 
 def test_sem_ficha_o_menu_nao_ganha_item_vazio():
     assert FICHA not in _menu([PAPEL_ADMIN])
 
 
-def test_ajuda_fica_em_secao_propria():
-    """É o que desenha o separador antes dela."""
-    secoes = _secoes([PAPEL_CORRETOR])
+def test_menu_tem_uma_secao_so():
+    """Chave nomeada no `st.navigation` vira cabeçalho recolhível, não risco.
 
-    assert AJUDA not in secoes[""]
-    assert secoes["Apoio"][0] == AJUDA
-    assert list(secoes) == ["", "Apoio"]
+    Os separadores finos antes da ajuda e do simulador são CSS, em
+    `ui.estilo`, escolhidos pelo `href` de cada link.
+    """
+    assert list(_secoes([PAPEL_ADMIN], FICHA)) == [""]

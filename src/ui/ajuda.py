@@ -46,7 +46,7 @@ def _estado_da_aplicacao() -> None:
         st.caption(
             "Vê todos os menus."
             if e_admin(papeis)
-            else "O Chat Simulador e o custo de LLM são exclusivos do admin."
+            else "O Simulador de Chat e o custo de LLM são exclusivos do admin."
         )
 
     with col_sessao:
@@ -67,8 +67,8 @@ Cada menu tem um assunto:
 |---|---|
 | **Dashboard** | Leitura. Como está a carteira: volume, distribuição pelo funil, consumo de LLM. A tabela do fim é ordenável, e clicar numa linha abre a ficha daquele lead. |
 | **Leads** | Operação. Tudo que se faz com um lead: ficha, canal, agendamentos, follow-up, conversa, exclusão. |
-| **Chat Simulador** | Teste. Conversar com o agente fingindo ser um lead, para ver o comportamento dele sem depender do Telegram. Só o `admin` vê este menu. |
 | **Ajuda** | Esta página. |
+| **Simulador de Chat** | Teste. Conversar com o agente fingindo ser um lead, para ver o comportamento dele sem depender do Telegram. Só o `admin` vê este menu, e entrar nele sempre abre uma conversa nova. |
 
 A divisão é de assunto, não de permissão: o dashboard responde *como está a
 carteira* e o menu de leads responde *o que eu faço com este lead*.
@@ -112,7 +112,7 @@ README.
 """,
     ),
     (
-        "Sumiu o menu Chat Simulador. Por quê?",
+        "Sumiu o menu Simulador de Chat. Por quê?",
         """
 Ele é exclusivo do papel `admin`. É uma ferramenta de teste: conversa com o
 agente fingindo ser um lead e cria leads de mentira na base, então na tela de

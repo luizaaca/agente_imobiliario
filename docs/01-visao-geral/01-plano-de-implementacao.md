@@ -141,7 +141,7 @@ A solução opera em **dois processos independentes** que compartilham a mesma c
 ```mermaid
 flowchart LR
     subgraph Proc1 ["Processo 1: streamlit run app.py"]
-        ChatTab["💬 Chat Simulador"]
+        ChatTab["💬 Simulador de Chat"]
         DashTab["📊 Dashboard do Corretor"]
     end
 
@@ -339,7 +339,7 @@ A interface se divide por assunto, e o papel do usuário decide quais menus apar
 |---|---|---|
 | **Dashboard** | leitura: KPIs, distribuição da carteira, custo de LLM | todos (o painel de custo, só o admin) |
 | **Leads** | operação: ficha, canal, follow-up, conversa, exclusão | todos |
-| **Chat Simulador** | testar o agente como se fosse um lead | só o admin |
+| **Simulador de Chat** | testar o agente como se fosse um lead | só o admin |
 | **Ajuda** | o que a aplicação faz, como usar e por que ela se comporta assim | todos |
 
 O menu vem em duas seções: os links de trabalho e, depois de um separador, a **Ajuda**.

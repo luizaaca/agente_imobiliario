@@ -18,6 +18,7 @@ from src.ui.leads import render_ficha, render_leads
 from src.ui.login import tela_de_login
 from src.ui.navegacao import (
     aviso_de_chave_de_cookie_gerada,
+    marcar_pagina_em_execucao,
     menu_do_usuario,
     registrar_paginas,
 )
@@ -84,7 +85,7 @@ pagina_ficha = st.Page(
 )
 pagina_chat = st.Page(
     render_chat,
-    title="Chat Simulador",
+    title="Simulador de Chat",
     icon=":material/forum:",
     url_path="chat",
 )
@@ -113,4 +114,7 @@ navegacao = st.navigation(
 aplicar_estilo()
 menu_do_usuario(name, authenticator)
 aviso_de_chave_de_cookie_gerada()
+# Antes de desenhar: e o que permite a uma tela saber que a navegacao acabou
+# de chegar nela, e nao que ela rodou de novo por um clique seu.
+marcar_pagina_em_execucao(navegacao)
 navegacao.run()

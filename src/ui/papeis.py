@@ -43,29 +43,28 @@ def menu_do_papel(
     papeis: Optional[Sequence[str]],
     ficha: Any = None,
 ) -> dict[str, list[Any]]:
-    """Paginas entregues ao `st.navigation`, agrupadas por secao do menu.
+    """Paginas entregues ao `st.navigation`, na ordem em que aparecem no menu.
 
-    O simulador de chat so aparece para o admin: e ferramenta de teste, nao de
-    atendimento. A ajuda fica por ultimo e aparece para todos — quem mais
-    precisa dela e justamente quem tem menos acesso.
+    A ordem e: o trabalho do dia primeiro, a ajuda depois e o simulador por
+    ultimo. O simulador so aparece para o admin — e ferramenta de teste, nao
+    de atendimento —, e a ajuda aparece para todos, porque quem mais precisa
+    dela e justamente quem tem menos acesso.
 
     A primeira da lista e a que responde por `default=True`, entao todo papel
     tem o dashboard como pagina inicial.
 
     A ficha do lead vai junto, no fim, mas e criada com
     `visibility="hidden"`: precisa estar registrada para ter URL e receber
-    `st.switch_page`, e nao deve virar um item de menu.
-    """
-    trabalho = [dashboard, leads]
-    if e_admin(papeis):
-        trabalho.append(chat)
+    `st.switch_page`, e nao vira item de menu.
 
-    # Dicionario, e nao lista: `st.navigation` separa cada chave em uma secao
-    # com titulo proprio, e e o que poe a Ajuda depois de um corte em vez de
-    # solta no fim dos links de trabalho. A primeira secao fica sem titulo,
-    # porque nomea-la ("Trabalho", "Principal") so acrescentaria uma palavra
-    # que ninguem precisa ler.
-    apoio = [ajuda]
+    Uma secao so, de titulo vazio. Uma chave nomeada do `st.navigation` nao
+    desenha um risco: desenha um cabecalho com rotulo e seta de recolher, que
+    transforma o item num grupo que se fecha. Os riscos finos antes da ajuda e
+    do simulador sao CSS, em `ui.estilo`.
+    """
+    menu = [dashboard, leads, ajuda]
+    if e_admin(papeis):
+        menu.append(chat)
     if ficha is not None:
-        apoio.append(ficha)
-    return {"": trabalho, "Apoio": apoio}
+        menu.append(ficha)
+    return {"": menu}
