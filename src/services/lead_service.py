@@ -478,28 +478,6 @@ class LeadService:
             msg.sent_at = datetime.now(UTC)
             db.commit()
 
-    def get_latest_identity_by_prefix(
-        self, channel: str, prefix: str, db: Session
-    ) -> Optional[LeadChannelIdentity]:
-        """Identidade mais recente de um canal cujo external_id casa o prefixo.
-
-        Usada pela UI para retomar a última conversa do usuário após um
-        refresh da página, em vez de abrir um lead novo a cada carregamento.
-        """
-        return (
-            db.query(LeadChannelIdentity)
-            .filter(
-                LeadChannelIdentity.channel == channel,
-                # autoescape: o prefixo contém '_', que em LIKE é curinga de
-                # um caractere e casaria identidades de outros usuários.
-                LeadChannelIdentity.external_chat_id.startswith(
-                    prefix, autoescape=True
-                ),
-            )
-            .order_by(LeadChannelIdentity.id.desc())
-            .first()
-        )
-
     def get_primary_identity(
         self, lead_id: int, db: Session
     ) -> Optional[LeadChannelIdentity]:

@@ -52,20 +52,6 @@ def test_external_ids_diferentes_geram_leads_diferentes(lead_service, db):
     assert a.id != b.id
 
 
-def test_busca_por_prefixo_nao_trata_underscore_como_curinga(lead_service, db):
-    """'_' é curinga em LIKE; o prefixo de um usuário não pode casar com outro."""
-    esperado = lead_service.get_or_create_lead(
-        channel="streamlit", external_id="streamlit_ana_abc123", db=db
-    )
-    lead_service.get_or_create_lead(
-        channel="streamlit", external_id="streamlitXanaYxyz789", db=db
-    )
-
-    achado = lead_service.get_latest_identity_by_prefix("streamlit", "streamlit_ana_", db)
-    assert achado is not None
-    assert achado.lead_id == esperado.id
-
-
 # --- Funil -------------------------------------------------------------------
 
 
@@ -311,22 +297,6 @@ def test_excluir_lead_preserva_o_consumo_de_llm(lead_service, lead_com_historico
 
 def test_excluir_lead_inexistente_devolve_falso(lead_service, db):
     assert lead_service.delete_lead(999999, db) is False
-
-
-def test_retomada_nao_pega_a_conversa_de_outro_usuario(lead_service, db):
-    """O '_' do prefixo e curinga em LIKE: sem autoescape a Ana retomaria a do Bob."""
-    lead_service.get_or_create_lead(
-        channel="streamlit", external_id="streamlit_ana_aaa111", db=db
-    )
-    lead_service.get_or_create_lead(
-        channel="streamlit", external_id="streamlit_bob_bbb222", db=db
-    )
-
-    da_ana = lead_service.get_latest_identity_by_prefix(
-        "streamlit", "streamlit_ana_", db
-    )
-
-    assert da_ana.external_chat_id == "streamlit_ana_aaa111"
 
 
 # --- Listagem de conversas do simulador --------------------------------------
