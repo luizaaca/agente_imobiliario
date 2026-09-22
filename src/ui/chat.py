@@ -11,6 +11,7 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+from src.ui.conversa import Fala, falas_do_lead, renderizar
 from src.ui.navegacao import entrou_na_pagina_agora
 from src.ui.texto import mensagem_para_markdown
 
@@ -28,19 +29,23 @@ def _prefixo_do_usuario() -> str:
     return f"streamlit_{st.session_state.get('username', 'demo')}_"
 
 
-def _historico_visivel(lead_id: int, db) -> list[dict]:
-    """Mensagens do lead prontas para o `st.chat_message` (sem system/tool)."""
-    return [
-        {"role": m.role, "content": m.content}
-        for m in LeadService().get_history(lead_id, LIMITE_EXIBIDO, db)
-        if m.role in ("user", "assistant")
-    ]
+def _recarregar(lead_id: int) -> None:
+    """Relê a conversa do banco para a tela.
+
+    O simulador mostra tudo que aconteceu, e não só o que a pessoa leria: as
+    chamadas de ferramenta, as consultas que o agente de busca escreveu e o que
+    cada uma devolveu. É ferramenta de quem constrói o agente.
+
+    Ler do banco, em vez de ir acumulando o que a tela já sabe, é o que traz as
+    ferramentas junto — elas acontecem dentro do turno e ninguém as anuncia.
+    """
+    with get_db() as db:
+        st.session_state.messages = falas_do_lead(lead_id, db, LIMITE_EXIBIDO)
 
 
 def abrir_conversa(lead_id: int) -> None:
     """Carrega no simulador a conversa de um lead existente."""
-    with get_db() as db:
-        st.session_state.messages = _historico_visivel(lead_id, db)
+    _recarregar(lead_id)
     st.session_state.lead_id = lead_id
 
 
@@ -204,9 +209,7 @@ def render_chat():
     # trocar de lead passa a exigir rolar tudo de volta para cima.
     janela = st.container(height=ALTURA_DA_CONVERSA)
     with janela:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(mensagem_para_markdown(msg["content"]))
+        renderizar(st.session_state.messages)
 
     # Desabilitado quando falta configuração: deixar o campo ativo só levaria
     # o usuário a mandar uma mensagem e receber "atendimento indisponível".
@@ -215,7 +218,7 @@ def render_chat():
         disabled=bool(faltando),
     )
     if prompt := entrada:
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append(Fala(role="user", conteudo=prompt))
         with janela:
             with st.chat_message("user"):
                 st.markdown(mensagem_para_markdown(prompt))
@@ -241,7 +244,9 @@ def render_chat():
                     )
                     st.markdown(mensagem_para_markdown(response))
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        # O turno inteiro vem do banco, e nao so a resposta: as ferramentas que
+        # rodaram no meio dele so existem la.
+        _recarregar(lead_id)
         # Rerun para o painel refletir o lead recem-criado e a contagem de
         # mensagens atualizada.
         st.rerun()

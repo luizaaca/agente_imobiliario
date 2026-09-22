@@ -26,6 +26,7 @@ from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.tempo import agora, formatar, para_exibir, para_guardar
+from src.ui.conversa import falas_do_lead, quantas_falas, renderizar
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
 from src.ui.tabela import (
     AJUDA_DA_BUSCA,
@@ -41,7 +42,7 @@ from src.ui.tabela import (
     temperatura,
     texto,
 )
-from src.ui.texto import markdown_seguro, mensagem_para_markdown
+from src.ui.texto import markdown_seguro
 
 # Lead cuja ficha esta aberta. Zero significa "ficha em branco", porque nenhum
 # lead tem id 0. Ausente na pagina da ficha significa que se chegou nela sem
@@ -90,13 +91,6 @@ COR_DO_STATUS = {
     "agendado": "green",
     "inativo": "gray",
 }
-ROTULO_DO_TIPO = {
-    "followup": ":material/autorenew: follow-up automático",
-    "handover": ":material/handshake: handover ao corretor",
-    "system_notice": ":material/settings: aviso do sistema",
-}
-
-
 def abrir_ficha(lead_id: int) -> None:
     """Escolhe o lead e leva para a pagina da ficha."""
     st.session_state[CHAVE_LEAD_ABERTO] = lead_id
@@ -561,24 +555,18 @@ def _conversa(lead: Lead) -> None:
     obriga a rolar tudo de volta para chegar a elas.
     """
     with get_db() as db:
-        conversa = [
-            (m.role, m.message_type, m.content)
-            for m in LeadService().get_history(lead.id, 200, db)
-            if m.role in ("user", "assistant")
-        ]
+        falas = falas_do_lead(lead.id, db, 200)
 
-    if not conversa:
+    if not falas:
         st.caption("Nenhuma mensagem registrada para este lead.")
         return
 
-    st.caption(f"{len(conversa)} mensagem(ns)")
+    st.caption(
+        f"{quantas_falas(falas)} mensagem(ns) — as ferramentas que o agente "
+        f"usou abrem nos painéis"
+    )
     with st.container(height=ALTURA_DA_CONVERSA):
-        for role, tipo, conteudo in conversa:
-            with st.chat_message(role):
-                rotulo = ROTULO_DO_TIPO.get(tipo)
-                if rotulo:
-                    st.caption(rotulo)
-                st.markdown(mensagem_para_markdown(conteudo))
+        renderizar(falas)
 
 
 def _resumo_para_o_corretor(lead: Lead) -> None:

@@ -171,6 +171,20 @@ No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
 separados (ADR 0004), e nada aqui pode depender de qual deles atendeu o turno
 anterior.
 
+### Onde se vê o que ele fez
+
+As consultas do agente de busca não viram mensagem — é o que torna a delegação
+barata —, então a única cópia delas é o `metadata_json` da chamada. A aba
+**Conversa** da ficha e o simulador leem dali e mostram, num painel fechado ao
+lado da fala que aquilo produziu: o pedido em texto livre, cada `SELECT`
+escrito, o custo em tokens e o que a ferramenta devolveu ao agente.
+
+Fechado por padrão porque quem abre a ficha quer ler a conversa; o painel existe
+para a pergunta seguinte, que é como aqueles imóveis foram parar ali.
+
+O renderizador é o mesmo nas duas telas (`src/ui/conversa.py`). O canal do
+Telegram não passa por ele: o que chega à pessoa lá é só a resposta final.
+
 ### Quando o provider falha
 
 A tool monta filtros a partir da ficha estruturada do lead, usa o pedido como

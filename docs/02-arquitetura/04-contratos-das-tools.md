@@ -59,7 +59,8 @@ modelo.
 - os IDs apresentados são gravados no `metadata_json` da mensagem da tool, de
   onde `detalhar_imoveis` os relê, e entram também no cache da conversa (ver abaixo);
 - o rastro das consultas do agente de busca vai para o mesmo `metadata_json`,
-  para auditoria.
+  de onde a aba **Conversa** da ficha e o simulador o mostram num painel por
+  chamada, fechado.
 
 Nenhuma escrita no catálogo. A role usada pelo agente de busca não teria
 permissão para isso.
