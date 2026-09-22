@@ -252,64 +252,81 @@ python run_all.py
 
 ---
 
-## 6. Estrutura de Diretórios Completa
+## 6. Estrutura de Diretórios
 
 ```text
 agente_imobiliario/
-├── app.py                        # Streamlit (chat simulador + dashboard)
-├── run_telegram.py               # Bot Telegram (polling + scheduler)
+├── app.py                        # Streamlit: login, navegação e páginas
+├── run_telegram.py               # Bot Telegram (polling) + scheduler de follow-up
 ├── run_all.py                    # Supervisor: inicia ambos os processos
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml            # postgres, migrate, app, telegram-bot (profile)
+├── alembic.ini
+├── pyproject.toml                # configuração do ruff e do pytest
 ├── .env.example
 ├── README.md
 ├── requirements.txt
-├── docs/
-│   └── 01-visao-geral/
-│       └── 01-plano-de-implementacao.md
+├── alembic/
+│   ├── env.py
+│   └── versions/                 # migrations de schema
+├── config/
+│   └── credentials.yaml          # usuários e hashes bcrypt da UI
 ├── data/
-│   └── imoveis_catalogo.csv      # Artefato interno com catálogo sintético pronto para carga
+│   └── imoveis_catalogo.csv      # catálogo sintético pronto para carga
+├── seed/                         # geração do catálogo, fora do runtime da aplicação
+├── scripts/
+│   ├── seed_imoveis.py           # ingere o catálogo no PostgreSQL
+│   ├── generate_password_hash.py
+│   └── run_followup_once.py      # dispara um ciclo de follow-up manualmente
 ├── src/
-│   ├── config.py
+│   ├── config.py                 # settings e checagem de configuração ausente
+│   ├── tempo.py                  # fuso e formatação de data/hora
+│   ├── db/
+│   │   ├── models.py
+│   │   └── session.py
 │   ├── schemas/
 │   │   ├── lead.py
 │   │   ├── imovel.py
 │   │   ├── agendamento.py
+│   │   ├── mensagem.py
 │   │   └── agent.py
-│   ├── db/
-│   │   ├── models.py
-│   │   ├── repository.py
-│   │   └── session.py
-│   ├── services/
+│   ├── services/                 # regras de domínio, sem Streamlit nem LLM
 │   │   ├── catalog_service.py
 │   │   ├── lead_service.py
 │   │   ├── scheduling_service.py
 │   │   ├── summary_service.py
-│   │   └── followup_service.py
+│   │   ├── followup_service.py
+│   │   └── llm_usage_service.py
 │   ├── agent/
-│   │   ├── sdr_agent.py
+│   │   ├── sdr_agent.py          # agente conversacional e suas tools
+│   │   ├── perfil_agent.py       # consolidador do perfil narrativo
+│   │   ├── followup_agent.py     # composição da mensagem de follow-up
 │   │   ├── prompts.py
-│   │   └── tools.py
+│   │   ├── provider.py           # construção do modelo, OpenAI-compatible
+│   │   └── history.py            # reidratação do histórico para o PydanticAI
 │   ├── channels/
-│   │   └── telegram_bot.py       # Adaptador Telegram (handlers + despacho para o agente)
+│   │   └── telegram_bot.py       # adaptador Telegram (handlers + despacho)
 │   ├── scheduler/
-│   │   └── followup_scheduler.py # APScheduler com job de follow-up periódico
+│   │   ├── followup_scheduler.py # APScheduler com job periódico
+│   │   └── followup_runner.py    # o ciclo em si, testável sem scheduler
 │   └── ui/
-│       ├── chat.py
-│       └── dashboard.py
-├── config/
-│   └── credentials.yaml          # Credenciais bcrypt (autenticação Streamlit)
-├── scripts/
-│   ├── generate_password_hash.py # Utilitário para gerar hashes de senha
-│   └── seed_imoveis.py           # Script para ingerir o catálogo sintético no PostgreSQL
-├── alembic/                      # Migrations de schema PostgreSQL
-│   └── versions/
-└── tests/
-    ├── test_catalog_service.py
-    ├── test_scoring.py
-    ├── test_followup.py
-    └── test_agent_tools.py
+│       ├── dashboard.py          # KPIs, carteira e painel de consumo
+│       ├── leads.py              # lista e ficha do lead
+│       ├── chat.py               # simulador de chat
+│       ├── ajuda.py
+│       ├── login.py
+│       ├── navegacao.py
+│       ├── papeis.py             # visibilidade de menu por papel
+│       ├── estilo.py
+│       ├── tabela.py
+│       └── texto.py
+├── tests/                        # suíte plana, por assunto
+└── docs/
 ```
+
+> As tools do agente ficam em `sdr_agent.py`, junto do agente que as expõe:
+> são poucas e cada uma delega a um service. Um módulo separado só de tools
+> acrescentaria um salto de arquivo sem acrescentar fronteira.
 
 ---
 

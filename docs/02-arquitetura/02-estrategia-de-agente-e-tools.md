@@ -57,7 +57,15 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
+| `listar_agendamentos` | Devolve os compromissos de pé do lead, com o ID de cada um |
+| `confirmar_agendamento` | Move um compromisso para `confirmado`, quando a pessoa confirma |
+| `cancelar_agendamento` | Move um compromisso para `cancelado`, com o motivo registrado |
 | `encerrar_atendimento` | Fecha o atendimento, entrega o briefing executivo ao corretor e tira o lead da régua |
+
+As três tools de compromisso existente trabalham sobre IDs que o agente recebe
+nas instruções do turno, remontadas do banco. `agendar_reuniao` cria; as outras
+mudam o estado do que já existe — usar a primeira para confirmar criaria um
+segundo compromisso no mesmo horário.
 
 > **Nota de escopo da POC:** a capacidade de geração de follow-up contextual existe no sistema, mas **não será exposta como tool do agente conversacional com o cliente**. Na POC, ela será usada exclusivamente pelo `FollowUpService`, que controla a régua, a elegibilidade, as tentativas e o envio, acionando a LLM apenas para compor a mensagem.
 

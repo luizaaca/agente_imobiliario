@@ -139,28 +139,51 @@ Antes da demonstração, validar:
 
 ---
 
-## 7. Estrutura sugerida de testes
+## 7. Estrutura de testes
+
+A suíte é plana, organizada por assunto e não por nível da pirâmide:
 
 ```text
 tests/
-├── unit/
-│   ├── test_catalog_service.py
-│   ├── test_lead_service.py
-│   ├── test_scoring.py
-│   ├── test_followup_service.py
-│   └── test_scheduling_service.py
-├── contracts/
-│   ├── test_agent_tools.py
-│   └── test_schemas.py
-├── integration/
-│   ├── test_agent_db_flow.py
-│   ├── test_followup_scheduler_flow.py
-│   └── test_dashboard_queries.py
-└── e2e/
-    ├── test_scenario_compra.py
-    ├── test_scenario_investimento.py
-    └── test_scenario_followup.py
+├── conftest.py                        # banco de teste, schema por Alembic, TRUNCATE entre testes
+│
+│   # Serviços de domínio
+├── test_catalog_service.py            # filtros, escada de relaxamento, diagnóstico, FTS
+├── test_busca_e_ordem.py              # ordenação e desempate
+├── test_lead_service.py               # qualificação, status, histórico
+├── test_lead_crud.py                  # operações da ficha
+├── test_scheduling_service.py
+├── test_followup_service.py
+├── test_llm_usage_service.py          # tetos, custo, latência, taxa de erro
+│
+│   # Agente e tools, com modelo falso
+├── test_agent_tools.py                # contrato de cada tool
+├── test_busca_pela_conversa.py        # busca acionada pelo agente
+├── test_agendamento_pela_conversa.py  # marcar, confirmar, cancelar pela conversa
+├── test_contato_do_lead.py
+├── test_contexto_do_lead.py
+├── test_perfil_narrativo.py           # consolidador e caminho de degradação
+├── test_prompt_chega_ao_modelo.py
+├── test_provider.py                   # configuração ausente, provider custom
+├── test_cenarios.py                   # os casos obrigatórios de regressão da seção 5
+├── test_followup_manual.py
+│
+│   # UI e schemas
+├── test_papeis.py                     # visibilidade de menu por papel
+├── test_menu_e_chat.py
+├── test_selo_de_status.py
+├── test_texto_ui.py
+├── test_aviso_de_budget.py
+└── test_schemas.py
 ```
+
+A pirâmide da seção 2 descreve **o que cada teste faz**, não onde o arquivo
+mora. Como todo teste roda contra um PostgreSQL de verdade (seção 4.3), a
+fronteira entre unitário e integração não cai em diretório: `test_lead_service.py`
+tem os dois, e separá-los espalharia o mesmo assunto por duas pastas.
+
+Nomear por assunto é o que faz uma falha apontar para onde olhar. Um arquivo
+chamado `test_agent_db_flow.py` não diz que comportamento quebrou.
 
 ---
 

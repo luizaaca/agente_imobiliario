@@ -552,41 +552,49 @@ CREATE INDEX idx_imoveis_search ON imoveis USING GIN (search_vector);
 
 ### 8.6 Full-Text Search (FTS)
 
-O FTS é o mecanismo central de ranking textual para a tool `buscar_imoveis`.
+O FTS é o mecanismo de ranking textual do catálogo.
 
-#### Trigger para manter `search_vector` atualizado
-
-```sql
-CREATE OR REPLACE FUNCTION update_imoveis_search_vector()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.search_vector := to_tsvector('portuguese',
-        COALESCE(NEW.titulo, '') || ' ' ||
-        COALESCE(NEW.descricao, '') || ' ' ||
-        COALESCE(NEW.bairro, '') || ' ' ||
-        COALESCE(NEW.tipo, '') || ' ' ||
-        COALESCE(NEW.finalidade, '') || ' ' ||
-        COALESCE(NEW.tags, '') || ' ' ||
-        COALESCE(NEW.perfil_indicado, '')
-    );
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_imoveis_search_vector
-    BEFORE INSERT OR UPDATE ON imoveis
-    FOR EACH ROW EXECUTE FUNCTION update_imoveis_search_vector();
-```
-
-#### Trigger para `updated_at`
+#### `search_vector` é coluna gerada
 
 ```sql
-CREATE TRIGGER trg_imoveis_updated_at
-    BEFORE UPDATE ON imoveis
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+search_vector TSVECTOR GENERATED ALWAYS AS (
+    to_tsvector('portuguese'::regconfig,
+        coalesce(titulo, '')    || ' ' ||
+        coalesce(descricao, '') || ' ' ||
+        coalesce(tags, '')      || ' ' ||
+        coalesce(bairro, '')    || ' ' ||
+        coalesce(tipo, '')
+    )
+) STORED
 ```
 
-> A função `update_updated_at()` é compartilhada com outras tabelas.
+Coluna gerada, e não trigger: o PostgreSQL recalcula o vetor em todo `INSERT` e
+`UPDATE` que toque uma das cinco colunas, sem código nosso no caminho. Não há
+trigger para desabilitar por engano, nem carga em massa que escape dele — o
+vetor não tem como ficar defasado.
+
+A expressão vive em `SEARCH_VECTOR_EXPR`, em `src/db/models.py`, e é usada tanto
+pela migration quanto pelo `create_all` dos testes. O texto precisa ser
+idêntico nos dois caminhos: qualquer divergência faz o `autogenerate` do Alembic
+acusar drift de schema.
+
+O índice que a atende é `ix_imoveis_search_vector`, GIN sobre a coluna.
+
+#### O que está e o que não está no vetor
+
+| No vetor | Fora do vetor |
+|---|---|
+| `titulo`, `descricao`, `tags`, `bairro`, `tipo` | `zona`, `finalidade`, `perfil_indicado`, `operacao`, e todos os numéricos |
+
+O que ficou de fora tem coluna própria e se filtra com `WHERE`. A distinção
+importa na hora de escrever consulta: procurar `zona_norte` no vetor não devolve
+nada, e procurar "comercial" como texto traz apartamento que usa a palavra na
+descrição e perde sala que não a usa.
+
+#### `updated_at`
+
+Mantido pela aplicação, com `onupdate` do SQLAlchemy — não há trigger. Um
+`UPDATE` feito fora do ORM, direto no banco, não atualiza a coluna.
 
 #### Query de busca em camadas (conceitual)
 
@@ -596,13 +604,17 @@ SELECT * FROM imoveis
 WHERE disponivel = true
   AND finalidade = $1
   AND preco BETWEEN $2 AND $3
-  AND bairro = ANY($4)
+  AND bairro ILIKE $4
   AND quartos >= $5
 
--- Camada 2: ranking textual sobre os resultados
-ORDER BY ts_rank(search_vector, plainto_tsquery('portuguese', $6)) DESC
+-- Camada 2: ranking textual sobre o que restou
+ORDER BY ts_rank(search_vector, websearch_to_tsquery('portuguese', $6)) DESC
 LIMIT $7;
 ```
+
+`websearch_to_tsquery`, e não `plainto_tsquery`: ela aceita `or`, `-` e aspas
+vindos do texto cru sem levantar erro de sintaxe, o que é o que se precisa
+quando a consulta é montada a partir do que um modelo escreveu.
 
 ### 8.7 Observações sobre o script de seed
 
