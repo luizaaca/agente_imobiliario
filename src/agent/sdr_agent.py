@@ -132,8 +132,8 @@ def _instrumentada(funcao):
 # descrever os IMOVEIS.
 FECHAMENTO_DA_BUSCA = (
     "\n---\n"
-    "Ao responder: no máximo cinco destes imóveis, uma linha de porquê para "
-    "cada, até nove linhas no total.\n"
+    "Ao responder: um destaque em duas ou três linhas — o imóvel que mais combina com o que ela contou de si, com o que a descrição diz de concreto e a ligação com ELA — e até quatro alternativas de uma linha, dizendo a diferença "
+    "de cada uma para o destaque. Até doze linhas.\n"
     "Abra pelo que você TEM, nunca pelo que faltou. Antes de escrever, leia as "
     "fichas acima e veja o que elas atendem do que ela pediu — muitas vezes "
     "atendem, e de outro jeito. Só diga que algo não existe depois de conferir "
@@ -143,7 +143,7 @@ FECHAMENTO_DA_BUSCA = (
     "primeira linha.\n"
     "Não ofereça um menu de próximos passos ('posso ampliar a busca, ou...') — "
     "a busca já foi refeita sozinha. Escolha você o próximo passo e termine "
-    "com UMA pergunta só."
+    "com UMA pergunta só, sobre o que ela achou destes imóveis — não sobre agendar, que vem depois de ela reagir."
 )
 
 
