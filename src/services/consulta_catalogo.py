@@ -241,16 +241,119 @@ _OPERADOR_QUE_NAO_E = re.compile(r"\b(and|not)\b", re.IGNORECASE)
 _TERMO_COM_UNDERSCORE = re.compile(r"\b\w+_\w+\b")
 
 
+_PALAVRA = re.compile(r"[A-Za-zÀ-ÿ]{4,}")
+
+# Para dobrar acento sem depender da extensão `unaccent`, que não está
+# instalada no cluster. Só minúsculas: os lexemas do `ts_stat` já vêm assim.
+_COM_ACENTO = "áàâãäéèêëíìîïóòôõöúùûüçñ"
+_SEM_ACENTO = "aaaaaeeeeiiiiooooouuuucn"
+
+# Um lexema precisa aparecer neste tanto de anúncios para valer como
+# vocabulário do catálogo. Abaixo disso é palavra de um anúncio só, e avisar
+# sobre ela seria ruído.
+MINIMO_DE_ANUNCIOS = 10
+
+# Lexemas dobrados mais curtos que isto são prefixo de palavra demais: `vã`
+# vira `va` e acusaria `vaga`; `pé` vira `pe` e acusaria `perto`.
+MINIMO_DE_LETRAS = 4
+
+# Quanto a palavra escrita pode exceder o lexema dobrado. O radicalizador corta
+# a terminação, então `estacao`, contra o lexema `estaçã` dobrado em `estaca`,
+# sobra uma letra. Três letras já é outra palavra: `arejado` não é `área`.
+SOBRA_MAXIMA = 2
+
+_vocabulario: dict | None = None
+
+
+def _ler_vocabulario_acentuado(minimo: int = MINIMO_DE_ANUNCIOS) -> dict:
+    """As palavras que o catálogo escreve com acento, lidas do próprio índice.
+
+    Devolve `{forma_dobrada: (lexema_acentuado, em_quantos_anúncios)}`. Sai do
+    `ts_stat` sobre o `search_vector`, que é exatamente o vocabulário contra o
+    qual a consulta do agente vai casar. Uma lista fixa no código envelheceria
+    junto com o catálogo, e aqui quem manda é o catálogo.
+    """
+    consulta = text(
+        "SELECT word, ndoc, translate(word, :acentos, :simples) AS dobrada "
+        "FROM ts_stat('SELECT search_vector FROM imoveis WHERE disponivel') "
+        "WHERE ndoc >= :minimo "
+        "  AND word <> translate(word, :acentos, :simples)"
+    )
+    parametros = {
+        "acentos": _COM_ACENTO, "simples": _SEM_ACENTO, "minimo": minimo,
+    }
+    with conexao_de_busca() as conn:
+        linhas = conn.execute(consulta, parametros).fetchall()
+
+    return {
+        dobrada: (acentuada, ndoc)
+        for acentuada, ndoc, dobrada in linhas
+        if len(dobrada) >= MINIMO_DE_LETRAS
+    }
+
+
+def _vocabulario_acentuado() -> dict:
+    """O vocabulário acentuado, lido uma vez por processo.
+
+    A falha ao ler também fica no cache. O aviso é apoio e não barreira: tentar
+    de novo a cada consulta custaria uma ida ao banco por busca para recuperar
+    algo que, sem ele, apenas deixa de ser dito.
+    """
+    global _vocabulario
+    if _vocabulario is None:
+        try:
+            _vocabulario = _ler_vocabulario_acentuado()
+        except SQLAlchemyError as e:
+            logger.warning(
+                "event=vocabulario_acentuado status=indisponivel erro=%s", e
+            )
+            _vocabulario = {}
+    return _vocabulario
+
+
+def _avisos_de_vocabulario(argumento: str, vocabulario: dict) -> list[str]:
+    """Aponta palavra escrita sem acento que o catálogo escreve com acento.
+
+    Separada da leitura para poder ser exercitada sem banco, e porque a regra é
+    o que muda: `metro` e `metrô` são lexemas diferentes, então quem procura a
+    forma sem acento não alcança nenhum dos anúncios que usam a outra.
+    """
+    avisos = []
+    for palavra in _PALAVRA.findall(argumento):
+        minuscula = palavra.lower()
+        for dobrada, (acentuada, ndoc) in vocabulario.items():
+            if not minuscula.startswith(dobrada):
+                continue
+            if len(minuscula) - len(dobrada) <= SOBRA_MAXIMA:
+                avisos.append(
+                    f"Atenção: '{palavra}' não alcança o lexema '{acentuada}', "
+                    f"que está em {ndoc} anúncios — sem o acento o PostgreSQL "
+                    f"gera outro lexema. Se era essa a palavra, escreva-a "
+                    f"acentuada."
+                )
+                break
+    return avisos
+
+
 def _avisos_da_tsquery(sql: str) -> list[str]:
     """Aponta o que, dentro de uma tsquery, não faz o que parece fazer.
 
-    Dois enganos observados em consultas reais, os dois silenciosos — a
+    Três enganos observados em consultas reais, os três silenciosos — a
     consulta roda, devolve menos do que devia ou nada, e ninguém fica sabendo
     por quê. Vale mais como aviso que como recusa: a consulta pode estar
     correta para outra intenção, e quem decide é quem a escreveu.
     """
+    argumentos = _ARGUMENTO_DA_TSQUERY.findall(sql)
+    if not argumentos:
+        return []
+
+    # Lido aqui e não no topo de `validar` para que a consulta sem busca
+    # textual nunca pague a ida ao banco.
+    vocabulario = _vocabulario_acentuado()
+
     avisos: list[str] = []
-    for argumento in _ARGUMENTO_DA_TSQUERY.findall(sql):
+    for argumento in argumentos:
+        avisos.extend(_avisos_de_vocabulario(argumento, vocabulario))
         if achado := _OPERADOR_QUE_NAO_E.search(argumento):
             palavra = achado.group(1)
             avisos.append(
@@ -266,7 +369,7 @@ def _avisos_da_tsquery(sql: str) -> list[str]:
                 f"coladas e restringe muito. Use a palavra simples aqui, ou "
                 f"`tags ILIKE '%{termo}%'` para casar a tag literal."
             )
-    return avisos
+    return list(dict.fromkeys(avisos))
 
 
 def _com_limite(sql: str, mascarado: str) -> tuple[str, list[str]]:

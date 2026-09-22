@@ -17,11 +17,15 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.db.models import Imovel
 from src.db.session import conexao_de_busca
+from src.services import consulta_catalogo
 from src.services.consulta_catalogo import (
     LIMITE_MAXIMO,
     TAMANHO_MAXIMO,
     ConsultaRecusada,
+    _avisos_de_vocabulario,
+    _ler_vocabulario_acentuado,
     executar,
     validar,
 )
@@ -250,7 +254,7 @@ def test_not_dentro_da_tsquery_tambem_e_avisado():
 def test_nome_de_tag_dentro_da_tsquery_e_avisado():
     """O underscore vira adjacência e restringe muito mais do que parece.
 
-    `metro_proximo` casa 33 imóveis; `metro` casa 90. A diferença é todo
+    `metro_proximo` casa 36 imóveis; `metro` casa 96. A diferença é todo
     anúncio que fala de metrô sem usar as duas palavras coladas nessa ordem.
     """
     _, avisos = validar(
@@ -288,3 +292,133 @@ def test_o_aviso_chega_ao_agente_no_texto_do_resultado(catalogo):
         "websearch_to_tsquery('portuguese', 'varanda and metro')"
     )
     assert "não é operador" in resultado.para_texto().splitlines()[0]
+
+
+# --- O vocabulário do catálogo, contra a palavra sem acento ------------------
+
+# Como o catálogo de verdade devolve: lexema dobrado, lexema real, anúncios.
+VOCABULARIO = {
+    "metro": ("metrô", 63),
+    "condomini": ("condomíni", 120),
+    "proxim": ("próxim", 97),
+    "edifici": ("edifíci", 73),
+    "sala": ("salã", 40),
+}
+
+
+@pytest.mark.parametrize(
+    "argumento, esperado_no_aviso",
+    [
+        ("metro", "metrô"),
+        ("metro or bairro", "metrô"),
+        ("condominio fechado", "condomíni"),
+        ("proximo ao parque", "próxim"),
+    ],
+)
+def test_palavra_sem_acento_e_avisada(argumento, esperado_no_aviso):
+    """`metro` e `metrô` são lexemas diferentes: um não alcança o outro.
+
+    Medido no catálogo: 63 anúncios escrevem `metrô`, e nenhum deles responde a
+    `metro`. O engano é silencioso — a consulta roda e devolve outra coisa.
+    """
+    avisos = _avisos_de_vocabulario(argumento, VOCABULARIO)
+
+    assert len(avisos) == 1
+    assert esperado_no_aviso in avisos[0]
+
+
+@pytest.mark.parametrize(
+    "argumento",
+    [
+        "metrô or estação",        # já escrito com acento
+        "varanda gourmet",         # não está no vocabulário acentuado
+        "churrasqueira",
+        "vaga coberta",            # `vã` dobra em `va`: curto demais para acusar
+        "arejado",                 # `áre` dobra em `are`: idem
+        "metropolitano",           # sobra de mais: é outra palavra
+        "metropole",               # quatro letras de sobra já é outra palavra
+        "aproxima",                # o lexema no meio da palavra é coincidência
+    ],
+)
+def test_palavra_fora_do_alcance_nao_e_avisada(argumento):
+    """Aviso que aparece à toa é aviso que o agente aprende a ignorar."""
+    assert _avisos_de_vocabulario(argumento, VOCABULARIO) == []
+
+
+def test_o_aviso_informa_sem_mandar():
+    """`sala` casa o lexema de *salão*, que é outra palavra e não um acento.
+
+    A regra não distingue os dois casos, então a redação precisa deixar a
+    decisão com quem escreveu a consulta.
+    """
+    aviso = _avisos_de_vocabulario("sala ampla", VOCABULARIO)[0]
+
+    assert "Se era essa a palavra" in aviso
+
+
+def test_o_aviso_de_vocabulario_chega_pela_validacao(monkeypatch):
+    """A regra pode estar certa e não estar ligada em lugar nenhum."""
+    monkeypatch.setattr(
+        consulta_catalogo, "_vocabulario_acentuado", lambda: VOCABULARIO
+    )
+    resultado = validar(
+        "SELECT id FROM imoveis WHERE search_vector @@ "
+        "websearch_to_tsquery('portuguese', 'metro or bairro')"
+    )
+
+    assert any("metrô" in aviso for aviso in resultado[1])
+
+
+def test_consulta_sem_busca_textual_nao_procura_vocabulario(monkeypatch):
+    """Vocabulário custa uma ida ao banco; consulta sem tsquery não paga."""
+    def nao_deveria_ser_chamado():
+        raise AssertionError("leu o vocabulário sem precisar")
+
+    monkeypatch.setattr(
+        consulta_catalogo, "_vocabulario_acentuado", nao_deveria_ser_chamado
+    )
+    assert validar("SELECT id FROM imoveis WHERE zona = 'zona_sul'")[1] == []
+
+
+def test_o_mesmo_termo_em_duas_condicoes_avisa_uma_vez():
+    """O agente repete a mesma tsquery nas duas pontas de um OR."""
+    sql = (
+        "SELECT id FROM imoveis WHERE "
+        "search_vector @@ websearch_to_tsquery('portuguese', 'metro_proximo') "
+        "OR search_vector @@ websearch_to_tsquery('portuguese', 'metro_proximo')"
+    )
+    assert len(validar(sql)[1]) == 1
+
+
+def test_o_vocabulario_sai_do_catalogo_e_nao_de_uma_lista_no_codigo(db):
+    """Uma lista fixa envelheceria junto com o catálogo.
+
+    O `ts_stat` lê o mesmo índice contra o qual a consulta do agente vai casar,
+    então a palavra que entrar no catálogo amanhã já passa a ser conhecida.
+    """
+    for i in range(3):
+        db.add(Imovel(
+            id=500 + i, titulo=f"Apartamento com varanda {i}" + (" japonês" * (i == 0)),
+            descricao=(
+                "Fica ao lado da estação do metrô, em prédio de pé-direito "
+                "alto com salão de festas."
+            ),
+            tipo="apartamento", finalidade="residencial", operacao="venda",
+            bairro="Saude", zona="zona_sul", cidade="Sao Paulo", estado="SP",
+            preco=500000, area_m2=60, quartos=2, disponivel=True,
+        ))
+    db.commit()
+
+    vocabulario = _ler_vocabulario_acentuado(minimo=3)
+
+    assert vocabulario["metro"] == ("metrô", 3)
+    assert "estaca" in vocabulario
+    # `pé` dobra em `pe`, que é prefixo de `perto`, `pequeno`, `pedido`.
+    assert "pe" not in vocabulario
+    # `japonês` está num anúncio só: é palavra daquele anúncio, não vocabulário.
+    assert "japones" not in vocabulario
+
+
+def test_sem_vocabulario_acentuado_o_aviso_some(db):
+    """Catálogo sem palavra acentuada nenhuma não tem do que avisar."""
+    assert _ler_vocabulario_acentuado(minimo=1) == {}
