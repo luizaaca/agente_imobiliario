@@ -215,6 +215,38 @@ dele indicam.
 """,
     ),
     (
+        "Por que só consigo marcar um agendamento por lead?",
+        """
+Porque o corretor vai uma vez e vê com a pessoa os imóveis que ela quiser —
+não se marca uma visita por imóvel. Enquanto houver compromisso `pendente` ou
+`confirmado`, o botão **Novo agendamento** fica desabilitado; cancele o que
+está de pé para marcar outro.
+
+Na conversa, o agente avisa a pessoa que ela já tem algo marcado e pergunta se
+ela quer trocar. Só com o sim dela é que ele remarca — e aí o compromisso
+antigo fica no histórico, cancelado, com a nota de para quando foi remarcado.
+Sem essa nota você leria o cancelamento como desistência.
+
+O banco também cobra: há índice único sobre o lead para os status ativos. A
+regra já existia no código e não se sustentou — um lead chegou a ter duas
+visitas pendentes ao mesmo tempo.
+""",
+    ),
+    (
+        "Onde vejo quais imóveis o lead quer visitar?",
+        """
+Na **observação do agendamento**, com o ID de cada um. O compromisso não se
+prende a um imóvel: prende-se a um horário, e os imóveis de interesse vão
+escritos ali.
+
+A mesma observação aparece no **Resumo** do lead, junto do perfil narrativo —
+são os três textos que orientam você antes de ligar ou de sair.
+
+O agente é obrigado a preencher isso: uma visita cuja observação não cita
+nenhum imóvel que ele tenha apresentado à pessoa é recusada na hora.
+""",
+    ),
+    (
         "Quando um lead vira *inativo*?",
         """
 Quando ele **para de responder** e o follow-up esgota as tentativas de uma

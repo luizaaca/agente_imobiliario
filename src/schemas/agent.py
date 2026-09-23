@@ -35,7 +35,7 @@ class AgendamentoInput(BaseModel):
     tipo: str = Field(description="Deve ser 'visita' ou 'reuniao'")
     data_hora: datetime
     observacoes: Optional[str] = None
-    imovel_id: Optional[int] = None
+    remarcar: bool = False
 
 
 class ResumoCorretorOutput(BaseModel):

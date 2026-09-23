@@ -78,21 +78,20 @@ def test_resposta_de_mensagem_valida_uma_linha_real(db):
     assert resposta.sent_at is None
 
 
-def test_resposta_de_agendamento_valida_uma_linha_real(db, catalogo):
+def test_resposta_de_agendamento_valida_uma_linha_real(db):
     lead = Lead(status="novo")
     db.add(lead)
     db.flush()
-    imovel = db.query(Imovel).first()
     agendamento = Agendamento(
         lead_id=lead.id,
-        imovel_id=imovel.id,
         tipo="visita",
         data_hora=datetime(2026, 10, 1, 15, 0, tzinfo=UTC),
+        observacoes="Quer ver os imóveis 142 e 144.",
         status="pendente",
     )
     db.add(agendamento)
     db.commit()
 
     resposta = AgendamentoResponse.model_validate(agendamento)
-    assert resposta.imovel_id == imovel.id
+    assert resposta.observacoes == "Quer ver os imóveis 142 e 144."
     assert resposta.status.value == "pendente"

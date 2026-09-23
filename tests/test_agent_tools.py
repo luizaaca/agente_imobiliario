@@ -1,6 +1,7 @@
 """Testes de contrato das tools e do ciclo de mensagem do agente."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic_ai.messages import (
@@ -193,7 +194,7 @@ def test_busca_degradada_sem_nada_lista_o_que_tentou(
 def test_agendar_reuniao_cria_agendamento(llm_fake, catalogo, lead_id, deps, db):
     modelo = llm_fake(
         ("agendar_reuniao", {
-            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1,
+            "tipo": "visita", "data_hora": "2027-03-10 15:00",
         }),
         "Agendado!",
     )
@@ -311,7 +312,7 @@ def test_encerrar_por_desistencia_com_visita_de_pe_e_recusado(
     """Marcar `inativo` apagaria o lembrete de uma visita que continua na agenda."""
     conversar("quero visitar", lead_id, deps, llm_fake(
         ("agendar_reuniao", {
-            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 1,
+            "tipo": "visita", "data_hora": "2027-03-10 15:00",
         }),
         "Agendado!",
     ))
@@ -669,30 +670,38 @@ def test_o_perfil_anterior_sobrevive_ao_handover(
     assert "limite de tokens" in perfil
 
 
-def test_agendar_reuniao_vincula_o_imovel(llm_fake, lead_id, deps, catalogo, db):
+def test_agendar_reuniao_guarda_os_imoveis_na_observacao(llm_fake, lead_id, deps, db):
+    """É o único lugar onde o corretor descobre o que será visitado."""
     modelo = llm_fake(
         ("agendar_reuniao", {
-            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 3,
+            "tipo": "visita", "data_hora": "2027-03-10 15:00",
+            "observacoes": "Quer ver os imóveis 142 (Mooca) e 144 (Tatuapé).",
         }),
         "Agendado!",
     )
-    conversar("quero visitar a cobertura", lead_id, deps, modelo)
+    conversar("quero visitar os dois", lead_id, deps, modelo)
 
     agendamento = db.query(Agendamento).filter(Agendamento.lead_id == lead_id).one()
-    assert agendamento.imovel_id == 3
-    assert agendamento.imovel.titulo == "Cobertura Moema Alto Padrao"
+    assert "142" in agendamento.observacoes
+    assert "144" in agendamento.observacoes
 
 
-def test_agendar_reuniao_rejeita_imovel_inventado(llm_fake, lead_id, deps, catalogo, db):
-    """Um ID que nao existe violaria a FK e derrubaria o turno inteiro."""
+def test_agendar_sobre_compromisso_de_pe_nao_derruba_o_turno(
+    llm_fake, lead_id, deps, db
+):
+    """O aviso volta como texto, e a conversa segue: ela precisa ser perguntada."""
+    SchedulingService().create(
+        lead_id=lead_id, tipo="visita",
+        data_hora=datetime.now(UTC) + timedelta(days=1), db=db
+    )
     modelo = llm_fake(
         ("agendar_reuniao", {
-            "tipo": "visita", "data_hora": "2027-03-10 15:00", "imovel_id": 99999,
+            "tipo": "visita", "data_hora": "2027-03-10 15:00",
         }),
-        "Qual imovel voce quer visitar?",
+        "Voce ja tem uma visita marcada. Quer trocar?",
     )
-    resposta = conversar("quero visitar", lead_id, deps, modelo)
 
-    assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 0
-    assert resposta == "Qual imovel voce quer visitar?"
-    assert LeadService().get_lead(lead_id, db).status != "agendado"
+    resposta = conversar("marca pra terca", lead_id, deps, modelo)
+
+    assert resposta == "Voce ja tem uma visita marcada. Quer trocar?"
+    assert db.query(Agendamento).filter(Agendamento.lead_id == lead_id).count() == 1

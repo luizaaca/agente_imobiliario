@@ -68,17 +68,21 @@ def test_visita_confirmada_pinta_o_selo_de_azul(db):
     assert COR_DO_STATUS_DE_AGENDAMENTO["confirmado"] in selo_de_status(lead, situacoes)
 
 
-def test_compromisso_mais_proximo_manda_na_cor(db):
-    """Duas visitas marcadas: vale a que acontece primeiro."""
-    lead = lead_agendado(db, "confirmado", dias=10)
+def test_o_compromisso_de_pe_manda_na_cor_e_nao_o_historico(db):
+    """O lead que desmarcou e marcou de novo mostra o que está de pé.
+
+    É um compromisso ativo por lead, mas os encerrados continuam na tabela —
+    e um cancelamento antigo não pode roubar a cor do compromisso atual.
+    """
+    lead = lead_agendado(db, "cancelado", dias=1)
     db.add(Agendamento(
         lead_id=lead.id, tipo="visita",
-        data_hora=agora() + timedelta(days=1), status="pendente",
+        data_hora=agora() + timedelta(days=10), status="confirmado",
     ))
     db.commit()
 
     situacoes = situacoes_de_agendamento([lead], db)
-    assert COR_DO_STATUS_DE_AGENDAMENTO["pendente"] in selo_de_status(lead, situacoes)
+    assert COR_DO_STATUS_DE_AGENDAMENTO["confirmado"] in selo_de_status(lead, situacoes)
 
 
 def test_agendamento_cancelado_nao_colore_o_selo(db):

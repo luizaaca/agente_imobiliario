@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -28,7 +29,10 @@ from src.services.catalog_service import (
 )
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
-from src.services.scheduling_service import SchedulingService
+from src.services.scheduling_service import (
+    CompromissoJaMarcado,
+    SchedulingService,
+)
 from src.services.summary_service import SummaryService
 from src.tempo import formatar, momento_atual, para_guardar
 
@@ -332,7 +336,8 @@ async def detalhar_imoveis(
     mais sobre o que você mostrou. Buscar de novo custa dezenas de milhares de
     tokens e traz imóveis diferentes, que não é o que ela perguntou.
 
-    Também é por aqui que você recupera o `imovel_id` para `agendar_reuniao`.
+    Também é por aqui que você recupera o ID de cada imóvel para escrever
+    na `observacoes` de `agendar_reuniao`.
     """
     with get_db() as db:
         pedidos = imovel_ids or ctx.deps.lead_service.imoveis_apresentados(
@@ -723,32 +728,23 @@ async def agendar_reuniao(
     ctx: RunContext[SDRDependencies],
     tipo: Annotated[str, Field(description="Exatamente um de: visita, reuniao.")],
     data_hora: Annotated[str, Field(description="Data e hora no formato YYYY-MM-DD HH:MM.")],
-    observacoes: Optional[str] = None,
-    imovel_id: Annotated[Optional[int], Field(description=(
-        "ID de um imóvel devolvido por `buscar_imoveis`. OBRIGATÓRIO quando "
-        "tipo='visita' — não se visita coisa nenhuma. Não invente: use apenas "
-        "IDs já apresentados."))] = None,
+    observacoes: Annotated[Optional[str], Field(description=(
+        "O que o corretor precisa saber antes de ir. Numa visita, comece "
+        "pelos imóveis que a pessoa quer ver, com o ID de cada um — ex.: "
+        "'Quer ver os imóveis 142 (sobrado na Mooca) e 144 (Tatuapé)'. "
+        "Depois, o que pesa na decisão dela."))] = None,
+    remarcar: Annotated[bool, Field(description=(
+        "Só `true` quando a pessoa JÁ disse que quer trocar o compromisso que "
+        "ela tem marcado por este novo horário. Nunca use para contornar o "
+        "aviso de compromisso existente sem ter perguntado a ela."))] = False,
 ) -> str:
-    """Registrar visita ou reunião para handover ao corretor."""
+    """Registrar visita ou reunião para handover ao corretor.
+
+    Um compromisso de pé por pessoa. Havendo outro, a ferramenta avisa e não
+    marca: combine a troca com ela e chame de novo com `remarcar=true`.
+    """
     if tipo not in ("visita", "reuniao"):
         return "Tipo inválido. Use 'visita' ou 'reuniao'."
-
-    # Visita sem imóvel chega ao corretor como um horário e nada mais: ele não
-    # sabe aonde ir. Aconteceu de verdade — o agente marcou "sábado às 10h na
-    # Bela Vista" e o agendamento ficou sem vínculo com o imóvel, porque o id
-    # só existe no retorno da busca e ele não o tinha guardado.
-    if tipo == "visita" and imovel_id is None:
-        logger.info(
-            "event=visita_sem_imovel lead_id=%s acao=recusada", ctx.deps.lead_id
-        )
-        raise ModelRetry(
-            "Uma visita é sempre a um imóvel, e este agendamento veio sem "
-            "`imovel_id` — o corretor receberia um horário sem saber aonde ir. "
-            "Chame de novo com o ID do imóvel que a pessoa escolheu; se você "
-            "não o tiver, use `detalhar_imoveis` para recuperá-lo — ele "
-            "devolve na hora tudo que você já apresentou. Se o encontro "
-            "não for num imóvel do catálogo, use tipo='reuniao'."
-        )
 
     try:
         dt = para_guardar(datetime.strptime(data_hora, "%Y-%m-%d %H:%M"))
@@ -756,37 +752,89 @@ async def agendar_reuniao(
         return "Formato de data inválido. Use YYYY-MM-DD HH:MM."
 
     with get_db() as db:
-        imovel = None
-        if imovel_id is not None:
-            # Um ID inventado violaria a FK e derrubaria o turno inteiro. O
-            # erro volta como texto para o modelo poder se corrigir sozinho.
-            imovel = ctx.deps.catalog_service.get_by_id(imovel_id, db)
-            if imovel is None:
-                logger.warning(
-                    "event=imovel_inexistente_no_agendamento lead_id=%s imovel_id=%s",
-                    ctx.deps.lead_id, imovel_id,
-                )
-                return (
-                    f"Imóvel {imovel_id} não existe no catálogo. Use um ID "
-                    f"retornado por `buscar_imoveis` ou agende sem imóvel."
-                )
+        if tipo == "visita":
+            _exigir_imoveis_na_observacao(ctx, observacoes, db)
+        try:
+            agendamento = ctx.deps.scheduling_service.create(
+                lead_id=ctx.deps.lead_id,
+                tipo=tipo,
+                data_hora=dt,
+                observacoes=observacoes,
+                db=db,
+                remarcar=remarcar,
+            )
+        except CompromissoJaMarcado as conflito:
+            return _aviso_de_compromisso_existente(ctx, conflito.existente)
 
-        agendamento = ctx.deps.scheduling_service.create(
-            lead_id=ctx.deps.lead_id,
-            tipo=tipo,
-            data_hora=dt,
-            observacoes=observacoes,
-            imovel_id=imovel_id,
-            db=db,
-        )
-        linha_imovel = f"\nImóvel: {imovel.titulo} (ID: {imovel.id})" if imovel else ""
         return (
             f"Agendamento criado com sucesso! (ID: {agendamento.id})\n"
             f"Tipo: {tipo}\n"
-            f"Data/Hora: {data_hora}{linha_imovel}\n"
+            f"Data/Hora: {data_hora}\n"
             f"Status: pendente"
             + _falta_para_o_corretor(ctx, db)
         )
+
+
+def _exigir_imoveis_na_observacao(
+    ctx: RunContext[SDRDependencies], observacoes: Optional[str], db
+) -> None:
+    """Recusa a visita cuja observação não cita nenhum imóvel apresentado.
+
+    O compromisso não aponta mais para uma linha do catálogo: quem diz o que
+    será visitado é este texto, e é ele que o corretor lê. Vazio, o handover
+    vira um horário e nada mais — aconteceu de verdade, com o agente marcando
+    "sábado às 10h na Bela Vista" e o corretor sem saber aonde ir.
+
+    A conferência é contra os IDs que ESTA pessoa viu, e não contra qualquer
+    número no texto: "sábado às 10h" tem dígitos e não diz imóvel nenhum.
+    Quando nada foi apresentado — lead criado à mão, conversa que começou pelo
+    agendamento — não há o que cobrar.
+    """
+    mostrados = ctx.deps.lead_service.imoveis_apresentados(ctx.deps.lead_id, db)
+    texto = observacoes or ""
+    if not mostrados or any(
+        re.search(rf"\b{imovel_id}\b", texto) for imovel_id in mostrados
+    ):
+        return
+
+    logger.info(
+        "event=visita_sem_imovel_na_observacao lead_id=%s acao=recusada",
+        ctx.deps.lead_id,
+    )
+    raise ModelRetry(
+        "Esta visita não diz o que será visitado. O agendamento não guarda "
+        "mais o imóvel em campo próprio — quem diz isso ao corretor é a "
+        "`observacoes`, e é ela que ele lê junto do perfil e do resumo. "
+        "Chame de novo com os imóveis que a pessoa quer ver e o ID de cada "
+        f"um, escolhidos entre os que você já apresentou: {mostrados}. Se não "
+        "lembrar de qual é qual, `detalhar_imoveis` devolve as fichas na hora."
+    )
+
+
+def _aviso_de_compromisso_existente(
+    ctx: RunContext[SDRDependencies], existente
+) -> str:
+    """O texto que o modelo lê quando tenta marcar sobre um compromisso de pé.
+
+    Volta como retorno, e não como `ModelRetry`: a correção não está com o
+    modelo, está com a pessoa. Ele precisa perguntar se ela quer trocar, e só
+    então insistir — uma retentativa imediata marcaria por cima de um
+    compromisso que ela talvez queira manter.
+    """
+    logger.info(
+        "event=agendamento_sobre_compromisso_ativo lead_id=%s agendamento_id=%s "
+        "acao=avisado",
+        ctx.deps.lead_id, existente.id,
+    )
+    return (
+        f"Esta pessoa já tem {existente.tipo} marcada para "
+        f"{formatar(existente.data_hora)} ({existente.status}), e só se marca "
+        f"um compromisso por vez. Nada foi alterado.\n"
+        f"Pergunte a ela se quer trocar por este novo horário. Se ela disser "
+        f"que sim, chame esta ferramenta de novo com `remarcar=true`. Se ela "
+        f"só quis confirmar o que já existe, use `confirmar_agendamento` com "
+        f"o ID {existente.id}."
+    )
 
 
 def _falta_para_o_corretor(ctx: RunContext[SDRDependencies], db) -> str:
@@ -818,8 +866,8 @@ def _compromisso_do_lead(ctx, agendamento_id: int, db):
     """Busca o agendamento garantindo que ele e deste lead.
 
     Sem a checagem de dono, um id vindo do modelo poderia alcancar o
-    compromisso de outra pessoa — o mesmo cuidado que `agendar_reuniao` toma
-    com `imovel_id`. O erro volta como texto para o modelo se corrigir.
+    compromisso de outra pessoa. O erro volta como texto para o modelo se
+    corrigir.
     """
     agendamento = ctx.deps.scheduling_service.get(agendamento_id, db)
     if agendamento is None or agendamento.lead_id != ctx.deps.lead_id:
@@ -849,8 +897,7 @@ def _erro_de_id(ctx, agendamento_id: int, db) -> str:
 
     disponiveis = "; ".join(
         f"ID {id_}: {tipo} em {formatar(quando)}"
-        + (f", {imovel}" if imovel else "")
-        for id_, tipo, quando, _, imovel in itens
+        for id_, tipo, quando, _ in itens
     )
     return (
         f"Não existe compromisso {agendamento_id} para esta pessoa. Os que "
@@ -1142,17 +1189,14 @@ def montar_contexto_do_lead(lead) -> str:
 
 
 def compromissos_ativos(lead_id: int, db) -> list[tuple]:
-    """(id, tipo, data_hora, status, titulo do imovel) dos compromissos de pe.
+    """(id, tipo, data_hora, status) dos compromissos de pe.
 
     Ordenados do mais proximo para o mais distante: "a proxima visita" e a
     leitura mais comum, e ela precisa estar no topo.
     """
     return sorted(
         (
-            (
-                a.id, a.tipo, a.data_hora, a.status,
-                a.imovel.titulo if a.imovel else None,
-            )
+            (a.id, a.tipo, a.data_hora, a.status)
             for a in SchedulingService().list_by_lead(lead_id, db)
             if a.status in SchedulingService.STATUS_ATIVOS
         ),
@@ -1161,45 +1205,37 @@ def compromissos_ativos(lead_id: int, db) -> list[tuple]:
 
 
 def texto_dos_compromissos(lead_id: int) -> str:
-    """Agendamentos de pe do lead, com id, em texto para o modelo ler.
+    """O compromisso de pe do lead, com id, em texto para o modelo ler.
 
     Serve as instrucoes e a tool `listar_agendamentos`, que devolvem a mesma
     verdade em posicoes diferentes da conversa: as instrucoes abrem a
     requisicao, a tool responde no fim dela.
 
-    Sem esta lista o modelo nao tem de onde tirar o `agendamento_id` de
+    Sem esta linha o modelo nao tem de onde tirar o `agendamento_id` de
     `confirmar_agendamento` e `cancelar_agendamento` — e, sem ferramenta nem
-    id, o que ele faz e chamar `agendar_reuniao` de novo, criando compromisso
-    duplicado e anunciando uma confirmacao que nunca houve.
+    id, o que ele faz e chamar `agendar_reuniao` de novo, anunciando uma
+    confirmacao que nunca houve.
 
-    Traz o imovel de cada um porque e assim que a pessoa se refere a eles —
-    "aquele da Mooca", e nao "o das 10h". Sem o titulo aqui, o modelo vai
-    procurar a ligacao no historico da conversa, onde encontra IDs de
-    compromissos que ja foram apagados.
+    E um so por pessoa, cobrado por indice unico no banco. O que sera visitado
+    nao aparece aqui: mora na `observacoes` do compromisso, que e do corretor.
+    A conversa precisa do horario, e e o horario que entra.
 
-    O aviso sobre o historico existe pelo mesmo motivo: esta lista e a verdade
-    do banco agora, e o que passou na conversa pode ter mudado desde entao.
+    O aviso sobre o historico existe porque esta e a verdade do banco agora, e
+    o que passou na conversa pode ter mudado desde entao.
     """
     with get_db() as db:
         itens = compromissos_ativos(lead_id, db)
     if not itens:
         return (
-            "Compromissos marcados: nenhum. Se a conversa mencionar algum, ele "
+            "Compromisso marcado: nenhum. Se a conversa mencionar algum, ele "
             "foi cancelado ou já aconteceu."
         )
 
-    linhas = []
-    for id_, tipo, quando, status, imovel in itens:
-        onde = f", {imovel}" if imovel else ""
-        linhas.append(
-            f"- ID {id_}: {tipo} em {formatar(quando)}{onde} ({status})"
-        )
-
-    qual = "estes IDs" if len(itens) > 1 else "este ID"
+    id_, tipo, quando, status = itens[0]
     return (
-        f"Compromissos marcados ({len(itens)}) — esta é a lista completa e "
-        f"atual. Use {qual} para confirmar ou cancelar, e ignore "
-        f"qualquer ID citado antes na conversa:\n" + "\n".join(linhas)
+        "Compromisso marcado — é um só, e esta é a verdade do banco agora. "
+        "Ignore qualquer ID citado antes na conversa:\n"
+        f"- ID {id_}: {tipo} em {formatar(quando)} ({status})"
     )
 
 

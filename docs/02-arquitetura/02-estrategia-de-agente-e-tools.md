@@ -226,8 +226,11 @@ perguntou em seguida. Sem registro durável, responder "quantas vagas tem o de
 66 m²" custava uma busca inteira: dezenas de milhares de tokens, meio minuto, e
 imóveis diferentes dos que ela tinha visto.
 
-É o mesmo registro que sustenta o agendamento. `agendar_reuniao` exige
-`imovel_id`, e um ID perdido no truncamento deixaria a visita sem imóvel.
+É o mesmo registro que sustenta o agendamento. O compromisso não aponta para
+uma linha do catálogo: quem diz ao corretor o que será visitado é a
+`observacoes`, com o ID de cada imóvel — e a tool recusa a visita cuja
+observação não cita nenhum dos que esta pessoa viu. Um ID perdido no
+truncamento deixaria o corretor com um horário e nada mais.
 
 No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
 separados (ADR 0004), e nada aqui pode depender de qual deles atendeu o turno

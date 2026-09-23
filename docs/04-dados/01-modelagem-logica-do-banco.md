@@ -370,9 +370,14 @@ Persistir visitas e reuniões associadas a um lead.
 | `lead_id` | `BIGINT` | Não |  | FK para `leads.id` |
 | `tipo` | `VARCHAR(20)` | Não |  | `visita` ou `reuniao` |
 | `data_hora` | `TIMESTAMPTZ` | Não |  | Data/hora do compromisso |
-| `observacoes` | `TEXT` | Sim |  | Observações livres |
+| `observacoes` | `TEXT` | Sim |  | O que o corretor lê antes de ir, inclusive os imóveis que a pessoa quer ver, com ID |
 | `status` | `VARCHAR(20)` | Não |  | `pendente`, `confirmado`, `cancelado`, `realizado` |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
+
+Não há vínculo com `imoveis`. Quem visita raramente visita um imóvel só, e uma
+FK única obrigaria a escolher um deles e perder o resto — os imóveis de
+interesse vão escritos na `observacoes`, que é o que o corretor lê junto do
+perfil narrativo e do resumo executivo.
 
 ### 6.3 Constraints recomendadas
 
@@ -393,7 +398,19 @@ FOREIGN KEY (lead_id) REFERENCES leads(id)
 CREATE INDEX idx_agendamentos_lead_id ON agendamentos(lead_id);
 CREATE INDEX idx_agendamentos_data_hora ON agendamentos(data_hora);
 CREATE INDEX idx_agendamentos_status_data_hora ON agendamentos(status, data_hora);
+
+-- Um compromisso de pe por lead.
+CREATE UNIQUE INDEX uq_agendamentos_ativo_por_lead
+ON agendamentos (lead_id)
+WHERE status IN ('pendente', 'confirmado');
 ```
+
+O índice único é parcial de propósito: `cancelado` e `realizado` se repetem à
+vontade, porque são o histórico de onde o corretor tira que a pessoa já
+desmarcou uma vez. A regra morava só no código da aplicação e não se
+sustentou — um lead chegou a ter duas visitas `pendente` ao mesmo tempo,
+marcadas em turnos diferentes, porque o modelo não acertou o `agendamento_id`
+na hora de remarcar.
 
 ---
 

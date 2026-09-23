@@ -20,11 +20,14 @@ from typing import Optional
 
 import streamlit as st
 
-from src.db.models import Agendamento, Imovel, Lead
+from src.db.models import Agendamento, Lead
 from src.db.session import get_db
 from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
-from src.services.scheduling_service import SchedulingService
+from src.services.scheduling_service import (
+    CompromissoJaMarcado,
+    SchedulingService,
+)
 from src.tempo import agora, formatar, para_exibir, para_guardar
 from src.ui.conversa import (
     custo_da_conversa,
@@ -592,23 +595,6 @@ def _resumo_para_o_corretor(lead: Lead) -> None:
     st.markdown(markdown_seguro(lead.resumo))
 
 
-def _opcoes_de_imovel(db) -> list[tuple[Optional[int], str]]:
-    """(id, rótulo) dos imóveis disponíveis, com uma opção vazia na frente.
-
-    Só id e título: carregar o objeto inteiro de 300 imóveis a cada render da
-    ficha seria pagar caro por dois campos.
-    """
-    linhas = (
-        db.query(Imovel.id, Imovel.titulo, Imovel.bairro)
-        .filter(Imovel.disponivel.is_(True))
-        .order_by(Imovel.titulo)
-        .all()
-    )
-    return [(None, "— nenhum —")] + [
-        (id_, f"#{id_} · {titulo} ({bairro})") for id_, titulo, bairro in linhas
-    ]
-
-
 def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> None:
     """Cria um agendamento, ou reescreve um existente.
 
@@ -619,7 +605,6 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
     editando = agendamento_id is not None
 
     with get_db() as db:
-        opcoes = _opcoes_de_imovel(db)
         atual = SchedulingService().get(agendamento_id, db) if editando else None
         if editando and atual is None:
             st.error("Agendamento não encontrado. Ele pode ter sido excluído.")
@@ -632,11 +617,7 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
             ),
             "status": atual.status if atual else "pendente",
             "observacoes": (atual.observacoes if atual else "") or "",
-            "imovel_id": atual.imovel_id if atual else None,
         }
-
-    ids = [id_ for id_, _ in opcoes]
-    rotulos = dict(opcoes)
 
     with st.form(f"agendamento_{agendamento_id or 'novo'}"):
         col_tipo, col_data, col_hora = st.columns(3)
@@ -649,17 +630,12 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
             "Hora", value=inicial["quando"].time(), step=timedelta(minutes=15)
         )
 
-        imovel_id = st.selectbox(
-            "Imóvel",
-            ids,
-            index=ids.index(inicial["imovel_id"])
-            if inicial["imovel_id"] in ids else 0,
-            format_func=lambda i: rotulos[i],
-            help="Opcional. Uma reunião de alinhamento não precisa de imóvel.",
-        )
         observacoes = st.text_area(
-            "Observações", value=inicial["observacoes"], height=90,
-            placeholder="O que o corretor precisa saber antes de ir.",
+            "Observações", value=inicial["observacoes"], height=140,
+            placeholder=(
+                "Os imóveis que a pessoa quer ver, com o ID de cada um, e o "
+                "que pesa na decisão dela. É o que você lê antes de ir."
+            ),
         )
         status = (
             st.selectbox(
@@ -686,19 +662,28 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
         # O formulário devolve hora de São Paulo; o banco guarda em UTC.
         quando = para_guardar(datetime.combine(data, hora))
         servico = SchedulingService()
-        with get_db() as db:
-            if editando:
-                servico.editar(
-                    agendamento_id, db, tipo=tipo, data_hora=quando,
-                    status=status, observacoes=observacoes.strip() or None,
-                    imovel_id=imovel_id,
-                )
-            else:
-                servico.create(
-                    lead_id=lead.id, tipo=tipo, data_hora=quando,
-                    observacoes=observacoes.strip() or None, db=db,
-                    imovel_id=imovel_id,
-                )
+        try:
+            with get_db() as db:
+                if editando:
+                    servico.editar(
+                        agendamento_id, db, tipo=tipo, data_hora=quando,
+                        status=status, observacoes=observacoes.strip() or None,
+                    )
+                else:
+                    servico.create(
+                        lead_id=lead.id, tipo=tipo, data_hora=quando,
+                        observacoes=observacoes.strip() or None, db=db,
+                    )
+        except CompromissoJaMarcado as conflito:
+            # O indice unico recusaria do mesmo jeito, mas com erro de banco
+            # na tela. Aqui o corretor le o que ja esta marcado e decide.
+            st.error(
+                f"Este lead já tem {conflito.existente.tipo} em "
+                f"{formatar(conflito.existente.data_hora)}, e só se permite um "
+                f"compromisso de pé. Cancele esse antes de marcar outro."
+            )
+            return
+
         st.session_state.pop(CHAVE_AGENDAMENTO, None)
         st.toast(
             "Agendamento salvo." if editando else "Agendamento criado.",
@@ -749,17 +734,20 @@ def _agendamentos(lead: Lead) -> None:
 
     with get_db() as db:
         itens = [
-            (
-                a.id, a.tipo, a.data_hora, a.status,
-                a.imovel.titulo if a.imovel else None,
-                a.imovel.id if a.imovel else None,
-                a.observacoes,
-            )
+            (a.id, a.tipo, a.data_hora, a.status, a.observacoes)
             for a in SchedulingService().list_by_lead(lead.id, db)
         ]
+        tem_ativo = SchedulingService().tem_compromisso_ativo(lead.id, db)
 
+    # Desabilitado com compromisso de pe, em vez de escondido: sumindo, o
+    # botao parece um defeito da tela. Assim o motivo vem junto.
     if st.button(
-        "Novo agendamento", icon=":material/event:", key=f"novo_ag_{lead.id}"
+        "Novo agendamento", icon=":material/event:", key=f"novo_ag_{lead.id}",
+        disabled=tem_ativo,
+        help=(
+            "Este lead já tem um compromisso de pé — cancele-o antes"
+            if tem_ativo else "Marcar visita ou reunião para este lead"
+        ),
     ):
         st.session_state[CHAVE_AGENDAMENTO] = (lead.id, None)
         st.rerun()
@@ -768,15 +756,13 @@ def _agendamentos(lead: Lead) -> None:
         st.caption("Nenhum agendamento para este lead.")
         return
 
-    for id_, tipo, data_hora, status, titulo, imovel_id, observacoes in itens:
+    for id_, tipo, data_hora, status, observacoes in itens:
         with st.container(border=True):
             col_quando, col_status, col_acoes = st.columns(
                 [7, 3, 2], vertical_alignment="center"
             )
             with col_quando:
                 st.markdown(f"**{tipo.capitalize()}** · {formatar(data_hora)}")
-                if titulo:
-                    st.caption(f":material/home: #{imovel_id} · {titulo}")
                 if observacoes:
                     st.caption(markdown_seguro(observacoes))
             with col_status:

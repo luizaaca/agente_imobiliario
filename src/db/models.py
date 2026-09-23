@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -121,7 +122,6 @@ class Agendamento(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     lead_id: Mapped[int] = mapped_column(ForeignKey("leads.id"), nullable=False)
-    imovel_id: Mapped[Optional[int]] = mapped_column(ForeignKey("imoveis.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(String(20), nullable=False)
     data_hora: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     observacoes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -129,11 +129,19 @@ class Agendamento(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     lead: Mapped["Lead"] = relationship(back_populates="agendamentos")
-    imovel: Mapped[Optional["Imovel"]] = relationship()
 
     __table_args__ = (
         CheckConstraint("tipo IN ('visita','reuniao')", name="check_tipo_agendamento"),
         CheckConstraint("status IN ('pendente','confirmado','cancelado','realizado')", name="check_status_agendamento"),
+        # Um compromisso de pe por lead, cobrado pelo banco. A regra morava so
+        # no codigo e nao se sustentou: um lead chegou a ter duas visitas
+        # pendentes ao mesmo tempo. Parcial de proposito — cancelado e
+        # realizado se repetem a vontade, porque sao o historico de onde o
+        # corretor tira que a pessoa ja desmarcou uma vez.
+        Index(
+            "uq_agendamentos_ativo_por_lead", "lead_id", unique=True,
+            postgresql_where=text("status IN ('pendente', 'confirmado')"),
+        ),
     )
 
     def __repr__(self) -> str:

@@ -170,8 +170,9 @@ tudo de novo. Medido numa conversa real: *"o que os condomínios oferecem,
 piscina, vagas?"* disparou uma busca completa de **25.523 tokens de entrada e
 29 segundos**, que ainda trouxe imóveis diferentes dos que a pessoa tinha visto.
 
-É também por aqui que o `imovel_id` de `agendar_reuniao` é recuperado quando o
-truncamento do histórico o levou embora.
+É também por aqui que o agente recupera o ID de cada imóvel para escrever na
+`observacoes` de `agendar_reuniao`, quando o truncamento do histórico o levou
+embora.
 
 ### De onde vêm os IDs
 Do `metadata_json` das mensagens de ferramenta, onde cada busca grava o que
@@ -299,8 +300,8 @@ Registrar visita ou reunião para handover ao corretor.
 ### Input esperado
 - `tipo` (`visita` ou `reuniao`)
 - `data_hora`
-- `observacoes` (opcional)
-- `imovel_id` (opcional, quando aplicável)
+- `observacoes` — o que o corretor lê antes de ir
+- `remarcar` (default `false`)
 
 ### Output esperado
 - agendamento criado;
@@ -308,21 +309,49 @@ Registrar visita ou reunião para handover ao corretor.
 - dados principais do compromisso.
 
 ### Efeitos colaterais
-Criação de registro de agendamento e possível atualização do status do lead.
+Criação do registro, recálculo do score e possível mudança de status do lead —
+os três saem de `SchedulingService.sincronizar_lead_com_a_agenda`.
 
 ### Regras
-- não criar agendamento sem dados mínimos;
-- validar formato de data/hora;
-- registrar observações relevantes para o corretor;
-- **idempotente**: mesmo lead, mesma data e hora, mesmo imóvel e ainda de pé
-  devolve o compromisso existente em vez de criar outro. Sem isso, pedir duas
-  vezes a mesma visita — o que acontece quando o modelo não acha a ferramenta
-  certa, e quando alguém clica duas vezes na tela — põe dois compromissos na
-  agenda do corretor para o mesmo horário.
+
+**Um compromisso de pé por pessoa.** O corretor vai uma vez e vê com ela os
+imóveis que ela quiser; não se marca uma visita por imóvel. A regra é cobrada
+por índice único parcial sobre `lead_id` para os status ativos — ela morava só
+no código e não se sustentou, e um lead chegou a ter duas visitas `pendente` ao
+mesmo tempo.
+
+**Marcar sobre um compromisso existente avisa e não marca.** O retorno diz qual
+é o compromisso de pé e pede que o agente combine a troca com a pessoa; só com
+o sim dela ele chama de novo com `remarcar=true`. Volta como retorno, e não
+como `ModelRetry`, porque a correção não está com o modelo: está com a pessoa.
+Uma retentativa imediata marcaria por cima de um compromisso que ela talvez
+queira manter.
+
+**Remarcar cancela e cria.** Duas linhas, e não uma reescrita: o compromisso
+antigo fica no histórico com a nota *"Remarcado para …"* na `observacoes`. Sem
+a nota o corretor lê o cancelamento como desistência; sem a linha, ninguém vê
+que a pessoa já trocou de data uma vez.
+
+**A `observacoes` é o vínculo com os imóveis.** O agendamento não aponta para
+uma linha do catálogo: quem diz o que será visitado é esse texto, com o ID de
+cada imóvel — *"Quer ver os imóveis 142 (sobrado na Mooca) e 144 (Tatuapé)"*. É
+o que o corretor lê junto do perfil narrativo e do resumo executivo, e é por
+isso que uma `visita` cuja observação não cita nenhum imóvel **já apresentado a
+esta pessoa** é recusada com `ModelRetry`. A conferência é contra os IDs que ela
+viu, e não contra qualquer número no texto: *"sábado às 10h"* tem dígito e não
+diz imóvel nenhum. Quando nada foi apresentado — lead criado à mão, conversa
+que começou pelo agendamento — não há o que cobrar.
+
+**Idempotente**: mesmo lead, mesmo tipo, mesma data e hora, e ainda de pé
+devolve o compromisso existente em vez de recusar. Pedir duas vezes o mesmo
+horário é o que o duplo clique na tela faz, e o que o modelo faz quando repete
+a chamada sem ter lido o retorno da primeira.
 
 ### Erros tratáveis
 - lead inexistente;
 - data inválida;
+- compromisso já marcado (`CompromissoJaMarcado`, traduzido em aviso para o
+  agente e em mensagem na tela para o corretor);
 - falha de persistência.
 
 ---

@@ -30,7 +30,6 @@ class AgendamentoCreate(BaseModel):
     tipo: TipoAgendamento
     data_hora: datetime
     observacoes: Optional[str] = None
-    imovel_id: Optional[int] = None
 
 
 class AgendamentoResponse(AgendamentoCreate):
