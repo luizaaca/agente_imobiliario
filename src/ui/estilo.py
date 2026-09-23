@@ -194,6 +194,7 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
    toda linha da tabela. */
 [class*="st-key-acao_abrir_"] button,
 [class*="st-key-acao_editar_"] button,
+[class*="st-key-acao_followup_"] button,
 [class*="st-key-acao_excluir_"] button,
 [class*="st-key-editar_ag_"] button,
 [class*="st-key-excluir_ag_"] button,
@@ -209,6 +210,7 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 }}
 [class*="st-key-acao_abrir_"] button:hover,
 [class*="st-key-acao_editar_"] button:hover,
+[class*="st-key-acao_followup_"] button:hover,
 [class*="st-key-editar_ag_"] button:hover,
 .st-key-voltar_da_ficha button:hover,
 .st-key-acao_followup_da_ficha button:hover {{
@@ -222,6 +224,18 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 .st-key-acao_excluir_da_ficha button:hover {{
   color: #DC2626 !important;
   background: rgba(220, 38, 38, 0.10) !important;
+}}
+
+/* Na tabela de leads, excluir se afasta das outras duas. Disparar follow-up
+   manda mensagem para uma pessoa de verdade e excluir apaga o lead: sao as
+   duas acoes com consequencia da linha, e encostadas uma na outra a mao erra
+   de botao. O vao sai da folga que a propria coluna ja tem a direita, entao
+   nada e empurrado para fora.
+
+   So aqui: na lista de agendamentos a vizinha de excluir e editar, que nao
+   tem consequencia nenhuma. */
+.st-key-tabela_de_leads [class*="st-key-acao_excluir_"] button {{
+  margin-left: 14px !important;
 }}
 
 /* Acoes do cabecalho da ficha: mesmo desenho, um tamanho acima, e o icone
