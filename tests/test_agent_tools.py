@@ -195,6 +195,7 @@ def test_agendar_reuniao_cria_agendamento(llm_fake, catalogo, lead_id, deps, db)
     modelo = llm_fake(
         ("agendar_reuniao", {
             "tipo": "visita", "data_hora": "2027-03-10 15:00",
+            "observacoes": "Quer ver o imóvel 142.",
         }),
         "Agendado!",
     )
@@ -313,6 +314,7 @@ def test_encerrar_por_desistencia_com_visita_de_pe_e_recusado(
     conversar("quero visitar", lead_id, deps, llm_fake(
         ("agendar_reuniao", {
             "tipo": "visita", "data_hora": "2027-03-10 15:00",
+            "observacoes": "Quer ver o imóvel 142.",
         }),
         "Agendado!",
     ))
@@ -697,6 +699,7 @@ def test_agendar_sobre_compromisso_de_pe_nao_derruba_o_turno(
     modelo = llm_fake(
         ("agendar_reuniao", {
             "tipo": "visita", "data_hora": "2027-03-10 15:00",
+            "observacoes": "Quer ver o imóvel 142.",
         }),
         "Voce ja tem uma visita marcada. Quer trocar?",
     )

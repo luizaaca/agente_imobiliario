@@ -187,25 +187,24 @@ dois.
 ## 2b. `listar_agendamentos`
 
 ### Objetivo
-Devolver os compromissos de pé do lead, com o ID de cada um.
+Devolver o compromisso de pé do lead.
 
 ### Input esperado
 Nenhum: o lead vem das dependências.
 
 ### Output esperado
-O mesmo texto que abre as instruções — id, tipo, data e imóvel de cada
-compromisso, ou a linha "nenhum".
+O mesmo texto que abre as instruções — tipo, data e status do compromisso, ou
+a linha "nenhum". Sem id: nenhuma tool recebe qual compromisso, então não há o
+que o modelo precise guardar.
 
 ### Efeitos colaterais
 Nenhum.
 
-### Por que existe, se a lista já está nas instruções
+### Por que existe, se a informação já está nas instruções
 Posição. As instruções abrem a requisição; o histórico vem depois delas. Numa
-conversa em que o agente já respondeu várias vezes que não achava os IDs, o
-modelo seguiu o padrão recente e contradisse a própria lista — chegou a chamar
-outra tool como substituto e a relatar honestamente que aquilo não trazia os
-IDs. A tool devolve a mesma verdade na posição mais recente da
-conversa, que é onde o modelo olha.
+conversa em que o agente já tinha repetido que não achava o compromisso, o
+modelo seguiu o padrão recente e contradisse o próprio contexto. A tool devolve
+a mesma verdade na posição mais recente da conversa, que é onde o modelo olha.
 
 ---
 
@@ -335,12 +334,15 @@ que a pessoa já trocou de data uma vez.
 **A `observacoes` é o vínculo com os imóveis.** O agendamento não aponta para
 uma linha do catálogo: quem diz o que será visitado é esse texto, com o ID de
 cada imóvel — *"Quer ver os imóveis 142 (sobrado na Mooca) e 144 (Tatuapé)"*. É
-o que o corretor lê junto do perfil narrativo e do resumo executivo, e é por
-isso que uma `visita` cuja observação não cita nenhum imóvel **já apresentado a
-esta pessoa** é recusada com `ModelRetry`. A conferência é contra os IDs que ela
-viu, e não contra qualquer número no texto: *"sábado às 10h"* tem dígito e não
-diz imóvel nenhum. Quando nada foi apresentado — lead criado à mão, conversa
-que começou pelo agendamento — não há o que cobrar.
+o que o corretor lê junto do perfil narrativo e do resumo executivo, e por isso
+uma `visita` sem observação é recusada com `ModelRetry`, que diz o que
+escrever.
+
+Só se cobra que exista. Conferir o conteúdo — se cita imóvel, se o ID é de um
+já apresentado — é adivinhar a intenção de um texto livre, e erraria nos dois
+sentidos; o preço do falso negativo é recusar um agendamento que a pessoa
+acabou de combinar. Uma `reuniao` não precisa de observação: nem todo encontro
+é num imóvel do catálogo.
 
 **Idempotente**: mesmo lead, mesmo tipo, mesma data e hora, e ainda de pé
 devolve o compromisso existente em vez de recusar. Pedir duas vezes o mesmo
@@ -359,17 +361,20 @@ a chamada sem ter lido o retorno da primeira.
 ## 5.1 `confirmar_agendamento` e `cancelar_agendamento`
 
 ### Objetivo
-Mover um compromisso existente para `confirmado` ou `cancelado`, a partir do
-que a pessoa disse na conversa.
+Mover o compromisso do lead para `confirmado` ou `cancelado`, a partir do que a
+pessoa disse na conversa.
 
 ### Input esperado
-- `agendamento_id` — de um compromisso listado no contexto do lead
 - `motivo` (só no cancelamento) — o que a pessoa deu como razão, até 120 caracteres
+
+Nenhuma das duas recebe **qual** compromisso. É um de pé por pessoa, e o
+serviço o encontra pelo lead do turno.
 
 ### Output esperado
 - confirmação do novo estado, com tipo e data do compromisso;
-- recusa explicativa quando o id não existe, não é deste lead, ou o
-  compromisso já está no estado pedido.
+- quando não há compromisso de pé, uma recusa que aponta a saída: marcar com
+  `agendar_reuniao`, ou dizer à pessoa que o que ela cita já foi cancelado ou
+  já aconteceu.
 
 ### Efeitos colaterais
 Mudança de status do agendamento. O cancelamento grava também uma mensagem
@@ -379,37 +384,41 @@ Sendo o último compromisso de pé, o lead sai de `agendado`.
 ### Regras
 - só agir sobre decisão explícita: hesitação (*"acho que consigo"*, *"vou
   ver"*) não confirma nem cancela;
-- nunca usar `agendar_reuniao` para confirmar — isso cria um segundo
-  compromisso em vez de mudar o primeiro;
-- remarcar é cancelar o antigo e marcar o novo.
+- nunca usar `agendar_reuniao` para confirmar — isso avisa que já há
+  compromisso, e não muda o que existe;
+- remarcar não passa por aqui: é `agendar_reuniao` com `remarcar=true`, que
+  cancela o antigo e marca o novo numa chamada só.
 
 ### Erros tratáveis
-- `agendamento_id` inexistente ou de outro lead;
-- compromisso já cancelado ou realizado.
+- nenhum compromisso de pé;
+- compromisso já no estado pedido.
 
-### Por que o id vem do contexto
-As instruções do agente listam os compromissos de pé com id, data **e imóvel**,
-do mais próximo ao mais distante, dizendo que aquela é a lista completa e que
-IDs citados antes na conversa devem ser ignorados.
+### Por que nenhuma delas recebe id
+Porque errá-lo era a falha. Enquanto o `agendamento_id` foi argumento, o modelo
+pegava números antigos do histórico e chamava confirmar sobre um compromisso já
+apagado — e um id de outra pessoa alcançaria a agenda dela, o que obrigava a
+uma checagem de dono em cada tool. Com um compromisso por lead, cobrado por
+índice único, o argumento deixou de ter função: o dono passou a ser o lead do
+turno, por construção.
 
-São `@agent.instructions`, e não `@agent.system_prompt`, por uma razão de
-mecânica: o pydantic-ai só insere o system prompt quando o `message_history`
-chega vazio. Como o histórico é reidratado do banco a cada turno, um system
-prompt valeria apenas na primeira mensagem da conversa — e desta seção
-dependem as duas tools de compromisso.
+O contexto do turno continua trazendo o compromisso, agora sem id, porque a
+conversa precisa saber **quando** ele é. São `@agent.instructions`, e não
+`@agent.system_prompt`, por uma razão de mecânica: o pydantic-ai só insere o
+system prompt quando o `message_history` chega vazio. Como o histórico é
+reidratado do banco a cada turno, um system prompt valeria apenas na primeira
+mensagem da conversa.
 
 Cada parte disso resolve uma falha observada:
 
 | Sem isso | O que acontece |
 |---|---|
-| a lista | o modelo inventa um número ou chama `agendar_reuniao` de novo |
-| o imóvel | *"confirma aquele da Mooca"* não tem como virar um id, e o modelo vai procurar a ligação no histórico — onde encontra compromissos já apagados |
-| o aviso sobre a conversa | o histórico compete com o contexto, e o modelo às vezes acredita nele |
+| o compromisso no contexto | o modelo responde pelo que a conversa disse, e ela envelhece |
+| o aviso de que aquilo vale acima da conversa | o histórico compete com o contexto, e o modelo às vezes acredita nele |
 | a linha "nenhum" quando a agenda está vazia | o silêncio deixa valer o que a conversa disse antes |
 
-A recusa das duas tools também lista os IDs válidos. Só dizer "não existe" faz
-o modelo desistir e repassar o problema à pessoa; com as opções na própria
-recusa, ele pode acertar na retentativa.
+A recusa das duas tools aponta a saída. Só dizer "não existe" faz o modelo
+desistir e repassar o problema à pessoa; com o caminho na própria recusa, ele
+segue sozinho.
 
 ---
 

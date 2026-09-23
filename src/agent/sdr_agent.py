@@ -2,7 +2,6 @@
 
 import functools
 import logging
-import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -753,7 +752,7 @@ async def agendar_reuniao(
 
     with get_db() as db:
         if tipo == "visita":
-            _exigir_imoveis_na_observacao(ctx, observacoes, db)
+            _exigir_observacao(ctx, observacoes)
         try:
             agendamento = ctx.deps.scheduling_service.create(
                 lead_id=ctx.deps.lead_id,
@@ -767,47 +766,40 @@ async def agendar_reuniao(
             return _aviso_de_compromisso_existente(ctx, conflito.existente)
 
         return (
-            f"Agendamento criado com sucesso! (ID: {agendamento.id})\n"
-            f"Tipo: {tipo}\n"
+            f"Agendamento criado com sucesso!\n"
+            f"Tipo: {agendamento.tipo}\n"
             f"Data/Hora: {data_hora}\n"
-            f"Status: pendente"
+            f"Status: {agendamento.status}"
             + _falta_para_o_corretor(ctx, db)
         )
 
 
-def _exigir_imoveis_na_observacao(
-    ctx: RunContext[SDRDependencies], observacoes: Optional[str], db
-) -> None:
-    """Recusa a visita cuja observação não cita nenhum imóvel apresentado.
+def _exigir_observacao(ctx: RunContext[SDRDependencies], observacoes) -> None:
+    """Recusa a visita que chega sem observação.
 
-    O compromisso não aponta mais para uma linha do catálogo: quem diz o que
-    será visitado é este texto, e é ele que o corretor lê. Vazio, o handover
-    vira um horário e nada mais — aconteceu de verdade, com o agente marcando
-    "sábado às 10h na Bela Vista" e o corretor sem saber aonde ir.
+    O compromisso não aponta para uma linha do catálogo: quem diz o que será
+    visitado é este texto, e é ele que o corretor lê junto do perfil e do
+    resumo. Vazio, o handover vira um horário e nada mais — aconteceu de
+    verdade, com o agente marcando "sábado às 10h na Bela Vista" e o corretor
+    sem saber aonde ir.
 
-    A conferência é contra os IDs que ESTA pessoa viu, e não contra qualquer
-    número no texto: "sábado às 10h" tem dígitos e não diz imóvel nenhum.
-    Quando nada foi apresentado — lead criado à mão, conversa que começou pelo
-    agendamento — não há o que cobrar.
+    Só cobra que exista. Conferir o conteúdo — se cita imóvel, se o ID é de um
+    já apresentado — é adivinhar a intenção de um texto livre, e a ferramenta
+    erraria nos dois sentidos.
     """
-    mostrados = ctx.deps.lead_service.imoveis_apresentados(ctx.deps.lead_id, db)
-    texto = observacoes or ""
-    if not mostrados or any(
-        re.search(rf"\b{imovel_id}\b", texto) for imovel_id in mostrados
-    ):
+    if (observacoes or "").strip():
         return
 
     logger.info(
-        "event=visita_sem_imovel_na_observacao lead_id=%s acao=recusada",
-        ctx.deps.lead_id,
+        "event=visita_sem_observacao lead_id=%s acao=recusada", ctx.deps.lead_id
     )
     raise ModelRetry(
-        "Esta visita não diz o que será visitado. O agendamento não guarda "
-        "mais o imóvel em campo próprio — quem diz isso ao corretor é a "
+        "Esta visita não diz o que será visitado. O agendamento não guarda o "
+        "imóvel em campo próprio — quem diz isso ao corretor é a "
         "`observacoes`, e é ela que ele lê junto do perfil e do resumo. "
         "Chame de novo com os imóveis que a pessoa quer ver e o ID de cada "
-        f"um, escolhidos entre os que você já apresentou: {mostrados}. Se não "
-        "lembrar de qual é qual, `detalhar_imoveis` devolve as fichas na hora."
+        "um, e com o que pesa na decisão dela. Se não lembrar de qual imóvel "
+        "é qual, `detalhar_imoveis` devolve as fichas na hora."
     )
 
 
@@ -832,8 +824,7 @@ def _aviso_de_compromisso_existente(
         f"um compromisso por vez. Nada foi alterado.\n"
         f"Pergunte a ela se quer trocar por este novo horário. Se ela disser "
         f"que sim, chame esta ferramenta de novo com `remarcar=true`. Se ela "
-        f"só quis confirmar o que já existe, use `confirmar_agendamento` com "
-        f"o ID {existente.id}."
+        f"só quis confirmar o que já existe, use `confirmar_agendamento`."
     )
 
 
@@ -862,123 +853,85 @@ def _falta_para_o_corretor(ctx: RunContext[SDRDependencies], db) -> str:
     )
 
 
-def _compromisso_do_lead(ctx, agendamento_id: int, db):
-    """Busca o agendamento garantindo que ele e deste lead.
-
-    Sem a checagem de dono, um id vindo do modelo poderia alcancar o
-    compromisso de outra pessoa. O erro volta como texto para o modelo se
-    corrigir.
-    """
-    agendamento = ctx.deps.scheduling_service.get(agendamento_id, db)
-    if agendamento is None or agendamento.lead_id != ctx.deps.lead_id:
-        logger.warning(
-            "event=agendamento_inexistente_para_o_lead lead_id=%s "
-            "agendamento_id=%s",
-            ctx.deps.lead_id, agendamento_id,
-        )
-        return None
-    return agendamento
-
-
-def _erro_de_id(ctx, agendamento_id: int, db) -> str:
-    """Recusa que ja traz os IDs validos, para o modelo se corrigir sozinho.
-
-    So dizer "nao existe" faz o modelo desistir e contar isso a pessoa — foi o
-    que aconteceu quando ele pegou um ID antigo no historico e respondeu que
-    nao conseguia confirmar. Com a lista na propria recusa, ele tem como
-    acertar na retentativa, sem passar o problema adiante.
-    """
-    itens = compromissos_ativos(ctx.deps.lead_id, db)
-    if not itens:
-        return (
-            f"Não existe compromisso {agendamento_id}, e esta pessoa não tem "
-            f"nenhum marcado. Para criar um, use `agendar_reuniao`."
-        )
-
-    disponiveis = "; ".join(
-        f"ID {id_}: {tipo} em {formatar(quando)}"
-        for id_, tipo, quando, _ in itens
-    )
-    return (
-        f"Não existe compromisso {agendamento_id} para esta pessoa. Os que "
-        f"existem agora são: {disponiveis}. Chame a ferramenta de novo com um "
-        f"destes IDs."
-    )
+# O que confirmar e cancelar respondem quando não há o que confirmar ou
+# cancelar. Dizer só "não existe" fazia o modelo desistir e contar isso à
+# pessoa; com a saída na própria recusa, ele segue sozinho.
+SEM_COMPROMISSO = (
+    "Esta pessoa não tem compromisso de pé. Se ela quer marcar um, use "
+    "`agendar_reuniao`; se ela está falando de algo que já aconteceu ou que "
+    "já foi cancelado, diga isso a ela em vez de mexer na agenda."
+)
 
 
 @sdr_agent.tool
 @_instrumentada
 async def listar_agendamentos(ctx: RunContext[SDRDependencies]) -> str:
-    """Consultar os compromissos marcados desta pessoa, com o ID de cada um.
+    """Consultar o compromisso marcado desta pessoa.
 
-    Use quando ela perguntar o que tem marcado ou quando for a visita, e antes
-    de confirmar ou cancelar se você não tiver certeza de qual é o ID. A
+    Use quando ela perguntar o que tem marcado ou quando for a visita. A
     resposta vem do banco no momento da chamada.
 
-    A mesma lista abre as suas instruções, mas ali ela fica antes de toda a
-    conversa; chamando aqui você a recebe agora, depois dela.
+    A mesma informação abre as suas instruções, mas ali ela fica antes de toda
+    a conversa; chamando aqui você a recebe agora, depois dela.
     """
     return texto_dos_compromissos(ctx.deps.lead_id)
 
 
 @sdr_agent.tool
 @_instrumentada
-async def confirmar_agendamento(
-    ctx: RunContext[SDRDependencies],
-    agendamento_id: Annotated[int, Field(description=(
-        "ID de um compromisso listado no contexto do lead. Não invente e não "
-        "use IDs de imóvel."))],
-) -> str:
-    """Marcar como confirmado um compromisso que a pessoa disse que vai cumprir.
+async def confirmar_agendamento(ctx: RunContext[SDRDependencies]) -> str:
+    """Marcar como confirmado o compromisso que a pessoa disse que vai cumprir.
 
     Só quando ela confirmar de forma clara. Diante de hesitação ou de resposta
     vaga, não chame esta ferramenta: pergunte.
+
+    Não recebe qual compromisso: é um só por pessoa, e o serviço o encontra
+    pelo lead. Enquanto o ID era argumento, errá-lo alcançava o compromisso de
+    outra pessoa — e o modelo o errava, pegando números antigos na conversa.
     """
     with get_db() as db:
-        agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
+        agendamento = ctx.deps.scheduling_service.compromisso_ativo(
+            ctx.deps.lead_id, db
+        )
         if agendamento is None:
-            return _erro_de_id(ctx, agendamento_id, db)
+            return SEM_COMPROMISSO
         if agendamento.status == "confirmado":
-            return f"O compromisso {agendamento_id} já estava confirmado."
-        if agendamento.status not in SchedulingService.STATUS_ATIVOS:
             return (
-                f"O compromisso {agendamento_id} está {agendamento.status} e "
-                f"não pode ser confirmado. Marque um novo se for o caso."
+                f"A {agendamento.tipo} de "
+                f"{formatar(agendamento.data_hora)} já estava confirmada."
             )
 
         atual = ctx.deps.scheduling_service.update_status(
-            agendamento_id, "confirmado", db
+            agendamento.id, "confirmado", db
         )
-        return (
-            f"Compromisso {agendamento_id} confirmado: {atual.tipo} em "
-            f"{formatar(atual.data_hora)}."
-        )
+        return f"Confirmado: {atual.tipo} em {formatar(atual.data_hora)}."
 
 
 @sdr_agent.tool
 @_instrumentada
 async def cancelar_agendamento(
     ctx: RunContext[SDRDependencies],
-    agendamento_id: Annotated[int, Field(description=(
-        "ID de um compromisso listado no contexto do lead."))],
     motivo: Annotated[str, Field(max_length=120, description=(
         "O que a pessoa disse, em poucas palavras. Ex.: viajou na data."))],
 ) -> str:
-    """Cancelar um compromisso que a pessoa disse que não vai cumprir.
+    """Cancelar o compromisso que a pessoa disse que não vai cumprir.
 
     Só com uma decisão explícita dela. "Acho que não consigo" ou "vou ver" não
     é cancelamento — é dúvida, e o caminho é perguntar ou oferecer remarcar.
     Cancelar tira um compromisso da agenda do corretor.
+
+    Para remarcar não use esta ferramenta: `agendar_reuniao` com
+    `remarcar=true` faz as duas coisas e deixa o motivo registrado.
     """
     with get_db() as db:
-        agendamento = _compromisso_do_lead(ctx, agendamento_id, db)
+        agendamento = ctx.deps.scheduling_service.compromisso_ativo(
+            ctx.deps.lead_id, db
+        )
         if agendamento is None:
-            return _erro_de_id(ctx, agendamento_id, db)
-        if agendamento.status == "cancelado":
-            return f"O compromisso {agendamento_id} já estava cancelado."
+            return SEM_COMPROMISSO
 
         tipo, quando = agendamento.tipo, agendamento.data_hora
-        ctx.deps.scheduling_service.update_status(agendamento_id, "cancelado", db)
+        ctx.deps.scheduling_service.update_status(agendamento.id, "cancelado", db)
         ctx.deps.lead_service.save_message(
             lead_id=ctx.deps.lead_id,
             channel=ctx.deps.channel,
@@ -988,8 +941,8 @@ async def cancelar_agendamento(
             db=db,
         )
         return (
-            f"Compromisso {agendamento_id} cancelado: {tipo} em "
-            f"{formatar(quando)}. O corretor verá o motivo registrado."
+            f"Cancelado: {tipo} em {formatar(quando)}. O corretor verá o "
+            f"motivo registrado."
         )
 
 
@@ -1026,12 +979,14 @@ async def encerrar_atendimento(
     follow-up, não você.
     """
     with get_db() as db:
-        compromissos = compromissos_ativos(ctx.deps.lead_id, db)
+        marcado = ctx.deps.scheduling_service.tem_compromisso_ativo(
+            ctx.deps.lead_id, db
+        )
 
     # Os dois desencontros possíveis entre o que o modelo diz e o que o banco
     # mostra. Ambos deixariam a agenda do corretor errada, e nenhum dos dois
     # ele consegue perceber sozinho depois.
-    if desfecho == "agendou" and not compromissos:
+    if desfecho == "agendou" and not marcado:
         logger.info(
             "event=encerramento_sem_compromisso lead_id=%s acao=recusado",
             ctx.deps.lead_id,
@@ -1042,16 +997,16 @@ async def encerrar_atendimento(
             "`agendar_reuniao` antes de encerrar, ou encerre com o desfecho "
             "que realmente aconteceu."
         )
-    if desfecho in DESFECHOS_QUE_ENCERRAM and compromissos:
+    if desfecho in DESFECHOS_QUE_ENCERRAM and marcado:
         logger.info(
             "event=encerramento_com_compromisso_de_pe lead_id=%s acao=recusado",
             ctx.deps.lead_id,
         )
         raise ModelRetry(
-            f"Esta pessoa tem {len(compromissos)} compromisso(s) de pé na "
-            "agenda do corretor. Encerrar agora apagaria o lembrete de "
-            "confirmação e ele iria ao imóvel à toa. Use "
-            "`cancelar_agendamento` primeiro, e só então encerre."
+            "Esta pessoa tem compromisso de pé na agenda do corretor. "
+            "Encerrar agora apagaria o lembrete de confirmação e ele "
+            "iria ao imóvel à toa. Use `cancelar_agendamento` primeiro, "
+            "e só então encerre."
         )
 
     if not await _anotar_no_perfil(ctx, f"Encerrou o atendimento: {motivo}."):
@@ -1188,54 +1143,42 @@ def montar_contexto_do_lead(lead) -> str:
     return "\n\n".join(partes)
 
 
-def compromissos_ativos(lead_id: int, db) -> list[tuple]:
-    """(id, tipo, data_hora, status) dos compromissos de pe.
-
-    Ordenados do mais proximo para o mais distante: "a proxima visita" e a
-    leitura mais comum, e ela precisa estar no topo.
-    """
-    return sorted(
-        (
-            (a.id, a.tipo, a.data_hora, a.status)
-            for a in SchedulingService().list_by_lead(lead_id, db)
-            if a.status in SchedulingService.STATUS_ATIVOS
-        ),
-        key=lambda item: item[2],
-    )
-
-
 def texto_dos_compromissos(lead_id: int) -> str:
-    """O compromisso de pe do lead, com id, em texto para o modelo ler.
+    """O compromisso de pe do lead, em texto para o modelo ler.
 
     Serve as instrucoes e a tool `listar_agendamentos`, que devolvem a mesma
     verdade em posicoes diferentes da conversa: as instrucoes abrem a
     requisicao, a tool responde no fim dela.
 
-    Sem esta linha o modelo nao tem de onde tirar o `agendamento_id` de
-    `confirmar_agendamento` e `cancelar_agendamento` — e, sem ferramenta nem
-    id, o que ele faz e chamar `agendar_reuniao` de novo, anunciando uma
-    confirmacao que nunca houve.
+    Nao traz ID. E um compromisso so por pessoa, cobrado por indice unico no
+    banco, e as tools de confirmar e cancelar agem sobre ele sem receber qual —
+    entao nao ha o que o modelo possa errar nem o que ele precise guardar.
 
-    E um so por pessoa, cobrado por indice unico no banco. O que sera visitado
-    nao aparece aqui: mora na `observacoes` do compromisso, que e do corretor.
-    A conversa precisa do horario, e e o horario que entra.
+    O que sera visitado tambem nao aparece aqui: mora na `observacoes` do
+    compromisso, que e do corretor. A conversa precisa do horario, e e o
+    horario que entra.
 
     O aviso sobre o historico existe porque esta e a verdade do banco agora, e
     o que passou na conversa pode ter mudado desde entao.
     """
     with get_db() as db:
-        itens = compromissos_ativos(lead_id, db)
-    if not itens:
+        agendamento = SchedulingService().compromisso_ativo(lead_id, db)
+        marcado = (
+            (agendamento.tipo, agendamento.data_hora, agendamento.status)
+            if agendamento
+            else None
+        )
+    if marcado is None:
         return (
             "Compromisso marcado: nenhum. Se a conversa mencionar algum, ele "
             "foi cancelado ou já aconteceu."
         )
 
-    id_, tipo, quando, status = itens[0]
+    tipo, quando, status = marcado
     return (
-        "Compromisso marcado — é um só, e esta é a verdade do banco agora. "
-        "Ignore qualquer ID citado antes na conversa:\n"
-        f"- ID {id_}: {tipo} em {formatar(quando)} ({status})"
+        "Compromisso marcado — é um só, e esta é a verdade do banco agora, "
+        f"acima do que a conversa disser:\n- {tipo} em {formatar(quando)} "
+        f"({status})"
     )
 
 

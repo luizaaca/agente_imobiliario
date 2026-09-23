@@ -85,7 +85,7 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
 | `agendar_reuniao` | Registra visita ou reunião no banco |
-| `listar_agendamentos` | Devolve os compromissos de pé do lead, com o ID de cada um |
+| `listar_agendamentos` | Devolve o compromisso de pé do lead — tipo, data e status |
 | `confirmar_agendamento` | Move um compromisso para `confirmado`, quando a pessoa confirma |
 | `cancelar_agendamento` | Move um compromisso para `cancelado`, com o motivo registrado |
 | `encerrar_atendimento` | Fecha o atendimento, entrega o briefing executivo ao corretor e tira o lead da régua |
@@ -228,9 +228,9 @@ imóveis diferentes dos que ela tinha visto.
 
 É o mesmo registro que sustenta o agendamento. O compromisso não aponta para
 uma linha do catálogo: quem diz ao corretor o que será visitado é a
-`observacoes`, com o ID de cada imóvel — e a tool recusa a visita cuja
-observação não cita nenhum dos que esta pessoa viu. Um ID perdido no
-truncamento deixaria o corretor com um horário e nada mais.
+`observacoes`, com o ID de cada imóvel — e a tool recusa a visita que chega sem
+ela. Um ID perdido no truncamento deixaria o corretor com um horário e nada
+mais.
 
 No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
 separados (ADR 0004), e nada aqui pode depender de qual deles atendeu o turno

@@ -242,8 +242,11 @@ escritos ali.
 A mesma observação aparece no **Resumo** do lead, junto do perfil narrativo —
 são os três textos que orientam você antes de ligar ou de sair.
 
-O agente é obrigado a preencher isso: uma visita cuja observação não cita
-nenhum imóvel que ele tenha apresentado à pessoa é recusada na hora.
+O agente é obrigado a preencher isso: uma visita que chega sem observação é
+recusada na hora, com o pedido de escrever os imóveis e o ID de cada um. O
+conteúdo em si não é conferido — adivinhar se um texto livre cita imóvel
+erraria nos dois sentidos, e o preço do engano seria recusar uma visita que a
+pessoa acabou de combinar.
 """,
     ),
     (

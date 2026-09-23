@@ -409,8 +409,9 @@ O índice único é parcial de propósito: `cancelado` e `realizado` se repetem 
 vontade, porque são o histórico de onde o corretor tira que a pessoa já
 desmarcou uma vez. A regra morava só no código da aplicação e não se
 sustentou — um lead chegou a ter duas visitas `pendente` ao mesmo tempo,
-marcadas em turnos diferentes, porque o modelo não acertou o `agendamento_id`
-na hora de remarcar.
+marcadas em turnos diferentes, porque o modelo não acertou o id na hora de
+remarcar. Com a unicidade garantida aqui, as tools de confirmar e cancelar
+deixaram de receber qual compromisso: o dono é o lead do turno.
 
 ---
 
