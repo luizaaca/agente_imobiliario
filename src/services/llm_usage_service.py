@@ -126,6 +126,20 @@ class LLMUsageService:
             .scalar() or 0
         )
 
+    def get_conversation_cost(self, lead_id: int, db: Session) -> float:
+        """Custo estimado de uma conversa inteira, em USD.
+
+        Soma tudo que o lead consumiu: os turnos de chat, as idas do agente de
+        busca ao catálogo e a consolidação do perfil. Quem olha uma conversa
+        quer saber o que ela custou, e não o que cada agente custou dentro
+        dela.
+        """
+        return float(
+            db.query(func.sum(LLMUsage.estimated_cost_usd))
+            .filter(LLMUsage.lead_id == lead_id)
+            .scalar() or 0.0
+        )
+
     def get_conversation_turns(self, lead_id: int, db: Session) -> int:
         """Total de turnos de chat de uma conversa.
 

@@ -30,6 +30,20 @@ def e_admin(papeis: Optional[Sequence[str]]) -> bool:
     return PAPEL_ADMIN in (papeis or [])
 
 
+def ve_os_bastidores(papeis: Optional[Sequence[str]]) -> bool:
+    """Se este usuario enxerga o que a conversa custou e o que rodou por baixo.
+
+    Custo em dolar do provider e SQL do agente de busca sao informacao de quem
+    opera a aplicacao. Na ficha do corretor eles nao ajudam a atender ninguem
+    e ainda afastam uma fala da seguinte.
+
+    E o mesmo papel do simulador, e de proposito: admin e quem enxerga a
+    maquina. Existe com nome proprio para a chamada na tela dizer o que esta
+    em jogo — a regra e a visibilidade, nao o cargo.
+    """
+    return e_admin(papeis)
+
+
 def papeis_da_sessao() -> list[str]:
     """Papeis do usuario logado, como o authenticator os deixou na sessao."""
     return list(st.session_state.get("roles") or [])

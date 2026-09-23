@@ -332,6 +332,32 @@ está tudo bem quando nada foi exercitado.
 
 ---
 
+## 7.1 Custo por conversa
+
+O dashboard responde "quanto a aplicação gastou hoje". Quem olha um lead tem
+outra pergunta: **quanto custou esta conversa**. A resposta aparece na aba
+**Conversa** da ficha do lead e no cabeçalho do simulador, numa linha:
+
+```
+148.584 / 400.000 tokens · US$ 0.1585 estimados
+```
+
+O numerador soma tudo que o lead consumiu — turnos de chat, idas do agente de
+busca ao catálogo e consolidação do perfil. Quem olha uma conversa quer saber
+o que ela custou, e não o que cada agente custou dentro dela.
+
+O denominador é `LLM_MAX_TOKENS_PER_CONVERSATION`, o teto que entrega o
+atendimento ao corretor no instante em que é atingido. Sem ele, o número diria
+quanto se gastou sem dizer o quanto falta, e o handover chegaria sem aviso.
+
+A linha é do `admin`. Para o corretor, `custo_da_conversa` devolve vazio antes
+de consultar o banco: a tela dele não paga consulta por um número que não vai
+mostrar. Na mesma aba, e pelo mesmo critério, os painéis com o SQL do agente de
+busca e o retorno cru de cada ferramenta também só existem para o `admin` —
+veja [papéis e o que cada um enxerga](03-autenticacao-da-ui.md#5-papéis-e-o-que-cada-um-enxerga).
+
+---
+
 ## 8. Variáveis de ambiente
 
 ```env

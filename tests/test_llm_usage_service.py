@@ -111,3 +111,38 @@ def test_resumo_do_dashboard_carrega_as_metricas_novas(servico, lead_id, db):
     assert resumo["daily_error_rate"] == 0.0
     assert resumo["daily_budget_exceeded"] is False
     assert resumo["monthly_budget_exceeded"] is False
+
+def test_custo_da_conversa_soma_todas_as_operacoes(servico, lead_id, db):
+    """Chat, busca e perfil gastam do mesmo bolso, e é o bolso que interessa."""
+    for operacao, entrada, saida in (
+        ("chat", 1000, 500), ("busca", 4000, 300), ("perfil", 200, 100),
+    ):
+        servico.record(
+            lead_id=lead_id, model="gpt-4o-mini", tokens_in=entrada,
+            tokens_out=saida, operation=operacao, db=db,
+        )
+
+    esperado = sum(
+        servico.estimate_cost("gpt-4o-mini", entrada, saida)
+        for entrada, saida in ((1000, 500), (4000, 300), (200, 100))
+    )
+    assert servico.get_conversation_cost(lead_id, db) == pytest.approx(esperado)
+
+
+def test_custo_de_uma_conversa_nao_alcanca_a_outra(servico, lead_id, db):
+    outro = Lead(status="novo")
+    db.add(outro)
+    db.commit()
+    db.refresh(outro)
+    servico.record(
+        lead_id=outro.id, model="gpt-4o", tokens_in=500_000, tokens_out=100_000,
+        operation="chat", db=db,
+    )
+
+    assert servico.get_conversation_cost(lead_id, db) == 0.0
+    assert servico.get_conversation_cost(outro.id, db) > 0.0
+
+
+def test_conversa_sem_chamada_nenhuma_custa_zero(servico, lead_id, db):
+    """Zero, e não `None`: a tela soma este número a um teto."""
+    assert servico.get_conversation_cost(lead_id, db) == 0.0

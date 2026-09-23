@@ -9,7 +9,13 @@ teste.
 import pytest
 import yaml
 
-from src.ui.papeis import PAPEL_ADMIN, PAPEL_CORRETOR, e_admin, menu_do_papel
+from src.ui.papeis import (
+    PAPEL_ADMIN,
+    PAPEL_CORRETOR,
+    e_admin,
+    menu_do_papel,
+    ve_os_bastidores,
+)
 
 DASHBOARD, LEADS, CHAT, AJUDA = "dashboard", "leads", "chat", "ajuda"
 FICHA = "ficha"
@@ -42,6 +48,14 @@ def test_sem_papel_reconhecido_cai_no_menu_menor(papeis):
     """Ausência de papel não promove ninguém."""
     assert _menu(papeis) == [DASHBOARD, LEADS, AJUDA]
     assert not e_admin(papeis)
+
+
+def test_so_o_admin_ve_os_bastidores_da_conversa():
+    """Custo em dólar e SQL do agente são de quem opera, não de quem atende."""
+    assert ve_os_bastidores([PAPEL_ADMIN])
+    assert not ve_os_bastidores([PAPEL_CORRETOR])
+    for papeis in (None, [], ["desconhecido"]):
+        assert not ve_os_bastidores(papeis)
 
 
 def test_dashboard_e_sempre_a_primeira_pagina():

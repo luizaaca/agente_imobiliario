@@ -46,7 +46,7 @@ def _estado_da_aplicacao() -> None:
         st.caption(
             "Vê todos os menus."
             if e_admin(papeis)
-            else "O Simulador de Chat e o custo de LLM são exclusivos do admin."
+            else "Simulador, custo de LLM e bastidores da conversa são do admin."
         )
 
     with col_sessao:
@@ -118,10 +118,14 @@ Ele é exclusivo do papel `admin`. É uma ferramenta de teste: conversa com o
 agente fingindo ser um lead e cria leads de mentira na base, então na tela de
 quem atende de verdade seria ruído.
 
-Pelo mesmo motivo o painel **Consumo de LLM** só aparece para o `admin` — custo
-em dólar é informação de quem opera a aplicação. O *alerta* de orçamento
-estourado, esse, todo mundo vê: sem ele o chat pararia de responder sem
-explicação.
+Pelo mesmo motivo, só o `admin` vê o painel **Consumo de LLM** no dashboard e,
+na aba **Conversa** da ficha, o que aquela conversa custou e os painéis das
+ferramentas que o agente usou. Custo em dólar é informação de quem opera a
+aplicação, e o SQL do agente de busca é de quem o constrói — nenhum dos dois
+ajuda a atender um lead, e na ficha eles só afastam uma fala da seguinte.
+
+O *alerta* de orçamento estourado, esse, todo mundo vê: sem ele o chat pararia
+de responder sem explicação.
 
 O papel vem de `config/credentials.yaml`. **Ele esconde links do menu e não é
 controle de acesso** — quem edita esse arquivo se dá o papel que quiser.

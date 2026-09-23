@@ -26,8 +26,14 @@ from src.scheduler.followup_runner import run_followup_para_lead
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import SchedulingService
 from src.tempo import agora, formatar, para_exibir, para_guardar
-from src.ui.conversa import falas_do_lead, quantas_falas, renderizar
+from src.ui.conversa import (
+    custo_da_conversa,
+    falas_do_lead,
+    legenda_da_conversa,
+    renderizar,
+)
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
+from src.ui.papeis import papeis_da_sessao, ve_os_bastidores
 from src.ui.tabela import (
     AJUDA_DA_BUSCA,
     PLACEHOLDER_DA_BUSCA,
@@ -554,19 +560,20 @@ def _conversa(lead: Lead) -> None:
     algumas dezenas de turnos empurra as ações do lead para fora da tela e
     obriga a rolar tudo de volta para chegar a elas.
     """
+    bastidores = ve_os_bastidores(papeis_da_sessao())
     with get_db() as db:
         falas = falas_do_lead(lead.id, db, 200)
+        custo = custo_da_conversa(lead.id, db, bastidores)
 
     if not falas:
         st.caption("Nenhuma mensagem registrada para este lead.")
         return
 
-    st.caption(
-        f"{quantas_falas(falas)} mensagem(ns) — as ferramentas que o agente "
-        f"usou abrem nos painéis"
-    )
+    st.caption(legenda_da_conversa(falas, bastidores))
+    if custo:
+        st.caption(custo)
     with st.container(height=ALTURA_DA_CONVERSA):
-        renderizar(falas)
+        renderizar(falas, bastidores)
 
 
 def _resumo_para_o_corretor(lead: Lead) -> None:

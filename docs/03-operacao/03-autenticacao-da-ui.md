@@ -146,14 +146,15 @@ O `st.stop()` é chamado antes de qualquer conteúdo quando o login falha ou nã
 | **Ajuda** | sim | sim |
 | **Simulador de Chat** | sim | não |
 | Painel **Consumo de LLM**, dentro do dashboard | sim | não |
+| Custo da conversa e painéis de ferramenta, na aba **Conversa** da ficha | sim | não |
 | Alerta de orçamento de LLM estourado | sim | sim |
 
 Dois critérios definem essa divisão:
 
 - **o simulador é ferramenta de teste**, não de atendimento. Ele conversa com o agente fingindo ser um lead e cria leads de mentira na base; na tela de quem atende de verdade, é ruído;
-- **o custo em dólar do provider é informação de quem opera a aplicação**, não de quem atende leads. O *alerta* de estouro, esse, todo mundo vê: sem ele, o corretor veria o chat parar de responder sem explicação.
+- **o custo em dólar do provider é informação de quem opera a aplicação**, não de quem atende leads. Pela mesma razão ficam fora da ficha do corretor o SQL que o agente de busca escreveu e o texto cru que cada ferramenta devolveu ao modelo: nada disso ajuda a atender alguém, e na tela eles só afastam uma fala da seguinte. O *alerta* de estouro, esse, todo mundo vê: sem ele, o corretor veria o chat parar de responder sem explicação.
 
-A regra de visibilidade mora em `src/ui/papeis.py`, numa função pura (`menu_do_papel`) fora do Streamlit, para caber em teste — é a única regra de visibilidade da aplicação.
+As regras de visibilidade moram em `src/ui/papeis.py`, em funções puras fora do Streamlit para caberem em teste: `menu_do_papel` decide o menu, e `ve_os_bastidores` decide o que aparece dentro de uma conversa. São as duas únicas da aplicação.
 
 Um usuário **sem `roles:`** cai no menu do corretor: ausência de papel não promove ninguém.
 

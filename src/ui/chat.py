@@ -11,8 +11,9 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
-from src.ui.conversa import Fala, falas_do_lead, renderizar
+from src.ui.conversa import Fala, custo_da_conversa, falas_do_lead, renderizar
 from src.ui.navegacao import entrou_na_pagina_agora
+from src.ui.papeis import papeis_da_sessao, ve_os_bastidores
 from src.ui.texto import mensagem_para_markdown
 
 CANAL = "streamlit"
@@ -113,6 +114,10 @@ def _resumo_do_lead() -> None:
             return
         score = lead.score if lead.score is not None else "N/A"
         st.caption(f"**Lead #{lead.id}** · {lead.status} · score {score}")
+        # Numa linha propria: o seletor de conversa ao lado ja aperta esta
+        # coluna, e as duas juntas quebravam no meio do numero.
+        if custo := custo_da_conversa(lead.id, db, ve_os_bastidores(papeis_da_sessao())):
+            st.caption(custo)
 
 
 def _painel_da_conversa() -> None:
@@ -209,7 +214,7 @@ def render_chat():
     # trocar de lead passa a exigir rolar tudo de volta para cima.
     janela = st.container(height=ALTURA_DA_CONVERSA)
     with janela:
-        renderizar(st.session_state.messages)
+        renderizar(st.session_state.messages, ve_os_bastidores(papeis_da_sessao()))
 
     # Desabilitado quando falta configuração: deixar o campo ativo só levaria
     # o usuário a mandar uma mensagem e receber "atendimento indisponível".
