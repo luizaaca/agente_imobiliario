@@ -1051,7 +1051,9 @@ LACUNAS = (
     ("orcamento", "orçamento"),
     ("localizacao", "região ou bairro"),
     ("quartos", "quantos quartos"),
-    ("urgencia", "urgência"),
+    # Nunca "urgência": a anotação vira pergunta, e ninguém responde "qual é a
+    # sua urgência?". O rótulo é a pergunta que uma pessoa faria.
+    ("urgencia", "para quando ela precisa mudar"),
 )
 
 

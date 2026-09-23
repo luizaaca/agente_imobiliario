@@ -299,11 +299,11 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Fase 3: Qualificação, Score e Perfil Narrativo
 - [x] Definir critérios explícitos de score do lead:
-  - Completude dos dados (quantos campos estruturados preenchidos)
+  - Completude da ficha (meio ponto por campo-chave, telefone incluso)
   - Urgência declarada (alta/média/baixa)
-  - Aderência com catálogo (existem imóveis compatíveis?)
-  - Engajamento conversacional (turnos, perguntas feitas pelo lead)
-  - Intenção de agendamento manifestada
+  - Definição do pedido (tipo de imóvel escolhido)
+  - Engajamento conversacional (mensagens escritas pelo lead)
+  - Visita marcada, com piso de 7.0 para quem tem compromisso de pé
 - [x] Implementar score baseado nos critérios acima.
 - [x] Atualizar status do lead conforme avanço no funil.
 - [x] Garantir que o resumo do corretor explique o score de forma simples.

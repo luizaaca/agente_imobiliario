@@ -961,73 +961,71 @@ $$
 
 ### 13.3 Critérios de composição do score
 
-O score da POC deve ser calculado a partir de cinco dimensões já previstas no plano:
-
-1. completude dos dados;
-2. urgência declarada;
-3. aderência com catálogo;
-4. engajamento conversacional;
-5. intenção de agendamento.
-
-#### Distribuição sugerida de pesos
+O score sai de cinco dimensões, e o que ele ordena é a fila de quem o corretor liga primeiro.
 
 | Dimensão | Peso máximo |
 |---|---:|
-| Completude dos dados | `3.0` |
+| Completude da ficha | `3.0` |
 | Urgência declarada | `2.0` |
-| Aderência com catálogo | `2.0` |
+| Definição do pedido | `1.0` |
 | Engajamento conversacional | `1.5` |
-| Intenção de agendamento | `1.5` |
+| Visita marcada | `2.5` |
 | **Total** | **10.0** |
 
-### 13.4 Regras sugeridas por dimensão
+Não há cláusula de corte no cálculo. Os pesos somam exatamente 10, e um peso mal somado precisa quebrar em teste — não virar `INSERT` recusado pelo CHECK de faixa com o lead na tela.
 
-#### A. Completude dos dados (`0.0` a `3.0`)
-Pontuar conforme presença de informações-chave:
+### 13.4 Regras por dimensão
+
+#### A. Completude da ficha (`0.0` a `3.0`)
+
+Meio ponto por campo-chave preenchido, seis ao todo:
+
 - intenção;
 - orçamento;
-- localização;
+- localização (bairro ou região);
 - quartos;
-- urgência.
+- urgência;
+- telefone.
 
-Exemplo conceitual:
-- 0 ou 1 campo relevante: `0.5`
-- 2 campos: `1.5`
-- 3 ou 4 campos: `2.5`
-- 5 campos: `3.0`
+Meio ponto por campo em vez de faixas largas: assim todo dado que a conversa arranca move o número, e não só o que cruza um degrau. Telefone está na lista porque o score ordena ligações — uma ficha impecável sem número nunca chega a virar contato.
 
 #### B. Urgência declarada (`0.0` a `2.0`)
+
 - `baixa` → `0.5`
 - `media` → `1.0`
 - `alta` → `2.0`
 
-#### C. Aderência com catálogo (`0.0` a `2.0`)
-- nenhuma aderência encontrada → `0.0`
-- aderência parcial / poucos imóveis razoáveis → `1.0`
-- boa aderência / imóveis claramente compatíveis → `2.0`
+Urgência conta nas duas primeiras dimensões de propósito: na completude conta ter o dado, aqui conta o quanto ele aperta. Quem precisa mudar em trinta dias e quem pode esperar um ano contaram a mesma coisa, mas não valem a mesma ligação.
+
+#### C. Definição do pedido (`0.0` a `1.0`)
+
+`tipologia_interesse` preenchido vale `1.0`. Quem já sabe que quer apartamento e não casa passou do "estou só olhando".
 
 #### D. Engajamento conversacional (`0.0` a `1.5`)
-Sinais possíveis:
-- responde perguntas;
-- mantém a conversa ativa;
-- demonstra interesse real;
-- comenta/rejeita opções com motivo.
 
-Exemplo conceitual:
-- baixo engajamento → `0.5`
-- médio → `1.0`
-- alto → `1.5`
+Mensagens escritas pela pessoa, sem contar as do agente:
 
-#### E. Intenção de agendamento (`0.0` a `1.5`)
-- nenhuma intenção → `0.0`
-- abertura implícita → `0.5`
-- interesse claro em avançar → `1.0`
-- pedido explícito de visita/reunião → `1.5`
+- 1 a 5 → `0.5`
+- 6 a 10 → `1.0`
+- 11 ou mais → `1.5`
 
-### 13.5 Persistência do score
-- o score será **persistido** em `leads.score`;
-- ele representa um **snapshot operacional atual** do lead;
-- pode ser recalculado ao longo da conversa e atualizado conforme novas informações surgirem.
+#### E. Visita marcada (`0.0` a `2.5`, com piso de `7.0`)
+
+Vale quando há visita ou reunião de pé na agenda — status `pendente` ou `confirmado`. Cancelada e realizada não contam: a primeira deixou de existir, a segunda já aconteceu e o lead não está mais esperando por ela.
+
+Além dos `2.5`, o lead com compromisso de pé **nunca fica abaixo de `7.0`**. É o evento de conversão do funil, e sem piso próprio ele valeria menos que a completude do cadastro — um lead com visita na agenda empataria com um lead que já parou de responder.
+
+### 13.5 Persistência e recálculo
+
+O score é persistido em `leads.score` e representa o retrato operacional atual do lead. Ele é recalculado:
+
+- ao registrar qualificação nova na conversa (`registrar_qualificacao`);
+- ao salvar a ficha do lead na tela;
+- a cada mudança na agenda — criar, editar, cancelar, excluir ou dar por realizado um compromisso.
+
+O terceiro caso passa por `SchedulingService.sincronizar_lead_com_a_agenda`, que é também quem acerta o status do lead: os dois fatos que a agenda determina saem do mesmo lugar, e não de cada chamador.
+
+Não é editável à mão: seria um número dizendo uma coisa e os dados dizendo outra.
 
 ### 13.6 Explicabilidade
 O resumo do corretor deve explicar o score em linguagem simples, mencionando os principais fatores que o elevaram ou reduziram.

@@ -35,23 +35,37 @@ class SchedulingService:
             is not None
         )
 
-    def sincronizar_status_do_lead(self, lead_id: int, db: Session) -> Optional[str]:
-        """Faz o status do lead concordar com os compromissos dele.
+    def sincronizar_lead_com_a_agenda(
+        self, lead_id: int, db: Session
+    ) -> Optional[str]:
+        """Faz status e score do lead concordarem com os compromissos dele.
 
-        `agendado` nao e opiniao, e fato verificavel: ou existe visita marcada,
-        ou nao existe. Por isso a sincronizacao vale nos dois sentidos —
-        aparecendo compromisso o lead vai para `agendado`, sumindo o ultimo ele
-        volta para onde os dados o colocam.
+        Os dois fatos que a agenda determina saem daqui juntos, e não de cada
+        chamador. Enquanto o score ficava por conta de quem lembrasse, marcar
+        a visita não recalculava nada: o lead com visita na agenda carregava a
+        nota de antes de ela existir e empatava com quem já tinha parado de
+        responder.
 
-        Os outros estagios sao julgamento de quem atende e nao sao tocados
-        aqui; `inativo` tambem fica de fora, porque um lead que parou de
-        responder continua parado mesmo com uma visita antiga no calendario.
+        `agendado` não é opinião, é fato verificável: ou existe visita
+        marcada, ou não existe. Por isso a sincronização vale nos dois
+        sentidos — aparecendo compromisso o lead vai para `agendado`, sumindo
+        o último ele volta para onde os dados o colocam.
 
-        Devolve o novo status quando houve mudanca, e `None` quando ja estava
-        certo — e o que permite a quem chama saber se precisa avisar na tela.
+        Os outros estágios são julgamento de quem atende e não são tocados
+        aqui; `inativo` também fica de fora, porque um lead que parou de
+        responder continua parado mesmo com uma visita antiga no calendário.
+        O score não tem essa ressalva: quem cancelou a visita perde o ponto
+        dela mesmo estando inativo, senão o número mente para sempre.
+
+        Devolve o novo status quando houve mudança, e `None` quando já estava
+        certo — é o que permite a quem chama saber se precisa avisar na tela.
         """
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
-        if lead is None or lead.status == LeadStatus.INATIVO.value:
+        if lead is None:
+            return None
+
+        LeadService().calculate_score(lead_id, db)
+        if lead.status == LeadStatus.INATIVO.value:
             return None
 
         tem = self.tem_compromisso_ativo(lead_id, db)
@@ -128,7 +142,7 @@ class SchedulingService:
             "data_hora=%s imovel_id=%s status=ok",
             lead_id, agendamento.id, tipo, data_hora, imovel_id,
         )
-        self.sincronizar_status_do_lead(lead_id, db)
+        self.sincronizar_lead_com_a_agenda(lead_id, db)
         db.refresh(agendamento)
         return agendamento
 
@@ -195,7 +209,7 @@ class SchedulingService:
             agendamento_id, agendamento.lead_id, tipo, data_hora, status,
             imovel_id,
         )
-        self.sincronizar_status_do_lead(agendamento.lead_id, db)
+        self.sincronizar_lead_com_a_agenda(agendamento.lead_id, db)
         db.refresh(agendamento)
         return agendamento
 
@@ -221,7 +235,7 @@ class SchedulingService:
             "event=agendamento_excluido agendamento_id=%s lead_id=%s",
             agendamento_id, lead_id,
         )
-        self.sincronizar_status_do_lead(lead_id, db)
+        self.sincronizar_lead_com_a_agenda(lead_id, db)
         return True
 
     def update_status(
@@ -248,7 +262,7 @@ class SchedulingService:
                 "novo_status=%s",
                 agendamento_id, agendamento.lead_id, status,
             )
-            self.sincronizar_status_do_lead(agendamento.lead_id, db)
+            self.sincronizar_lead_com_a_agenda(agendamento.lead_id, db)
             db.refresh(agendamento)
         return agendamento
 

@@ -315,12 +315,21 @@ fora; para o agente assumir a conversa, ainda falta trabalho.
     (
         "De onde vem o score?",
         """
-De cinco dimensões: completude dos dados, urgência declarada, aderência ao
-catálogo, engajamento na conversa e sinal de intenção de agendamento.
+De cinco dimensões, somando 10: completude da ficha (3.0), urgência declarada
+(2.0), definição do pedido (1.0), engajamento na conversa (1.5) e visita
+marcada (2.5).
 
-Ele é recalculado quando o lead avança e quando você salva a ficha. Por isso
-não é editável na mão — seria um número dizendo uma coisa e os dados dizendo
-outra.
+**Visita marcada nunca fica abaixo de 7.0.** É o evento que o atendimento
+inteiro persegue, e a lista é ordenada por este número — sem um piso próprio,
+um lead com visita na agenda empatava com um que parou de responder. Visita
+cancelada ou já realizada não conta.
+
+O telefone entra na completude junto com intenção, orçamento, região, quartos
+e urgência, meio ponto cada. Ficha impecável sem número não vira ligação.
+
+Ele é recalculado quando o lead avança, quando você salva a ficha e a cada
+mexida na agenda. Por isso não é editável na mão — seria um número dizendo uma
+coisa e os dados dizendo outra.
 """,
     ),
     (

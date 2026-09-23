@@ -447,12 +447,12 @@ def _formulario(lead: Optional[Lead]) -> None:
                     else servico.editar_lead(lead.id, campos, db)
                 )
                 lead_id = alvo.id
-                servico.calculate_score(lead_id, db)
-                # O status escolhido na ficha vale para os estagios de
-                # julgamento; `agendado` e fato verificavel, e quem manda e a
-                # agenda. Sem isto daria para marcar `agendado` sem visita
-                # nenhuma, ou tirar de `agendado` quem tem visita marcada.
-                SchedulingService().sincronizar_status_do_lead(lead_id, db)
+                # Score e status saem os dois daqui. O status escolhido na
+                # ficha vale para os estagios de julgamento; `agendado` e fato
+                # verificavel, e quem manda e a agenda. Sem isto daria para
+                # marcar `agendado` sem visita nenhuma, ou tirar de `agendado`
+                # quem tem visita marcada.
+                SchedulingService().sincronizar_lead_com_a_agenda(lead_id, db)
 
             st.toast(
                 "Lead criado." if novo else "Ficha salva.", icon=":material/check:"

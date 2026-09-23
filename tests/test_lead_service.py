@@ -13,7 +13,15 @@ from src.db.models import (
     LLMUsage,
 )
 from src.services.followup_service import FollowUpService
-from src.services.lead_service import LeadService
+from src.services.lead_service import (
+    FAIXAS_DE_ENGAJAMENTO,
+    PESO_AGENDAMENTO,
+    PESO_TIPOLOGIA,
+    PESO_URGENCIA,
+    PONTO_POR_CAMPO_DA_FICHA,
+    LeadService,
+    _campos_da_ficha,
+)
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
 
@@ -129,6 +137,23 @@ def test_valores_nao_textuais_passam_intactos(lead_service):
 # --- Score -------------------------------------------------------------------
 
 
+def marcar_visita(lead_id, db):
+    """Põe uma visita de pé na agenda do lead."""
+    return SchedulingService().create(
+        lead_id=lead_id, tipo="visita",
+        data_hora=datetime.now(UTC) + timedelta(days=1), db=db,
+    )
+
+
+def conversar(lead_service, lead_id, db, quantas):
+    """Escreve `quantas` mensagens da pessoa, para mexer no engajamento."""
+    for i in range(quantas):
+        lead_service.save_message(
+            lead_id=lead_id, channel="teste", role="user",
+            content=f"mensagem {i}", message_type="chat", db=db,
+        )
+
+
 def test_score_de_lead_sem_dados_e_zero(lead_service, lead_id, db):
     assert lead_service.calculate_score(lead_id, db) == Decimal("0.00")
 
@@ -143,12 +168,33 @@ def test_score_cresce_com_a_completude(lead_service, lead_id, db):
     assert completo > parcial
 
 
+def test_telefone_conta_como_campo_da_ficha(lead_service, lead_id, db):
+    """O score ordena a fila de ligações, e sem número não há ligação."""
+    lead_service.update_qualification(lead_id, QUALIFICACAO_COMPLETA, db)
+    sem_telefone = lead_service.calculate_score(lead_id, db)
+
+    lead_service.update_qualification(lead_id, {"telefone": "(11) 99999-0000"}, db)
+
+    assert lead_service.calculate_score(lead_id, db) > sem_telefone
+
+
+def test_forma_de_pagamento_nao_mexe_no_score(lead_service, lead_id, db):
+    """Campo que a conversa nunca capta não pode segurar ponto da régua."""
+    lead_service.update_qualification(lead_id, QUALIFICACAO_COMPLETA, db)
+    antes = lead_service.calculate_score(lead_id, db)
+
+    lead_service.update_qualification(lead_id, {"forma_pagamento": "a_vista"}, db)
+
+    assert lead_service.calculate_score(lead_id, db) == antes
+
+
 def test_urgencia_alta_pontua_mais_que_baixa(lead_service, db):
     def score_para(urgencia, sufixo):
         lid = lead_service.get_or_create_lead(
             channel="teste", external_id=f"u-{sufixo}", db=db
         ).id
-        lead_service.update_qualification(lid, {**QUALIFICACAO_COMPLETA, "urgencia": urgencia}, db)
+        lead_service.update_qualification(
+            lid, {**QUALIFICACAO_COMPLETA, "urgencia": urgencia}, db)
         return lead_service.calculate_score(lid, db)
 
     assert score_para("alta", "alta") > score_para("baixa", "baixa")
@@ -158,29 +204,106 @@ def test_engajamento_do_lead_soma_ao_score(lead_service, lead_id, db):
     lead_service.update_qualification(lead_id, QUALIFICACAO_COMPLETA, db)
     sem_mensagens = lead_service.calculate_score(lead_id, db)
 
-    for i in range(6):
-        lead_service.save_message(
-            lead_id=lead_id, channel="teste", role="user",
-            content=f"mensagem {i}", message_type="chat", db=db,
-        )
-    com_mensagens = lead_service.calculate_score(lead_id, db)
+    conversar(lead_service, lead_id, db, 6)
 
-    assert com_mensagens > sem_mensagens
+    assert lead_service.calculate_score(lead_id, db) > sem_mensagens
 
 
-def test_score_nunca_passa_de_dez(lead_service, lead_id, db):
+def test_visita_marcada_leva_o_lead_para_a_faixa_quente(lead_service, lead_id, db):
+    """Visita marcada é o evento de conversão: nunca fica abaixo de 7.0.
+
+    Sem o piso, um lead com visita na agenda empatava com um lead que já
+    tinha parado de responder — e a fila é ordenada por este número.
+    """
+    assert lead_service.calculate_score(lead_id, db) < Decimal("7.00")
+
+    marcar_visita(lead_id, db)
+
+    assert lead_service.calculate_score(lead_id, db) >= Decimal("7.00")
+
+
+def test_marcar_a_visita_recalcula_o_score_sozinho(lead_service, lead_id, db):
+    """Ninguém chama `calculate_score` aqui, e o número tem que estar certo.
+
+    É o defeito que motivou esta mudança: `agendar_reuniao` criava o
+    compromisso e voltava, e o painel seguia mostrando a nota de antes de a
+    visita existir.
+    """
+    lead_service.update_qualification(lead_id, QUALIFICACAO_COMPLETA, db)
+    lead_service.calculate_score(lead_id, db)
+
+    marcar_visita(lead_id, db)
+
+    assert lead_service.get_lead(lead_id, db).score >= Decimal("7.00")
+
+
+def test_visita_cancelada_devolve_o_score(lead_service, lead_id, db):
+    agendamento = marcar_visita(lead_id, db)
+    com_visita = lead_service.calculate_score(lead_id, db)
+
+    SchedulingService().update_status(agendamento.id, "cancelado", db)
+
+    assert lead_service.get_lead(lead_id, db).score < com_visita
+
+
+def test_visita_realizada_nao_segura_o_lead_no_topo(lead_service, lead_id, db):
+    """Visita que já aconteceu não é mais promessa de visita."""
+    agendamento = marcar_visita(lead_id, db)
+    SchedulingService().update_status(agendamento.id, "realizado", db)
+
+    assert lead_service.calculate_score(lead_id, db) < Decimal("7.00")
+
+
+def test_lead_inativo_tambem_perde_o_ponto_da_visita(lead_service, lead_id, db):
+    """O estágio de inativo não é tocado; o score é recalculado assim mesmo.
+
+    Um lead que parou de responder continua parado mesmo com visita antiga no
+    calendário — mas se a visita foi cancelada, a nota não pode continuar
+    dizendo que existe uma.
+    """
+    agendamento = marcar_visita(lead_id, db)
+    lead_service.update_status(lead_id, "inativo", db)
+
+    SchedulingService().update_status(agendamento.id, "cancelado", db)
+
+    lead = lead_service.get_lead(lead_id, db)
+    assert lead.status == "inativo"
+    assert lead.score < Decimal("7.00")
+
+
+def test_a_nota_dez_e_alcancavel(lead_service, lead_id, db):
+    """Ficha cheia, prazo apertado, conversa longa e visita marcada dão 10.
+
+    Enquanto `forma_pagamento` valia um ponto ninguém chegava lá: a conversa
+    nunca captou esse campo em lead nenhum, e o teto real era 6.5 — abaixo
+    dos 7.0 que o painel chama de quente.
+    """
     lead_service.update_qualification(
         lead_id,
-        {**QUALIFICACAO_COMPLETA, "urgencia": "alta", "forma_pagamento": "a_vista",
-         "tipologia_interesse": "apartamento"},
+        {**QUALIFICACAO_COMPLETA, "urgencia": "alta",
+         "telefone": "(11) 98888-7777", "tipologia_interesse": "apartamento"},
         db,
     )
-    for i in range(15):
-        lead_service.save_message(
-            lead_id=lead_id, channel="teste", role="user",
-            content=f"m{i}", message_type="chat", db=db,
-        )
-    assert lead_service.calculate_score(lead_id, db) <= Decimal("10.00")
+    conversar(lead_service, lead_id, db, 12)
+    marcar_visita(lead_id, db)
+
+    assert lead_service.calculate_score(lead_id, db) == Decimal("10.00")
+
+
+def test_os_pesos_das_dimensoes_somam_dez():
+    """A régua promete 0 a 10, e quem cobra é o CHECK do banco.
+
+    Não há cláusula de corte no cálculo, de propósito: peso mal somado tem de
+    quebrar aqui, e não virar INSERT recusado com o lead na tela.
+    """
+    teto = (
+        len(_campos_da_ficha(Lead())) * PONTO_POR_CAMPO_DA_FICHA
+        + max(PESO_URGENCIA.values())
+        + PESO_TIPOLOGIA
+        + FAIXAS_DE_ENGAJAMENTO[0][1]
+        + PESO_AGENDAMENTO
+    )
+    assert teto == 10.0
 
 
 # --- Mensagens ---------------------------------------------------------------
