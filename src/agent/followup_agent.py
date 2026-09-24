@@ -32,6 +32,25 @@ def _linha(rotulo: str, valor: Any) -> Optional[str]:
     return f"- {rotulo}: {valor}" if valor not in (None, "", "?") else None
 
 
+def _instrucao_tentativa(tentativa: int) -> str:
+    """Orientação progressiva conforme o número da tentativa."""
+    if tentativa == 1:
+        return (
+            "Esta é a 1ª tentativa de contato nesta régua. "
+            "Pode ser um pouco mais completa, mas sem exagerar."
+        )
+    if tentativa == 2:
+        return (
+            "Esta é a 2ª tentativa. Seja mais curta e casual que a anterior. "
+            "Mude o ângulo: se antes perguntou sobre preferências, agora "
+            "comente sobre o mercado ou destaque um detalhe do que ele busca."
+        )
+    return (
+        f"Esta é a tentativa {tentativa} — provavelmente a última antes do "
+        "silêncio. Uma frase só, leve, sem pressão. Deixe a porta aberta."
+    )
+
+
 def build_followup_prompt(
     contexto: dict[str, Any], regua: str, tentativa: int
 ) -> str:
@@ -54,8 +73,7 @@ def build_followup_prompt(
 
     partes = [
         f"## Situação\n{FOLLOWUP_INSTRUCOES[regua]}",
-        f"Esta é a tentativa {tentativa} de contato. "
-        f"Quanto maior a tentativa, mais leve e mais curta deve ser a mensagem.",
+        _instrucao_tentativa(tentativa),
         f"## O que o lead já informou\n{dados}",
     ]
 

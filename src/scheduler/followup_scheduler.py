@@ -6,7 +6,7 @@ from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.scheduler.followup_runner import Sender, run_followup_cycle
+from src.scheduler.followup_runner import Sender, run_followup_cycle, dispatch_pending_followups
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,18 @@ def create_scheduler(sender: Optional[Sender] = None) -> AsyncIOScheduler:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=300,
+    )
+
+    async def run_dispatch_pending():
+        await dispatch_pending_followups(sender=sender)
+
+    scheduler.add_job(
+        run_dispatch_pending,
+        "interval",
+        seconds=10,
+        id="dispatch_pending_job",
+        max_instances=1,
+        coalesce=True,
     )
 
     logger.info(

@@ -16,11 +16,13 @@ Um ciclo, para cada lead elegível:
 
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Optional, Protocol
 
 from src.agent.followup_agent import gerar_mensagem_followup
 from src.agent.provider import LLMConfigError
 from src.config import settings
+from src.db.models import FollowUpAttempt, Mensagem
 from src.db.session import get_db
 from src.services.followup_service import REGUAS, FollowUpService
 from src.services.lead_service import LeadService
@@ -287,3 +289,53 @@ async def _processar_lead(
                 lead_id=lead_id, regua=regua, status="failed", db=db,
                 failure_reason=f"{type(e).__name__}: {e}"[:120],
             )
+
+async def dispatch_pending_followups(sender: Optional[Sender] = None) -> None:
+    """Dispara as mensagens que estao presas como 'generated'.
+    
+    Usado para enviar pelo processo do Telegram os follow-ups que
+    foram gerados manualmente pelo painel Streamlit.
+    """
+    if not sender:
+        return
+        
+    with get_db() as db:
+        pendentes = (
+            db.query(FollowUpAttempt, Mensagem)
+            .join(Mensagem, FollowUpAttempt.message_id == Mensagem.id)
+            .filter(FollowUpAttempt.status == "generated")
+            .with_for_update(skip_locked=True)
+            .all()
+        )
+        
+        if not pendentes:
+            return
+            
+        lead_service = LeadService()
+        
+        for attempt, msg in pendentes:
+            identidade = lead_service.get_primary_identity(attempt.lead_id, db)
+            canal = identidade.channel if identidade else msg.channel
+            chat_id = identidade.external_chat_id if identidade else None
+            
+            if not chat_id:
+                attempt.status = "failed"
+                attempt.failure_reason = "sem chat_id para o canal"
+                continue
+                
+            try:
+                enviado = await sender(canal, chat_id, msg.content)
+                if enviado:
+                    attempt.status = "sent"
+                    msg.status = "sent"
+                    msg.sent_at = datetime.now(UTC)
+                    logger.info("event=dispatch_pending_sucesso lead_id=%s message_id=%s", attempt.lead_id, msg.id)
+                else:
+                    attempt.status = "failed"
+                    attempt.failure_reason = "canal recusou o envio"
+            except Exception as e:
+                attempt.status = "failed"
+                attempt.failure_reason = f"{type(e).__name__}: {e}"[:120]
+                logger.exception("event=dispatch_pending_falhou lead_id=%s", attempt.lead_id)
+                
+        db.commit()

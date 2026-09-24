@@ -24,10 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler para /start: saudação e criação do lead."""
+    """Handler para /start: cria o lead e delega ao agente.
+
+    O /start não carrega texto do usuário, então usamos uma saudação
+    sintética para que o agente gere a primeira resposta via LLM — com
+    tom, persona e contexto adequados — em vez de uma mensagem fixa.
+    """
     chat_id = str(update.effective_chat.id)
     user = update.effective_user
-    
+
+    # Garante a criação do lead com o nome do usuário antes de delegar;
+    # o message_handler chamaria get_or_create_lead também, mas sem o nome.
     with get_db() as db:
         LeadService().get_or_create_lead(
             channel="telegram",
@@ -35,14 +42,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db=db,
             nome=user.full_name if user else None,
         )
-    
-    await update.message.reply_text(
-        f"Olá{f', {user.first_name}' if user else ''}! 🏠\n\n"
-        "Sou o assistente digital da imobiliária. "
-        "Posso ajudar você a encontrar o imóvel ideal!\n\n"
-        "Me conta: você está procurando imóvel para comprar, "
-        "alugar ou investir? 😊"
-    )
+
+    # Injeta o texto sintético no update e delega ao fluxo normal.
+    update.message.text = "Oi"
+    await message_handler(update, context)
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
