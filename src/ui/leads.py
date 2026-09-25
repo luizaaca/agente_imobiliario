@@ -22,7 +22,8 @@ import streamlit as st
 
 from src.db.models import Agendamento, Lead
 from src.db.session import get_db
-from src.scheduler.followup_runner import run_followup_para_lead
+from src.scheduler.followup_runner import DisparoManual, run_followup_para_lead
+from src.services.followup_service import REGUAS
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import (
     CompromissoJaMarcado,
@@ -51,7 +52,7 @@ from src.ui.tabela import (
     temperatura,
     texto,
 )
-from src.ui.texto import markdown_seguro
+from src.ui.texto import markdown_seguro, mensagem_para_markdown
 
 # Lead cuja ficha esta aberta. Zero significa "ficha em branco", porque nenhum
 # lead tem id 0. Ausente na pagina da ficha significa que se chegou nela sem
@@ -59,8 +60,10 @@ from src.ui.texto import markdown_seguro
 CHAVE_LEAD_ABERTO = "lead_aberto"
 # Lead cujo botao de excluir foi clicado, para o segundo clique ser deliberado.
 CHAVE_EXCLUSAO = "lead_a_excluir"
-# Desfecho do ultimo disparo manual: (lead_id, tipo, texto).
-CHAVE_AVISO_FOLLOWUP = "aviso_followup"
+# Lead cujo follow-up o corretor pediu; a geracao roda no rerun seguinte.
+CHAVE_FOLLOWUP_PENDENTE = "followup_pendente"
+# Desfecho do ultimo disparo manual, (lead_id, DisparoManual), ate ser fechado.
+CHAVE_DESFECHO_FOLLOWUP = "desfecho_followup"
 # Formulario de agendamento aberto: (lead_id, agendamento_id ou None p/ novo).
 CHAVE_AGENDAMENTO = "agendamento_em_edicao"
 # Agendamento cujo botao de excluir foi clicado, para o segundo clique ser
@@ -259,10 +262,7 @@ def _confirmacao_na_lista(lead: Lead) -> None:
     Na coluna dos botoes nao caberiam: o aviso quebraria em varias linhas e os
     botoes ficariam menores que o alvo confortavel de clique.
     """
-    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
-    if aviso and aviso[0] == lead.id:
-        mostrar = st.success if aviso[1] == "ok" else st.info
-        mostrar(aviso[2], icon=":material/send:")
+    _followup_do_lead(lead)
 
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return
@@ -787,23 +787,96 @@ def _agendamentos(lead: Lead) -> None:
 
 
 def _disparar_followup(lead: Lead) -> None:
-    """Gera o follow-up deste lead agora.
+    """Marca o lead para disparo de follow-up no próximo rerun.
 
-    Sem `sender`: a UI não tem canal de saída próprio. A mensagem é gerada,
-    persistida e aparece na conversa — nos canais com push quem despacha é o
-    processo do Telegram.
+    A geração acontece em ``_followup_do_lead``, que desenha na largura toda
+    da página — e não dentro da micro-coluna do botão, onde o aviso de
+    andamento quebraria em várias linhas.
     """
-    with st.spinner("Gerando follow-up..."):
-        resultado = asyncio.run(run_followup_para_lead(lead.id))
-
-    st.session_state[CHAVE_AVISO_FOLLOWUP] = (
-        lead.id,
-        "ok" if resultado.executado else "aviso",
-        "Follow-up gerado e registrado na conversa do lead."
-        if resultado.executado
-        else resultado.motivo,
-    )
+    st.session_state[CHAVE_FOLLOWUP_PENDENTE] = lead.id
+    st.session_state.pop(CHAVE_DESFECHO_FOLLOWUP, None)
     st.rerun()
+
+
+def _followup_do_lead(lead: Lead) -> None:
+    """Gera o follow-up pedido para este lead e mostra como terminou.
+
+    O desfecho fica na tela até o corretor fechá-lo, e não num toast: o que
+    ele quer ler é a mensagem que a Marina escreveu, e quatro segundos no
+    canto da tela não bastam para isso — nem para notar que deu errado.
+    """
+    if st.session_state.get(CHAVE_FOLLOWUP_PENDENTE) == lead.id:
+        st.session_state.pop(CHAVE_FOLLOWUP_PENDENTE, None)
+        nome = markdown_seguro(rotulo_do_lead(lead))
+        with st.status(f"Escrevendo o follow-up de **{nome}**…"):
+            resultado = asyncio.run(run_followup_para_lead(lead.id))
+        st.session_state[CHAVE_DESFECHO_FOLLOWUP] = (lead.id, resultado)
+        # O rerun atualiza a linha e a conversa, que já estavam desenhadas.
+        st.rerun()
+
+    guardado = st.session_state.get(CHAVE_DESFECHO_FOLLOWUP)
+    if not guardado or guardado[0] != lead.id:
+        return
+
+    resultado = guardado[1]
+    with st.container(
+        horizontal=True, vertical_alignment="top", key=f"desfecho_followup_{lead.id}"
+    ):
+        if resultado.executado:
+            st.success(
+                corpo_do_followup_gerado(resultado),
+                title=titulo_do_followup_gerado(resultado),
+                icon=":material/mark_chat_read:",
+            )
+        elif resultado.falhou:
+            st.error(
+                resultado.motivo,
+                title="Não foi possível gerar o follow-up",
+                icon=":material/error:",
+            )
+        else:
+            st.info(
+                resultado.motivo,
+                title="Follow-up não disparado",
+                icon=":material/block:",
+            )
+        if st.button(
+            "", icon=":material/close:", key=f"fecha_followup_{lead.id}",
+            help="Fechar aviso", type="tertiary",
+        ):
+            st.session_state.pop(CHAVE_DESFECHO_FOLLOWUP, None)
+            st.rerun()
+
+
+def titulo_do_followup_gerado(resultado: DisparoManual) -> str:
+    """Régua e tentativa: o que o corretor precisa para saber quanto resta."""
+    regua = REGUAS[resultado.regua]["descricao"] if resultado.regua else ""
+    return (
+        f"Follow-up gerado · {regua} · "
+        f"tentativa {resultado.tentativa} de {resultado.maximo}"
+    )
+
+
+def corpo_do_followup_gerado(resultado: DisparoManual) -> str:
+    """A mensagem citada, e para onde ela vai.
+
+    Preparada como a conversa prepara uma fala — cifrão escapado, quebras
+    preservadas —, para o corretor ler aqui o mesmo que vai ler lá.
+    """
+    citacao = "\n".join(
+        f"> {linha}"
+        for linha in mensagem_para_markdown(resultado.texto.strip()).split("\n")
+    )
+    if resultado.enviado:
+        destino = "Enviada pelo Telegram."
+    elif resultado.canal == "telegram":
+        destino = (
+            "Registrada na conversa; o bot do Telegram a envia em instantes, "
+            "se estiver no ar."
+        )
+    else:
+        destino = "Registrada na conversa — aparece no chat do lead."
+    return f"{citacao}\n\n{destino}"
 
 
 def _avisos_e_confirmacao(lead: Lead) -> None:
@@ -813,10 +886,7 @@ def _avisos_e_confirmacao(lead: Lead) -> None:
     eles quebrariam em varias linhas, e a confirmacao de uma acao sem desfazer
     precisa de espaco para ser lida antes de clicada.
     """
-    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
-    if aviso and aviso[0] == lead.id:
-        mostrar = st.success if aviso[1] == "ok" else st.info
-        mostrar(aviso[2], icon=":material/send:")
+    _followup_do_lead(lead)
 
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return

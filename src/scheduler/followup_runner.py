@@ -116,11 +116,33 @@ async def run_followup_cycle(sender: Optional[Sender] = None) -> dict[str, int]:
 
 @dataclass
 class DisparoManual:
-    """Desfecho de um follow-up disparado pelo corretor na tela."""
+    """Desfecho de um follow-up disparado pelo corretor na tela.
+
+    `executado` falso tem duas causas que a tela mostra de jeitos diferentes:
+    uma regra que barrou o disparo (teto, budget, status sem régua), que é
+    informação, e uma falha na geração (`falhou`), que é erro.
+    """
 
     executado: bool
     motivo: str = ""
     stats: dict[str, int] = field(default_factory=dict)
+    falhou: bool = False
+    texto: str = ""
+    regua: str = ""
+    tentativa: int = 0
+    maximo: int = 0
+    canal: str = ""
+    enviado: bool = False
+
+
+@dataclass
+class _Desfecho:
+    """O que `_processar_lead` fez com um lead; o ciclo automático o ignora."""
+
+    texto: str = ""
+    canal: str = ""
+    enviado: bool = False
+    erro: str = ""
 
 
 async def run_followup_para_lead(
@@ -172,8 +194,21 @@ async def run_followup_para_lead(
         "event=followup_disparo_manual lead_id=%s regua=%s tentativa=%s",
         lead_id, regua, tentativas + 1,
     )
-    await _processar_lead(lead_id, canal_origem, regua, contexto, sender, stats)
-    return DisparoManual(True, "", stats)
+    desfecho = await _processar_lead(
+        lead_id, canal_origem, regua, contexto, sender, stats
+    )
+    return DisparoManual(
+        executado=not desfecho.erro,
+        motivo=desfecho.erro,
+        stats=stats,
+        falhou=bool(desfecho.erro),
+        texto=desfecho.texto,
+        regua=regua,
+        tentativa=tentativas + 1,
+        maximo=maximo,
+        canal=desfecho.canal,
+        enviado=desfecho.enviado,
+    )
 
 
 async def _processar_lead(
@@ -183,12 +218,15 @@ async def _processar_lead(
     contexto: dict[str, object],
     sender: Optional[Sender],
     stats: dict[str, int],
-) -> None:
+) -> _Desfecho:
     """Gera, persiste, despacha e registra o follow-up de um lead.
 
     Extraido do ciclo para que o disparo manual do dashboard passe exatamente
     pelo mesmo caminho: mesma geracao, mesma persistencia, mesmo registro de
     tentativa. O que muda entre os dois e so quem escolhe o lead.
+
+    Nao propaga excecao — um lead com problema nao derruba o ciclo. Quem
+    precisa saber se deu certo, como o botao do dashboard, le o desfecho.
     """
     followup_service = FollowUpService()
     lead_service = LeadService()
@@ -274,21 +312,25 @@ async def _processar_lead(
             "event=followup_processado lead_id=%s regua=%s tentativa=%s enviado=%s",
             lead_id, regua, tentativa, enviado,
         )
+        return _Desfecho(texto=gerado.texto, canal=canal, enviado=enviado)
 
     except LLMConfigError as e:
         logger.error("event=followup_llm_config_error lead_id=%s erro=%s", lead_id, e)
         stats["falhas"] += 1
+        return _Desfecho(erro=f"O modelo de linguagem não está configurado: {e}")
     except Exception as e:
         stats["falhas"] += 1
         logger.exception(
             "event=followup_falhou lead_id=%s regua=%s tipo_erro=%s",
             lead_id, regua, type(e).__name__,
         )
+        motivo = f"{type(e).__name__}: {e}"[:120]
         with get_db() as db:
             followup_service.record_attempt(
                 lead_id=lead_id, regua=regua, status="failed", db=db,
-                failure_reason=f"{type(e).__name__}: {e}"[:120],
+                failure_reason=motivo,
             )
+        return _Desfecho(erro=f"A geração falhou ({motivo}).")
 
 async def dispatch_pending_followups(sender: Optional[Sender] = None) -> None:
     """Dispara as mensagens que estao presas como 'generated'.

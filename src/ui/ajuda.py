@@ -177,7 +177,9 @@ Telegram**. Sem esse processo no ar, o disparo automático não acontece.
 
 O botão **Disparar follow-up** na ficha usa a mesma lógica com outro gatilho:
 dispensa só a janela de tempo — quem está olhando o lead já decidiu que é hora
-— e mantém o teto de tentativas da régua e o orçamento de LLM.
+— e mantém o teto de tentativas da régua e o orçamento de LLM. Ao terminar,
+ele mostra a mensagem que a Marina escreveu, a régua e quantas tentativas dela
+já foram usadas; o aviso fica na tela até você fechá-lo.
 
 Esgotadas as tentativas de uma régua de silêncio, o lead vai para `inativo`.
 Ele volta ao funil sozinho se responder.
