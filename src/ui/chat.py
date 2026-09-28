@@ -209,6 +209,14 @@ def render_chat():
 
     _painel_da_conversa()
 
+    # Relida a cada desenho, e não só ao trocar de conversa ou ao fim de um
+    # turno: a conversa também cresce por fora desta tela — o follow-up
+    # disparado na ficha ou pelo ciclo automático, a pessoa escrevendo pelo
+    # Telegram — e o que a sessão guardava ficava para trás até alguém
+    # escrever aqui.
+    if st.session_state.lead_id is not None:
+        _recarregar(st.session_state.lead_id)
+
     # A conversa fica numa caixa de altura fixa, e não solta na página: solta,
     # ela empurra o painel de conversa para fora da tela conforme cresce, e
     # trocar de lead passa a exigir rolar tudo de volta para cima.

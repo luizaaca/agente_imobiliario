@@ -325,7 +325,7 @@ São limitações reais da entrega, não do desenho:
 
 - **O canal Telegram nunca foi executado.** O código existe (`src/channels/telegram_bot.py`, `run_telegram.py`, scheduler no `post_init`), mas sem um `TELEGRAM_BOT_TOKEN` real o fluxo Telegram → agente → banco → dashboard não foi verificado ponta a ponta.
 - **Sem streaming de resposta.** O chat espera a resposta completa e então a exibe.
-- **A UI não tem teste automatizado.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), mas a renderização em si foi verificada manualmente no navegador.
+- **A UI quase não tem teste de renderização.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), mas a renderização foi verificada manualmente no navegador. A exceção é o chat, que roda pelo `AppTest` para provar que mostra o que chegou à conversa por fora dele.
 - **O follow-up só envia ativamente pelo Telegram.** Sem canal com push, a mensagem é gerada e registrada com status `generated`, mas não sai. No Streamlit ela aparece no histórico do lead. O que o painel gera para um lead do Telegram fica à espera do processo do bot, que o envia se ainda for recente (até 15 minutos) e se o lead não tiver respondido nesse meio-tempo; senão, a tentativa vira `skipped`.
 - **Custo estimado por tabela fixa** (`LLMUsageService.PRICING`). Modelo fora da tabela cai num preço genérico e registra aviso no log — o número aparece no dashboard, mas é um palpite.
 - **O tom do agente degrada em conversas longas.** Ele tende a voltar a listar opções e oferecer menus de próximos passos, porque imita as próprias mensagens anteriores no histórico.
