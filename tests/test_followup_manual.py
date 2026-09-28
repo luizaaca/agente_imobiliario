@@ -188,7 +188,7 @@ def test_mensagem_citada_inteira_e_como_a_conversa_a_mostra():
     ("campos", "esperado"),
     [
         ({"canal": "streamlit"}, "chat do lead"),
-        ({"canal": "telegram"}, "bot do Telegram a envia"),
+        ({"canal": "telegram"}, "próximos 15 minutos"),
         ({"canal": "telegram", "enviado": True}, "Enviada pelo Telegram"),
     ],
 )

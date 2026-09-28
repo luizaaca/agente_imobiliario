@@ -941,6 +941,8 @@ Recomendação conceitual:
 
 - `failure_reason` deve ser curto e operacional; detalhes extensos podem ir para logs.
 - `status='skipped'` cobre casos em que a tentativa foi avaliada, mas não executada por regra de negócio.
+- `generated` é o desfecho normal num canal sem envio ativo (Streamlit): a mensagem está no chat do lead. `failed` fica para quando se tentou enviar e deu errado — um canal sem envio não é tentado.
+- Num canal com envio, `generated` é uma espera: a mensagem foi gerada sem remetente (painel, script avulso) e o processo do Telegram a envia. Vira `skipped` se passar de 15 minutos, se o lead responder antes, ou se houver outra mais recente para o mesmo lead — só a última sai.
 
 ---
 

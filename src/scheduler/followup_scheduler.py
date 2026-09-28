@@ -6,7 +6,11 @@ from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.scheduler.followup_runner import Sender, run_followup_cycle, dispatch_pending_followups
+from src.scheduler.followup_runner import (
+    Sender,
+    dispatch_pending_followups,
+    run_followup_cycle,
+)
 
 logger = logging.getLogger(__name__)
 

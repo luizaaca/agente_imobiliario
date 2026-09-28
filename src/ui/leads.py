@@ -22,7 +22,11 @@ import streamlit as st
 
 from src.db.models import Agendamento, Lead
 from src.db.session import get_db
-from src.scheduler.followup_runner import DisparoManual, run_followup_para_lead
+from src.scheduler.followup_runner import (
+    VALIDADE_DO_PENDENTE,
+    DisparoManual,
+    run_followup_para_lead,
+)
 from src.services.followup_service import REGUAS
 from src.services.lead_service import LeadService
 from src.services.scheduling_service import (
@@ -870,9 +874,11 @@ def corpo_do_followup_gerado(resultado: DisparoManual) -> str:
     if resultado.enviado:
         destino = "Enviada pelo Telegram."
     elif resultado.canal == "telegram":
+        minutos = int(VALIDADE_DO_PENDENTE.total_seconds() // 60)
         destino = (
-            "Registrada na conversa; o bot do Telegram a envia em instantes, "
-            "se estiver no ar."
+            "Registrada na conversa; o bot do Telegram a envia em instantes. "
+            f"Se ele não estiver no ar nos próximos {minutos} minutos, ela é "
+            "descartada sem sair."
         )
     else:
         destino = "Registrada na conversa — aparece no chat do lead."

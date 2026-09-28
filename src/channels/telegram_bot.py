@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 
 from src.agent.sdr_agent import SDRDependencies, process_message
+from src.channels.envio import CANAIS_COM_ENVIO
 from src.config import settings
 from src.db.session import get_db
 from src.services.catalog_service import CatalogService
@@ -23,18 +24,26 @@ from src.services.scheduling_service import SchedulingService
 logger = logging.getLogger(__name__)
 
 
+# O que o agente recebe como primeira fala quando a conversa abre por /start.
+SAUDACAO_DO_START = "Oi"
+
+
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para /start: cria o lead e delega ao agente.
 
     O /start não carrega texto do usuário, então usamos uma saudação
     sintética para que o agente gere a primeira resposta via LLM — com
     tom, persona e contexto adequados — em vez de uma mensagem fixa.
+
+    A saudação vai por parâmetro, e não escrita no `update`: os objetos do
+    python-telegram-bot são imutáveis, e atribuir a `update.message.text`
+    levanta `AttributeError` — o /start ficava sem resposta.
     """
     chat_id = str(update.effective_chat.id)
     user = update.effective_user
 
     # Garante a criação do lead com o nome do usuário antes de delegar;
-    # o message_handler chamaria get_or_create_lead também, mas sem o nome.
+    # o fluxo comum chamaria get_or_create_lead também, mas sem o nome.
     with get_db() as db:
         LeadService().get_or_create_lead(
             channel="telegram",
@@ -43,16 +52,18 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             nome=user.full_name if user else None,
         )
 
-    # Injeta o texto sintético no update e delega ao fluxo normal.
-    update.message.text = "Oi"
-    await message_handler(update, context)
+    await _responder(update, SAUDACAO_DO_START)
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler para mensagens de texto."""
+    await _responder(update, update.message.text)
+
+
+async def _responder(update: Update, user_text: str) -> None:
+    """Passa a fala ao agente e devolve a resposta no mesmo chat."""
     chat_id = str(update.effective_chat.id)
-    user_text = update.message.text
-    
+
     # Show typing indicator
     await update.effective_chat.send_action(ChatAction.TYPING)
     
@@ -98,9 +109,9 @@ def make_sender(app: Application):
     """Cria o despachante de follow-up ligado a esta aplicação Telegram."""
 
     async def send(channel: str, external_chat_id: str, texto: str) -> bool:
-        if channel != "telegram":
-            # Outros canais (Streamlit) não têm envio ativo: a mensagem fica
-            # persistida e aparece no painel.
+        if channel not in CANAIS_COM_ENVIO:
+            # Quem chama já filtra por CANAIS_COM_ENVIO; isto é só a guarda
+            # para não mandar ao Telegram um chat_id de outro canal.
             return False
         await app.bot.send_message(chat_id=external_chat_id, text=texto)
         return True
