@@ -42,8 +42,8 @@ def _instrucao_tentativa(tentativa: int) -> str:
     if tentativa == 2:
         return (
             "Esta é a 2ª tentativa. Seja mais curta e casual que a anterior. "
-            "Mude o ângulo: se antes perguntou sobre preferências, agora "
-            "comente sobre o mercado ou destaque um detalhe do que ele busca."
+            "Mude o ângulo: puxe outro dado que ele já deu — se antes falou do "
+            "bairro, agora fale do prazo ou do tipo de imóvel."
         )
     return (
         f"Esta é a tentativa {tentativa} — provavelmente a última antes do "

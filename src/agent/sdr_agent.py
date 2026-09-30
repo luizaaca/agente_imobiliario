@@ -829,11 +829,11 @@ def _aviso_de_compromisso_existente(
 
 
 def _falta_para_o_corretor(ctx: RunContext[SDRDependencies], db) -> str:
-    """Cobra nome e telefone na hora em que eles passam a fazer falta.
+    """Cobra nome e telefone que ainda faltem quando a visita é marcada.
 
-    Marcar visita é o momento em que o dado deixa de ser curiosidade e vira
-    necessidade: é um corretor de carne e osso que vai ligar. Pedir antes, sem
-    motivo, soa a cadastro; pedir aqui tem uma razão que a pessoa entende.
+    Os dois se pedem cedo, mas sem insistir, e a pessoa pode não ter dado.
+    Marcar visita é o momento em que o dado deixa de ser opcional: é um
+    corretor de carne e osso que vai ligar, e essa é uma razão que ela entende.
 
     Vai no retorno da tool, e não só nas instruções, porque este texto é a
     última coisa que o modelo lê antes de escrever — é onde a ordem pega.
@@ -1110,6 +1110,10 @@ def montar_contexto_do_lead(lead) -> str:
         return "Primeira mensagem desta pessoa. Você ainda não sabe nada sobre ela."
 
     sabido = _o_que_se_sabe(lead)
+    # O telefone se pede cedo; sem esta linha o modelo não sabe que já o tem e
+    # pede de novo. Só o fato, não o número: a conversa não precisa dele.
+    if lead.telefone:
+        sabido.append("Telefone: já informado")
 
     preenchidos = {
         "intencao": lead.intencao is not None,
