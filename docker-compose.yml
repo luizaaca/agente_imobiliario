@@ -38,6 +38,9 @@ x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   LLM_MONTHLY_TOKEN_BUDGET: ${LLM_MONTHLY_TOKEN_BUDGET:-10000000}
   LLM_MAX_TURNS_PER_CONVERSATION: ${LLM_MAX_TURNS_PER_CONVERSATION:-30}
   LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-400000}
+  # Intervalo do ciclo automatico de follow-up, lido pelo scheduler do
+  # `telegram-bot`. Baixar para 1 serve para ver o ciclo rodar numa demo.
+  FOLLOWUP_INTERVAL_MINUTES: ${FOLLOWUP_INTERVAL_MINUTES:-30}
   LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
 
 # Teto do log de cada container. Sem isso o Docker guarda o log sem limite

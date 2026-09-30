@@ -6,7 +6,7 @@ agente de busca inclui o perfil narrativo — texto derivado do que o lead
 digitou. Uma instrução escondida numa mensagem de lead chega até aqui.
 
 A fronteira de verdade é a role `busca_ro`, que só tem `SELECT` em `imoveis`
-(ver a migration `e3c7a94f1b05`). O que este módulo acrescenta é profundidade:
+(ver a migration `29abbb20023f`). O que este módulo acrescenta é profundidade:
 recusa cedo, com uma mensagem que o agente entende, em vez de deixar o
 PostgreSQL recusar com um erro de permissão que não ensina nada.
 

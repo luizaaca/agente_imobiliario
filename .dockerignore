@@ -23,7 +23,7 @@ htmlcov/
 .claude/
 .gemini/
 
-# Segredos: as variaveis chegam por env_file no compose, nunca pela imagem
+# Segredos: as variaveis chegam por interpolacao no compose, nunca pela imagem
 .env
 .env.local
 .env.*.local
