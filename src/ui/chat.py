@@ -25,6 +25,11 @@ LIMITE_EXIBIDO = 100
 # painel de troca de lead e o campo de mensagem sempre visiveis.
 ALTURA_DA_CONVERSA = 460
 
+# De quanto em quanto tempo a caixa da conversa relê o banco sem esperar
+# clique. Cada vez são duas consultas pequenas, limitadas a LIMITE_EXIBIDO
+# falas, e só enquanto o chat está aberto num lead.
+INTERVALO_DE_RELEITURA = "5s"
+
 
 def _prefixo_do_usuario() -> str:
     return f"streamlit_{st.session_state.get('username', 'demo')}_"
@@ -195,6 +200,26 @@ def _aviso_de_configuracao() -> list[str]:
     return faltando
 
 
+@st.fragment(run_every=INTERVALO_DE_RELEITURA)
+def _conversa_ao_vivo() -> None:
+    """As falas do lead aberto, relidas do banco a cada desenho.
+
+    A conversa também cresce por fora desta tela — o follow-up disparado na
+    ficha ou pelo ciclo automático, a pessoa escrevendo pelo Telegram. Relida
+    só ao trocar de lead ou ao fim de um turno, ela ficava para trás até
+    alguém escrever aqui.
+
+    É fragmento para se redesenhar sozinho, sem esperar clique, e sem rodar a
+    página inteira: só esta caixa vai ao banco a cada intervalo. Durante um
+    turno o Streamlit segura esses redesenhos e os retoma ao fim, então a
+    resposta que está sendo gerada não é interrompida.
+    """
+    lead_id = st.session_state.lead_id
+    if lead_id is not None:
+        _recarregar(lead_id)
+    renderizar(st.session_state.messages, ve_os_bastidores(papeis_da_sessao()))
+
+
 def render_chat():
     st.header("Chat com o Agente SDR", divider="gray")
     st.caption("Simule uma conversa como lead imobiliário")
@@ -209,20 +234,15 @@ def render_chat():
 
     _painel_da_conversa()
 
-    # Relida a cada desenho, e não só ao trocar de conversa ou ao fim de um
-    # turno: a conversa também cresce por fora desta tela — o follow-up
-    # disparado na ficha ou pelo ciclo automático, a pessoa escrevendo pelo
-    # Telegram — e o que a sessão guardava ficava para trás até alguém
-    # escrever aqui.
-    if st.session_state.lead_id is not None:
-        _recarregar(st.session_state.lead_id)
-
     # A conversa fica numa caixa de altura fixa, e não solta na página: solta,
     # ela empurra o painel de conversa para fora da tela conforme cresce, e
     # trocar de lead passa a exigir rolar tudo de volta para cima.
-    janela = st.container(height=ALTURA_DA_CONVERSA)
+    #
+    # `autoscroll` explícito porque o automático não enxerga as falas dentro
+    # do fragmento: a caixa abria no topo da conversa em vez de no fim.
+    janela = st.container(height=ALTURA_DA_CONVERSA, autoscroll=True)
     with janela:
-        renderizar(st.session_state.messages, ve_os_bastidores(papeis_da_sessao()))
+        _conversa_ao_vivo()
 
     # Desabilitado quando falta configuração: deixar o campo ativo só levaria
     # o usuário a mandar uma mensagem e receber "atendimento indisponível".
