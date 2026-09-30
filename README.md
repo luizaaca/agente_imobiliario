@@ -4,7 +4,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 255 testes automatizados. O canal Telegram está implementado mas **nunca foi exercitado com um bot real** — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 567 testes automatizados. O bot do Telegram sobe com token real e o scheduler de follow-up roda nele, mas **nenhuma conversa pelo Telegram foi feita ainda** — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -14,22 +14,23 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 |---|---|
 | Chat com o agente, com memória da conversa | funcionando |
 | Qualificação progressiva pela conversa (sem formulário) | funcionando |
-| Busca no catálogo: filtros estruturados + Full-Text Search com ranking | funcionando, 300 imóveis |
-| Busca que se afrouxa sozinha quando não há resultado exato | funcionando |
+| Busca no catálogo por um agente dedicado, que escreve SQL sobre uma role somente-leitura | funcionando, 300 imóveis |
+| Busca que se afrouxa quando não há resultado exato, e degrada sem LLM se o agente de busca falhar | funcionando |
 | Score do lead em 5 dimensões e avanço no funil | funcionando |
 | Perfil narrativo incremental | funcionando |
-| Agendamento de visita/reunião, com vínculo ao imóvel | funcionando |
+| Agendamento de visita/reunião: um compromisso por lead, com os imóveis de interesse na observação | funcionando |
 | Confirmar ou desmarcar a visita pela conversa | funcionando |
 | Resumo executivo para o corretor | funcionando |
 | Follow-up automático com 4 réguas e limite de tentativas | funcionando; envio ativo só no Telegram |
+| Chat que se atualiza sozinho com o que chega por fora (follow-up, Telegram) | funcionando |
 | Dashboard: KPIs, distribuição da carteira, tabela ordenável, custo de LLM | funcionando |
 | Menu de leads: ficha editável, criação manual, vínculo de canal, conversa, exclusão | funcionando |
 | Agendamento pela tela: criar, editar e excluir, com seletor de data e hora | funcionando |
-| Disparo manual de follow-up pela tela | funcionando |
+| Disparo manual de follow-up pela tela, mostrando a mensagem gerada | funcionando |
 | Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
 | Página de ajuda com estado da instalação e FAQ | funcionando |
-| Budgets de token (conversa, dia, mês) e custo estimado | funcionando |
-| Canal Telegram | implementado, não exercitado |
+| Budgets de token (conversa, dia, mês) e custo estimado, também por conversa | funcionando |
+| Canal Telegram | bot no ar com token real; sem conversa exercitada |
 
 ### O diferencial
 
@@ -64,14 +65,14 @@ docker compose --profile telegram up --build
 
 Toda a aplicação está atrás de login. O repositório já traz usuários prontos em `config/credentials.yaml` — só os hashes bcrypt, nunca a senha em texto:
 
-| Usuário | Senha | Papel (`roles`) | Vê o Simulador de Chat e o custo de LLM? |
+| Usuário | Senha | Papel (`roles`) | Vê o Simulador de Chat, o custo de LLM e as ferramentas que o agente usou? |
 |---|---|---|---|
 | `admin` | `admin123` | `admin` | sim |
 | `corretor1` | `corretor123` | `corretor` | não |
 
 Depois de entrar, o menu **Ajuda** explica de dentro da aplicação o que cada tela faz, como trabalhar um lead e por que a aplicação se comporta como se comporta — inclusive o estado desta instalação (chat configurado ou não, seu papel, se a sessão é estável).
 
-**Entre como `admin` para avaliar a POC inteira.** O simulador de chat é ferramenta de teste e o consumo de LLM é informação de quem opera, então nenhum dos dois aparece para o `corretor` — entre como `corretor1` se quiser ver a tela enxuta de quem só atende leads. Dashboard e menu de Leads são iguais para os dois.
+**Entre como `admin` para avaliar a POC inteira.** O simulador de chat é ferramenta de teste, e o consumo de LLM e as chamadas de ferramenta do agente são informação de quem opera, então nada disso aparece para o `corretor` — entre como `corretor1` se quiser ver a tela enxuta de quem só atende leads. Dashboard e menu de Leads são iguais para os dois.
 
 O papel esconde links do menu; **não é controle de acesso**. Ele mora neste YAML versionado, e quem o edita se dá o papel que quiser. Ver [`docs/03-operacao/03-autenticacao-da-ui.md`](docs/03-operacao/03-autenticacao-da-ui.md).
 
@@ -115,7 +116,7 @@ cp .env.example .env
 
 Preencha `LLM_API_KEY` e `LLM_MODEL` (e `LLM_BASE_URL`, se não for a OpenAI), depois suba de novo. Qualquer provider OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local.
 
-> O `.env` é opcional para o Compose (`required: false`), mas o `DATABASE_URL` que estiver nele é ignorado dentro dos containers: o Compose aponta para `postgres:5432`, porque `127.0.0.1` dentro do container seria o próprio container.
+> O `.env` é opcional para o Compose: ele só preenche os `${VAR}` do `docker-compose.yml`, que tem default para tudo. O `DATABASE_URL` que estiver nele não chega aos containers — o compose monta a URL apontando para `postgres:5432`, porque `127.0.0.1` dentro do container seria o próprio container.
 
 #### Se algo der errado
 
@@ -172,7 +173,7 @@ O login é o mesmo das [credenciais de acesso](#credenciais-de-acesso) acima.
 python run_telegram.py
 ```
 
-Precisa de `TELEGRAM_BOT_TOKEN` no `.env`, obtido com o @BotFather. Este caminho **não foi validado** — ver Limitações.
+Precisa de `TELEGRAM_BOT_TOKEN` no `.env`, obtido com o @BotFather. O mesmo processo roda o scheduler de follow-up: sem ele no ar, o ciclo automático não acontece. Pelo Compose, é o `--profile telegram` da Opção 1.
 
 ---
 
@@ -244,11 +245,14 @@ Não existe valor padrão de propósito. Um default no código seria público �
 
 | Variável | Para quê |
 |---|---|
-| `DATABASE_URL` | PostgreSQL. `postgresql://` é normalizado para `postgresql+psycopg://`. No Compose é sobrescrita para apontar ao serviço `postgres` |
+| `DATABASE_URL` | PostgreSQL. `postgresql://` é normalizado para `postgresql+psycopg://`. No Compose é montada apontando ao serviço `postgres` |
 | `DB_PASSWORD` | senha do PostgreSQL do Compose. Padrão: `sdr_dev_pass` |
+| `DB_PASSWORD_BUSCA` | senha da role `busca_ro`, somente-leitura em `imoveis`, que executa o SQL do agente de busca. Padrão: `busca_ro_dev_pass` |
+| `LLM_MODEL_BUSCA` | modelo do agente de busca. Vazio usa o `LLM_MODEL` |
 | `TELEGRAM_BOT_TOKEN` | só para o canal Telegram. Sem ela, `run_telegram.py` sai com erro explícito |
 | `LLM_DAILY_TOKEN_BUDGET`, `LLM_MONTHLY_TOKEN_BUDGET` | tetos de consumo. Atingidos, o agente responde que está indisponível |
 | `LLM_MAX_TOKENS_PER_CONVERSATION`, `LLM_MAX_TURNS_PER_CONVERSATION` | quando encerrar a conversa e fazer handover ao corretor |
+| `FOLLOWUP_INTERVAL_MINUTES` | de quantos em quantos minutos o ciclo automático de follow-up roda. Padrão: 30 |
 | `LOGFIRE_TOKEN` | observabilidade, opcional |
 
 O exemplo completo, com comentários, está em `.env.example`.
@@ -266,7 +270,7 @@ app.py (Streamlit)              run_telegram.py
             │                               │
             └──────────┬────────────────────┘
                        │
-        src/agent/    agente PydanticAI + 8 tools
+        src/agent/    agente PydanticAI + 9 tools, agente de busca
         src/services/ regras de domínio
         src/db/       SQLAlchemy + Alembic
                        │
@@ -281,7 +285,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 
 **A busca textual é coluna gerada, não trigger.** `imoveis.search_vector` é `GENERATED ALWAYS AS (to_tsvector(...)) STORED` com índice GIN: o PostgreSQL mantém o vetor sozinho, sem código de aplicação que possa esquecer de atualizar. A consulta usa `websearch_to_tsquery` com OU entre os termos e ordena por `ts_rank`.
 
-**Quem afrouxa a busca é a tool, não o modelo.** Quando nada casa com os filtros exatos, `search_relaxando` afrouxa um critério por vez e devolve em português o que mudou. Sem isso o modelo afirmava ter ampliado a busca sem ter ampliado.
+**Quem procura imóvel não é quem conversa.** A Marina manda o pedido em texto livre a um agente de busca dedicado ([ADR 0007](./docs/06-decisoes/adr/0007-agente-de-busca-dedicado.md)), que consulta o catálogo por SQL, afrouxa um critério por vez quando nada casa e devolve os IDs com o porquê de cada um. O SQL roda numa role que só tem `SELECT` em `imoveis`, com a transação em `READ ONLY` e tempo limite. Se esse agente falhar, a tool cai numa busca estruturada sem LLM (`search_relaxando`), que devolve em português o que afrouxou.
 
 **O contexto do lead lista só o que se sabe.** Mandar todo campo com "não informado" ao lado entregava ao modelo um formulário em branco — e ele conduzia a conversa preenchendo campos, um a um.
 
@@ -295,7 +299,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 pytest
 ```
 
-358 testes, ~30 segundos. Cobrem services, contrato das oito tools, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+567 testes, ~50 segundos. Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -323,7 +327,7 @@ O processo de geração do catálogo está documentado em `seed/` (`planejamento
 
 São limitações reais da entrega, não do desenho:
 
-- **O canal Telegram nunca foi executado.** O código existe (`src/channels/telegram_bot.py`, `run_telegram.py`, scheduler no `post_init`), mas sem um `TELEGRAM_BOT_TOKEN` real o fluxo Telegram → agente → banco → dashboard não foi verificado ponta a ponta.
+- **O canal Telegram não teve conversa real.** O bot sobe com token real, faz polling e roda o scheduler de follow-up, e o `/start` e o despacho têm teste automatizado — mas o fluxo Telegram → agente → banco → dashboard não foi percorrido com uma pessoa do outro lado.
 - **Sem streaming de resposta.** O chat espera a resposta completa e então a exibe.
 - **A UI quase não tem teste de renderização.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), mas a renderização foi verificada manualmente no navegador. A exceção é o chat, que roda pelo `AppTest` para provar que mostra o que chegou à conversa por fora dele.
 - **O follow-up só envia ativamente pelo Telegram.** Sem canal com push, a mensagem é gerada e registrada com status `generated`, mas não sai. No Streamlit ela aparece no histórico do lead. O que o painel gera para um lead do Telegram fica à espera do processo do bot, que o envia se ainda for recente (até 15 minutos) e se o lead não tiver respondido nesse meio-tempo; senão, a tentativa vira `skipped`.
@@ -354,7 +358,7 @@ agente_imobiliario/
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 255 testes
+├── tests/                  # 567 testes
 └── docs/                   # especificação funcional e técnica
 ```
 
@@ -395,7 +399,7 @@ As versões têm teto de major em `requirements.txt` de propósito: sem isso o p
 
 ## Próximos passos
 
-- Validar o canal Telegram ponta a ponta com um bot real.
+- Percorrer o canal Telegram ponta a ponta com uma conversa real.
 - Streaming de resposta no chat.
 - Testes automatizados da UI.
 - Preços reais por modelo na tabela de custo.

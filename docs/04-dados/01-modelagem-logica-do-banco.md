@@ -200,6 +200,28 @@ Marido trabalha remoto, ela presencial na Faria Lima.
 ### 3.6 Texto longo
 - Usar `TEXT` para conteúdo narrativo, mensagens, observações e resumos.
 
+### 3.7 Índices
+- Além das chaves primárias, o schema cria só os índices que uma regra ou uma
+  consulta concreta pede: o GIN do texto completo, o que sustenta o painel de
+  consumo, e os únicos que impõem regra de negócio.
+- No volume da POC as demais consultas varrem a tabela e terminam abaixo de
+  um milissegundo. Medido com `EXPLAIN ANALYZE` no banco de desenvolvimento
+  (300 imóveis, 400 mensagens): a busca estruturada por finalidade, preço e
+  quartos leva 0,46 ms, e o histórico de um lead, 0,12 ms. Índice por coluna
+  entra quando o volume pedir, medido do mesmo jeito, e não por antecipação.
+
+### 3.8 Defaults
+- Os defaults de `status` em `mensagens`, de `cidade`, `estado` e `disponivel`
+  em `imoveis`, e de `is_primary` em `lead_channel_identities` são aplicados
+  pelo SQLAlchemy, e não pelo banco. Os de data (`now()`) e o de
+  `llm_usage.status` (`'ok'`) são do banco.
+
+### 3.9 Origem do schema
+- O schema inteiro vem de uma migration única,
+  `alembic/versions/29abbb20023f_schema_inicial.py`, aplicada no Compose pelo
+  serviço `migrate` e na suíte de testes a cada execução. Tudo o que esta
+  modelagem descreve como existente foi conferido contra o banco criado por ela.
+
 ---
 
 ## 4. Tabela `leads`
@@ -207,7 +229,7 @@ Marido trabalha remoto, ela presencial na Faria Lima.
 ### 4.1 Finalidade
 Representa o lead e seu estado consolidado de qualificação.
 
-### 4.2 Colunas propostas
+### 4.2 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -234,33 +256,28 @@ Representa o lead e seu estado consolidado de qualificação.
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `updated_at` | `TIMESTAMPTZ` | Não | `now()` | Última atualização |
 
-### 4.3 Constraints recomendadas
+### 4.3 Constraints
 
 ```sql
-CHECK (orcamento_min IS NULL OR orcamento_min >= 0)
-CHECK (orcamento_max IS NULL OR orcamento_max >= 0)
-CHECK (orcamento_min IS NULL OR orcamento_max IS NULL OR orcamento_min <= orcamento_max)
-CHECK (quartos IS NULL OR quartos >= 0)
-CHECK (score IS NULL OR (score >= 0 AND score <= 10))
+CHECK (orcamento_min >= 0)
+CHECK (orcamento_max >= 0)
+CHECK (quartos >= 0)
+CHECK (score >= 0 AND score <= 10)
 CHECK (status IN ('novo', 'em_qualificacao', 'qualificado', 'agendado', 'inativo'))
-CHECK (intencao IS NULL OR intencao IN ('compra', 'aluguel', 'investimento'))
-CHECK (urgencia IS NULL OR urgencia IN ('baixa', 'media', 'alta'))
+CHECK (intencao IN ('compra', 'aluguel', 'investimento'))
+CHECK (urgencia IN ('baixa', 'media', 'alta'))
 ```
 
-### 4.4 Índices recomendados
+Todas aceitam `NULL`: no PostgreSQL um `CHECK` que resulta em `NULL` passa, e
+as colunas opcionais continuam opcionais.
 
-```sql
-CREATE INDEX idx_leads_status ON leads(status);
-CREATE INDEX idx_leads_intencao ON leads(intencao);
-CREATE INDEX idx_leads_score ON leads(score);
-CREATE INDEX idx_leads_created_at ON leads(created_at);
-CREATE INDEX idx_leads_status_score ON leads(status, score DESC);
-CREATE INDEX idx_leads_bairro_interesse ON leads(bairro_interesse);
-```
+### 4.4 Índices
+
+Só a chave primária (ver §3.7).
 
 ### 4.5 Observações
-- `telefone` não deve ser `UNIQUE` nesta etapa, pois o identificador de canal ainda será tratado em lacuna específica.
-- `updated_at` deverá ser atualizado pela camada de aplicação ou por mecanismo automático futuro.
+- `telefone` não é `UNIQUE`: a identidade da pessoa num canal fica em `lead_channel_identities`, e duas fichas com o mesmo telefone são um caso de merge, não um erro de gravação.
+- `updated_at` é atualizado pelo `onupdate` do SQLAlchemy; um `UPDATE` feito direto no banco não o altera.
 
 ---
 
@@ -277,31 +294,30 @@ Nesta etapa, a tabela `mensagens` deixa de ser apenas um histórico textual mín
 - suportar Telegram, Streamlit e follow-up automático;
 - manter a modelagem simples, sem exigir ainda uma entidade explícita de `conversation` / `session`.
 
-### 5.3 Colunas propostas
+### 5.3 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
 | `id` | `BIGSERIAL` | Não | auto | PK |
 | `lead_id` | `BIGINT` | Não |  | FK para `leads.id` |
-| `channel` | `VARCHAR(30)` | Não |  | Ex.: `telegram`, `streamlit`, `followup_system` |
-| `channel_identity_id` | `BIGINT` | Sim |  | FK futura para identidade de canal; opcional nesta fase |
+| `channel` | `VARCHAR(30)` | Não |  | `telegram` ou `streamlit` — no follow-up, o canal da identidade primária do lead |
+| `channel_identity_id` | `BIGINT` | Sim |  | Reservada para apontar a identidade de canal; sem FK e não preenchida |
 | `role` | `VARCHAR(20)` | Não |  | `user`, `assistant`, `system`, `tool` |
 | `message_type` | `VARCHAR(30)` | Não |  | Ex.: `chat`, `followup`, `system_notice`, `handover` |
 | `content` | `TEXT` | Não |  | Conteúdo textual da mensagem |
-| `status` | `VARCHAR(20)` | Não | `'created'` | Ex.: `received`, `generated`, `sent`, `failed` |
+| `status` | `VARCHAR(20)` | Não | `'created'` (ORM) | Ex.: `received`, `generated`, `sent`, `failed` |
 | `external_message_id` | `VARCHAR(100)` | Sim |  | ID externo do canal, quando existir |
 | `in_reply_to_message_id` | `BIGINT` | Sim |  | Auto-relacionamento opcional para encadeamento simples |
-| `metadata_json` | `JSONB` | Sim |  | Metadados leves do canal/operação |
+| `metadata_json` | `JSON` | Sim |  | O que cada chamada de ferramenta fez: IDs apresentados, consultas do agente de busca |
 | `timestamp` | `TIMESTAMPTZ` | Não | `now()` | Momento principal do registro |
 | `sent_at` | `TIMESTAMPTZ` | Sim |  | Momento efetivo de envio, quando aplicável |
 
-### 5.4 Constraints recomendadas
+### 5.4 Constraints
 
 ```sql
 CHECK (role IN ('user', 'assistant', 'system', 'tool'))
 CHECK (message_type IN ('chat', 'followup', 'system_notice', 'handover'))
 CHECK (status IN ('created', 'received', 'generated', 'sent', 'failed'))
-CHECK (length(trim(content)) > 0)
 ```
 
 ### 5.5 Chaves estrangeiras
@@ -311,19 +327,11 @@ FOREIGN KEY (lead_id) REFERENCES leads(id)
 FOREIGN KEY (in_reply_to_message_id) REFERENCES mensagens(id)
 ```
 
-> `channel_identity_id` será formalizado quando a lacuna de identidade de canal for fechada.
+### 5.6 Índices
 
-### 5.6 Índices recomendados
-
-```sql
-CREATE INDEX idx_mensagens_lead_id ON mensagens(lead_id);
-CREATE INDEX idx_mensagens_channel ON mensagens(channel);
-CREATE INDEX idx_mensagens_status ON mensagens(status);
-CREATE INDEX idx_mensagens_message_type ON mensagens(message_type);
-CREATE INDEX idx_mensagens_timestamp ON mensagens(timestamp);
-CREATE INDEX idx_mensagens_lead_timestamp ON mensagens(lead_id, timestamp);
-CREATE INDEX idx_mensagens_external_message_id ON mensagens(external_message_id);
-```
+Só a chave primária (ver §3.7). O histórico é lido por `lead_id` e ordenado
+por `id`, e não por `timestamp`: uma chamada de ferramenta e o retorno dela
+caem no mesmo segundo, e o empate embaralharia o par.
 
 ### 5.7 Justificativa dos novos campos
 
@@ -331,7 +339,9 @@ CREATE INDEX idx_mensagens_external_message_id ON mensagens(external_message_id)
 Permite distinguir a origem da mensagem sem depender apenas do `canal_origem` do lead.
 
 #### `channel_identity_id`
-Prepara a tabela para a futura entidade de identidade de canal, sem obrigar sua implementação imediata.
+Reservada para ligar a mensagem à identidade de canal exata. Hoje o canal da
+mensagem (`channel`) e a identidade primária do lead bastam, e a coluna fica
+vazia.
 
 #### `message_type`
 Evita sobrecarregar `role` com semânticas de negócio. Exemplo:
@@ -362,7 +372,7 @@ Permite guardar metadados leves sem explodir o schema cedo demais.
 ### 6.1 Finalidade
 Persistir visitas e reuniões associadas a um lead.
 
-### 6.2 Colunas propostas
+### 6.2 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -379,7 +389,7 @@ FK única obrigaria a escolher um deles e perder o resto — os imóveis de
 interesse vão escritos na `observacoes`, que é o que o corretor lê junto do
 perfil narrativo e do resumo executivo.
 
-### 6.3 Constraints recomendadas
+### 6.3 Constraints
 
 ```sql
 CHECK (tipo IN ('visita', 'reuniao'))
@@ -392,13 +402,9 @@ CHECK (status IN ('pendente', 'confirmado', 'cancelado', 'realizado'))
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 6.5 Índices recomendados
+### 6.5 Índices
 
 ```sql
-CREATE INDEX idx_agendamentos_lead_id ON agendamentos(lead_id);
-CREATE INDEX idx_agendamentos_data_hora ON agendamentos(data_hora);
-CREATE INDEX idx_agendamentos_status_data_hora ON agendamentos(status, data_hora);
-
 -- Um compromisso de pe por lead.
 CREATE UNIQUE INDEX uq_agendamentos_ativo_por_lead
 ON agendamentos (lead_id)
@@ -407,11 +413,10 @@ WHERE status IN ('pendente', 'confirmado');
 
 O índice único é parcial de propósito: `cancelado` e `realizado` se repetem à
 vontade, porque são o histórico de onde o corretor tira que a pessoa já
-desmarcou uma vez. A regra morava só no código da aplicação e não se
-sustentou — um lead chegou a ter duas visitas `pendente` ao mesmo tempo,
-marcadas em turnos diferentes, porque o modelo não acertou o id na hora de
-remarcar. Com a unicidade garantida aqui, as tools de confirmar e cancelar
-deixaram de receber qual compromisso: o dono é o lead do turno.
+desmarcou uma vez. A regra fica no banco, e não só no código: uma checagem na
+aplicação cede a dois turnos gravando ao mesmo tempo, e a um modelo que erra
+qual compromisso trocar. Com a unicidade garantida aqui, as tools de confirmar
+e cancelar não recebem qual compromisso: o dono é o lead do turno.
 
 ---
 
@@ -420,7 +425,7 @@ deixaram de receber qual compromisso: o dono é o lead do turno.
 ### 7.1 Finalidade
 Registrar consumo de LLM para auditoria, controle de custo e métricas operacionais.
 
-### 7.2 Colunas propostas
+### 7.2 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -432,17 +437,18 @@ Registrar consumo de LLM para auditoria, controle de custo e métricas operacion
 | `tokens_output` | `INTEGER` | Não |  | Tokens de saída |
 | `tokens_total` | `INTEGER` | Não |  | Soma de entrada + saída |
 | `estimated_cost_usd` | `NUMERIC(12,6)` | Sim |  | Custo estimado |
-| `operation` | `VARCHAR(30)` | Não |  | Ex.: `chat`, `followup`, `resumo`, `perfil`, `busca` |
+| `operation` | `VARCHAR(30)` | Não |  | `chat`, `followup`, `perfil` ou `busca` |
+| `status` | `VARCHAR(20)` | Não | `'ok'` | `ok` ou `erro`: a tabela é o livro-caixa de toda chamada, inclusive as que falharam |
+| `error_type` | `VARCHAR(80)` | Sim |  | Classe da exceção, quando `status='erro'` |
+| `latency_ms` | `INTEGER` | Sim |  | Tempo da chamada ao provider |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 
-### 7.3 Constraints recomendadas
+### 7.3 Constraints
 
 ```sql
 CHECK (tokens_input >= 0)
 CHECK (tokens_output >= 0)
 CHECK (tokens_total >= 0)
-CHECK (estimated_cost_usd IS NULL OR estimated_cost_usd >= 0)
-CHECK (conversation_turn IS NULL OR conversation_turn >= 0)
 ```
 
 ### 7.4 Chave estrangeira
@@ -451,13 +457,11 @@ CHECK (conversation_turn IS NULL OR conversation_turn >= 0)
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 7.5 Índices recomendados
+### 7.5 Índices
 
 ```sql
-CREATE INDEX idx_llm_usage_lead_id ON llm_usage(lead_id);
-CREATE INDEX idx_llm_usage_operation ON llm_usage(operation);
-CREATE INDEX idx_llm_usage_created_at ON llm_usage(created_at);
-CREATE INDEX idx_llm_usage_lead_operation_created_at ON llm_usage(lead_id, operation, created_at);
+-- O painel de consumo filtra por periodo e separa as falhas.
+CREATE INDEX ix_llm_usage_created_at_status ON llm_usage (created_at, status);
 ```
 
 ---
@@ -506,7 +510,7 @@ Todos os campos do catálogo devem ser produzidos pela etapa de geração sinté
 | `disponivel` | Definir conforme cenário da POC; default recomendado `true` |
 | `imagem_url` | Usar placeholder por tipo ou perfil do imóvel |
 
-### 8.3 Colunas propostas
+### 8.3 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -517,8 +521,8 @@ Todos os campos do catálogo devem ser produzidos pela etapa de geração sinté
 | `operacao` | `VARCHAR(20)` | Não |  | Ex.: `venda`, `aluguel` |
 | `bairro` | `VARCHAR(100)` | Não |  | Bairro do imóvel |
 | `zona` | `VARCHAR(50)` | Sim |  | Ex.: `zona_sul`, `zona_oeste`, `centro`, `zona_norte`, `zona_leste` |
-| `cidade` | `VARCHAR(100)` | Não | `'São Paulo'` | Cidade |
-| `estado` | `VARCHAR(2)` | Não | `'SP'` | UF |
+| `cidade` | `VARCHAR(100)` | Não | `'São Paulo'` (ORM) | Cidade |
+| `estado` | `VARCHAR(2)` | Não | `'SP'` (ORM) | UF |
 | `preco` | `NUMERIC(12,2)` | Não |  | Preço em BRL |
 | `quartos` | `SMALLINT` | Não |  | Quantidade de quartos / salas privativas (0 para comercial) |
 | `suites` | `SMALLINT` | Sim |  | Quantidade de suítes (se disponível; 0 para comercial) |
@@ -530,43 +534,40 @@ Todos os campos do catálogo devem ser produzidos pela etapa de geração sinté
 | `descricao` | `TEXT` | Sim |  | Descrição textual rica (essencial para FTS) |
 | `tags` | `TEXT` | Sim |  | Tags ou amenidades em texto livre (separadas por vírgula) |
 | `perfil_indicado` | `VARCHAR(30)` | Sim |  | Ex.: `residencial_familia`, `alto_padrao`, `investidor`, `corporativo`, `pequena_empresa`, `saude_consultorio`, `varejo_comercio`, `logistica_industrial` |
-| `disponivel` | `BOOLEAN` | Não | `true` | Se o imóvel está disponível |
+| `disponivel` | `BOOLEAN` | Não | `true` (ORM) | Se o imóvel está disponível |
 | `imagem_url` | `VARCHAR(500)` | Sim |  | URL da imagem principal (placeholder na POC) |
 | `search_vector` | `TSVECTOR` | Sim |  | Vetor de busca FTS, gerado automaticamente |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `updated_at` | `TIMESTAMPTZ` | Não | `now()` | Última atualização |
 
-### 8.4 Constraints recomendadas
+### 8.4 Constraints
 
 ```sql
-CHECK (tipo IN (
-    'apartamento', 'studio', 'cobertura', 'casa', 'casa_condominio', 'sobrado', 'flat', 'loft',
-    'sala_comercial', 'consultorio', 'escritorio', 'andar_corporativo', 'predio_comercial', 'loja', 'galpao', 'terreno_comercial'
-))
 CHECK (finalidade IN ('residencial', 'comercial'))
 CHECK (operacao IN ('venda', 'aluguel'))
 CHECK (preco > 0)
 CHECK (area_m2 > 0)
 CHECK (quartos >= 0)
-CHECK (suites IS NULL OR suites >= 0)
-CHECK (banheiros IS NULL OR banheiros >= 0)
-CHECK (vaga_garagem IS NULL OR vaga_garagem >= 0)
-CHECK (condominio IS NULL OR condominio >= 0)
-CHECK (iptu_anual IS NULL OR iptu_anual >= 0)
+CHECK (suites >= 0)
+CHECK (banheiros >= 0)
+CHECK (vaga_garagem >= 0)
+CHECK (condominio >= 0)
+CHECK (iptu_anual >= 0)
 ```
 
-### 8.5 Índices recomendados
+`tipo` não tem `CHECK`. O vocabulário vive em `FINALIDADE_POR_TIPO`
+(`src/services/catalog_service.py`), que também diz a finalidade de cada tipo,
+e `tests/test_catalog_service.py` o compara com o `SELECT DISTINCT` da coluna —
+um tipo novo no catálogo quebra a suíte em vez de passar despercebido.
+
+### 8.5 Índices
 
 ```sql
-CREATE INDEX idx_imoveis_bairro ON imoveis(bairro);
-CREATE INDEX idx_imoveis_tipo ON imoveis(tipo);
-CREATE INDEX idx_imoveis_finalidade ON imoveis(finalidade);
-CREATE INDEX idx_imoveis_quartos ON imoveis(quartos);
-CREATE INDEX idx_imoveis_preco ON imoveis(preco);
-CREATE INDEX idx_imoveis_disponivel ON imoveis(disponivel);
-CREATE INDEX idx_imoveis_perfil_indicado ON imoveis(perfil_indicado);
-CREATE INDEX idx_imoveis_search ON imoveis USING GIN (search_vector);
+CREATE INDEX ix_imoveis_search_vector ON imoveis USING GIN (search_vector);
 ```
+
+Os filtros numéricos e de categoria não têm índice próprio (ver §3.7): com 300
+imóveis, a varredura sequencial termina em menos de meio milissegundo.
 
 ### 8.6 Full-Text Search (FTS)
 
@@ -591,10 +592,9 @@ Coluna gerada, e não trigger: o PostgreSQL recalcula o vetor em todo `INSERT` e
 trigger para desabilitar por engano, nem carga em massa que escape dele — o
 vetor não tem como ficar defasado.
 
-A expressão vive em `SEARCH_VECTOR_EXPR`, em `src/db/models.py`, e é usada tanto
-pela migration quanto pelo `create_all` dos testes. O texto precisa ser
-idêntico nos dois caminhos: qualquer divergência faz o `autogenerate` do Alembic
-acusar drift de schema.
+A expressão vive em `SEARCH_VECTOR_EXPR`, repetida no modelo
+(`src/db/models.py`) e na migration. O texto precisa ser idêntico nos dois:
+qualquer divergência faz o `autogenerate` do Alembic acusar drift de schema.
 
 O índice que a atende é `ix_imoveis_search_vector`, GIN sobre a coluna.
 
@@ -614,7 +614,11 @@ descrição e perde sala que não a usa.
 Mantido pela aplicação, com `onupdate` do SQLAlchemy — não há trigger. Um
 `UPDATE` feito fora do ORM, direto no banco, não atualiza a coluna.
 
-#### Query de busca em camadas (conceitual)
+#### Busca em camadas (caminho de degradação)
+
+Quem consulta o catálogo é o agente de busca, com SQL próprio (§8.9). Com o
+provider fora do ar, o `CatalogService` faz a busca estruturada no formato
+abaixo, afrouxando um critério por vez quando nada casa:
 
 ```sql
 -- Camada 1: filtros estruturados
@@ -680,10 +684,12 @@ profundidade.
 
 A role é criada por migration, com a aplicação e o catálogo. Duas cautelas:
 
-- **role no PostgreSQL é global ao cluster**, não ao banco. A migration precisa
-  ser idempotente (`DO $$ ... IF NOT EXISTS`), senão falha ao rodar no segundo
-  banco — que é exatamente o que a suíte de testes faz ao criar o seu;
-- a senha vem de `DB_PASSWORD_BUSCA`, nunca do arquivo da migration.
+- **role no PostgreSQL é global ao cluster**, não ao banco. A migration consulta
+  `pg_roles` e faz `ALTER ROLE` quando ela já existe, em vez de `CREATE` —
+  senão falharia no segundo banco, que é exatamente o que a suíte de testes faz
+  ao criar o seu. Os `GRANT`s são por banco e rodam em cada um;
+- a senha vem de `DB_PASSWORD_BUSCA`, nunca do arquivo da migration, e é
+  escapada pelo próprio servidor com `quote_literal`.
 
 O timeout de 3 segundos é generoso para o volume da POC: a busca mais pesada
 hoje é um `Bitmap Index Scan` sobre o índice GIN, na casa do milissegundo. Ele
@@ -731,13 +737,11 @@ A modelagem deve permitir correlação mínima por:
 ### 10.1 Finalidade
 Representar identidades externas de canal vinculadas a um lead.
 
-Na POC, esta tabela resolve principalmente o vínculo entre:
-- `telegram_chat_id`
-- `lead_id`
+Resolve o vínculo entre o identificador de um canal (o `chat_id` do Telegram,
+o identificador de cada conversa do simulador) e o `lead_id`, sem transformar
+o identificador do canal na identidade definitiva da pessoa.
 
-sem transformar o identificador do canal na identidade definitiva da pessoa.
-
-### 10.2 Colunas propostas
+### 10.2 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -746,68 +750,41 @@ sem transformar o identificador do canal na identidade definitiva da pessoa.
 | `channel` | `VARCHAR(30)` | Não |  | Ex.: `telegram`, `streamlit` |
 | `external_user_id` | `VARCHAR(100)` | Sim |  | Identificador externo do usuário, quando existir |
 | `external_chat_id` | `VARCHAR(100)` | Sim |  | Identificador externo do chat, quando existir |
-| `is_primary` | `BOOLEAN` | Não | `false` | Indica identidade principal daquele canal para o lead |
+| `is_primary` | `BOOLEAN` | Não | `false` (ORM) | A identidade por onde o follow-up alcança o lead |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação |
 | `last_seen_at` | `TIMESTAMPTZ` | Sim |  | Última atividade observada |
 
-### 10.3 Constraints recomendadas
-
-```sql
-CHECK (channel IN ('telegram', 'streamlit'))
-CHECK (external_user_id IS NOT NULL OR external_chat_id IS NOT NULL)
-```
-
-### 10.4 Chave estrangeira
+### 10.3 Chave estrangeira
 
 ```sql
 FOREIGN KEY (lead_id) REFERENCES leads(id)
 ```
 
-### 10.5 Índices recomendados
+### 10.4 Constraints e índices
 
-```sql
-CREATE INDEX idx_lead_channel_identities_lead_id ON lead_channel_identities(lead_id);
-CREATE INDEX idx_lead_channel_identities_channel ON lead_channel_identities(channel);
-CREATE INDEX idx_lead_channel_identities_external_user_id ON lead_channel_identities(external_user_id);
-CREATE INDEX idx_lead_channel_identities_external_chat_id ON lead_channel_identities(external_chat_id);
-CREATE INDEX idx_lead_channel_identities_last_seen_at ON lead_channel_identities(last_seen_at);
-```
+Nenhum `CHECK` e nenhum índice além da chave primária. A busca por
+(`channel`, `external_chat_id`) acontece uma vez por mensagem recebida, numa
+tabela com uma linha por conversa.
 
-### 10.6 Unicidade recomendada
-
-Para a POC, recomenda-se garantir unicidade por canal + identificador externo quando o valor existir.
-
-Exemplos conceituais:
-
-```sql
-UNIQUE (channel, external_chat_id)
-UNIQUE (channel, external_user_id)
-```
-
-> Em PostgreSQL real, isso pode exigir índice único parcial para lidar corretamente com `NULL`.
-
-### 10.7 Relação com `mensagens`
-
-A coluna `mensagens.channel_identity_id` passa a referenciar esta tabela.
-
-Chave estrangeira futura:
-
-```sql
-FOREIGN KEY (channel_identity_id) REFERENCES lead_channel_identities(id)
-```
+O par (`channel`, `external_chat_id`) **não é único no banco**, e a aplicação
+só o protege em parte: `get_or_create_lead` procura antes de criar, e
+`definir_identidade` reaproveita a identidade que o lead já tem naquele canal —
+mas não confere se outro lead já usa o mesmo identificador. Ligar pela ficha um
+`chat_id` que pertence a outra pessoa faria as duas fichas apontarem para o
+mesmo chat.
 
 ### 10.8 Regras de negócio da POC refletidas na modelagem
 
 - um lead pode ter mais de uma identidade de canal;
 - uma identidade de canal pertence a um único lead por vez;
-- `telegram_chat_id` é tratado como identidade de canal, não como identidade definitiva da pessoa;
+- o `chat_id` do Telegram é tratado como identidade de canal, não como identidade definitiva da pessoa;
+- a identidade primária é por onde o follow-up alcança o lead; ligar um canal pela ficha a torna a primária;
 - duplicidade de leads ainda pode existir, mas a modelagem permite reconciliação futura.
 
 ### 10.9 Observações
 
-- `streamlit` pode usar esta tabela futuramente se houver autenticação/identidade persistente por usuário.
-- nesta fase, a tabela é especialmente importante para Telegram.
-- a política de merge de leads duplicadas continua fora do escopo desta etapa.
+- o simulador do Streamlit também grava aqui: cada conversa nova recebe um identificador próprio, e com ele um lead.
+- a política de merge de leads duplicadas fica fora do escopo da POC.
 
 ---
 
@@ -863,14 +840,14 @@ O campo `conversation_turn` em `llm_usage` permanece válido na POC como contado
 ## 12. Tabela `followup_attempts`
 
 ### 12.1 Finalidade
-Registrar cada tentativa operacional de follow-up executada pelo `FollowUpService`.
+Registrar cada tentativa operacional de follow-up, gravada pelo `followup_runner` — no ciclo automático, no disparo manual e no despacho do que ficou pendente.
 
 Esta tabela existe para separar claramente:
 
 - a **mensagem** gerada/enviada, que pertence ao histórico em `mensagens`;
 - a **tentativa operacional**, que pertence ao controle da régua de follow-up.
 
-### 12.2 Colunas propostas
+### 12.2 Colunas
 
 | Coluna | Tipo SQL | Null | Default | Observações |
 |---|---|---:|---|---|
@@ -885,7 +862,7 @@ Esta tabela existe para separar claramente:
 | `executed_at` | `TIMESTAMPTZ` | Não | `now()` | Momento da execução |
 | `created_at` | `TIMESTAMPTZ` | Não | `now()` | Criação do registro |
 
-### 12.3 Constraints recomendadas
+### 12.3 Constraints
 
 ```sql
 CHECK (attempt_number >= 1)
@@ -905,24 +882,25 @@ FOREIGN KEY (lead_id) REFERENCES leads(id)
 FOREIGN KEY (message_id) REFERENCES mensagens(id)
 ```
 
-### 12.5 Índices recomendados
+### 12.5 Índices e unicidade
 
 ```sql
-CREATE INDEX idx_followup_attempts_lead_id ON followup_attempts(lead_id);
-CREATE INDEX idx_followup_attempts_regua ON followup_attempts(regua);
-CREATE INDEX idx_followup_attempts_status ON followup_attempts(status);
-CREATE INDEX idx_followup_attempts_executed_at ON followup_attempts(executed_at);
-CREATE INDEX idx_followup_attempts_lead_regua_executed_at ON followup_attempts(lead_id, regua, executed_at);
+-- A mesma regua nao dispara duas vezes a mesma tentativa para o mesmo lead.
+ALTER TABLE followup_attempts
+  ADD CONSTRAINT uq_followup_lead_regua_attempt UNIQUE (lead_id, regua, attempt_number);
 ```
 
-### 12.6 Unicidade e prevenção de duplicidade
+### 12.6 Prevenção de duplicidade
 
-Para a POC, a prevenção de duplicidade será feita principalmente na camada de aplicação (`FollowUpService`), mas a modelagem deve facilitar essa verificação.
+Em duas camadas. A aplicação conta as tentativas de `lead_id + regua` antes de
+gerar, e o próximo `attempt_number` sai dessa contagem. Se duas execuções
+concorrentes calcularem o mesmo número, a unicidade acima faz a segunda falhar
+com `IntegrityError` — a constraint é a última linha de defesa, e o
+`max_instances=1` do scheduler é a primeira.
 
-Recomendação conceitual:
-
-- consultar tentativas recentes por `lead_id + regua` antes de disparar nova tentativa;
-- usar `attempt_number` como contador lógico por régua.
+No despacho do que ficou pendente, a tentativa é reservada como `sent` por um
+`UPDATE ... WHERE status = 'generated'` antes de ir à rede: só quem mudou a
+linha envia.
 
 ### 12.7 Relação com `mensagens`
 
@@ -932,7 +910,7 @@ Recomendação conceitual:
 
 ### 12.8 Regras de negócio refletidas na modelagem
 
-- o controle da régua pertence ao `FollowUpService`;
+- a seleção de quem recebe, e em qual régua, pertence ao `FollowUpService`;
 - a LLM apenas compõe a mensagem;
 - a tentativa operacional precisa existir mesmo quando a mensagem não chega a ser enviada;
 - o histórico do lead continua em `mensagens`, mas o controle operacional fica em `followup_attempts`.
@@ -1081,26 +1059,33 @@ VARCHAR(30)
 | `agendado` | Lead com visita ou reunião registrada |
 | `inativo` | Lead sem resposta recente ou fora de tração no momento |
 
-### 13.9 Regras sugeridas de transição
+### 13.9 Regras de transição
 
 #### `novo` → `em_qualificacao`
-Quando houver interação inicial válida e início de coleta de contexto.
+Quando o lead escreve: `process_message` move para `em_qualificacao` antes de
+o turno rodar.
 
 #### `em_qualificacao` → `qualificado`
-Quando houver contexto suficiente para ação comercial, por exemplo:
-- intenção conhecida;
-- orçamento ou faixa de preço conhecida;
-- localização conhecida;
-- score operacional relevante (ex.: `score >= 7` ou critério equivalente de negócio).
+Quando `LeadService.esta_qualificado` é verdadeiro — há intenção, algum
+orçamento (mínimo ou máximo), alguma localização (bairro ou região) e
+quantidade de quartos. `avaliar_status` só avança leads em `novo` ou
+`em_qualificacao`: quem já está adiante não regride por uma qualificação nova.
 
-#### `qualificado` → `agendado`
-Quando existir um registro válido em `agendamentos`.
+#### qualquer estágio ativo → `agendado`
+Quando passa a existir compromisso de pé (`pendente` ou `confirmado`).
+`SchedulingService.sincronizar_lead_com_a_agenda` faz status e score
+concordarem com a agenda nos dois sentidos: sumindo o último compromisso, o
+lead volta para `qualificado` ou `em_qualificacao`, conforme os dados dele.
+`inativo` fica de fora da sincronização.
 
-#### `novo` / `em_qualificacao` / `qualificado` → `inativo`
-Quando o lead ficar sem resposta além da janela operacional definida para a régua correspondente.
+#### → `inativo`
+Em três casos:
+- o lead esgota as tentativas de uma régua de silêncio do follow-up;
+- `encerrar_atendimento` com desfecho `desistiu` ou `pediu_corretor`;
+- o teto de tokens ou de turnos da conversa, que faz o handover ao corretor.
 
 #### `inativo` → `em_qualificacao`
-Quando o lead voltar a interagir e a conversa for retomada.
+Quando o lead volta a escrever, pelo mesmo ponto de `process_message`.
 
 ### 13.10 Regras importantes
 - `agendado` tem precedência operacional sobre `qualificado`;
@@ -1127,28 +1112,26 @@ O dashboard deve usar:
 
 ### 13.13 Impacto no follow-up
 
-O `FollowUpService` deve considerar o `status` como um dos sinais principais para escolher a régua aplicável.
+Cada régua tem um `status_alvo`, e é o status que escolhe a régua:
 
-Exemplos:
-- `novo` sem resposta → régua de lead novo;
-- `em_qualificacao` → régua de qualificação interrompida;
-- `qualificado` após envio de imóveis → régua pós-envio;
-- `agendado` → régua de confirmação/lembrete.
+- `novo` → lead novo sem resposta (2 h de silêncio);
+- `em_qualificacao` → qualificação interrompida (6 h);
+- `qualificado` → pós-envio de imóveis (24 h);
+- `agendado` → pós-agendamento, até 24 h antes do compromisso.
+
+`inativo` não está em régua nenhuma: é o status que faz o follow-up parar.
 
 ---
 
-## 14. Decisões explicitamente adiadas
-
-As decisões abaixo serão tratadas nas próximas lacunas:
+## 14. Decisões adiadas
 
 1. histórico de mudanças de score/status.
 
 ---
 
-## 15. Resultado desta etapa
+## 15. Relação com o código
 
-Com este documento, a POC passa a ter uma **modelagem lógica mínima definida** para as tabelas principais, suficiente para orientar:
-- schemas Pydantic;
-- modelos SQLAlchemy;
-- migrations Alembic;
-- testes de persistência.
+A modelagem descrita aqui é a que existe: modelos em `src/db/models.py`, schemas
+Pydantic em `src/schemas/` — que a suíte confere contra o ORM em
+`tests/test_schemas.py` — e o schema físico na migration única
+`29abbb20023f_schema_inicial.py`.

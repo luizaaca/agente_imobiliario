@@ -117,22 +117,28 @@ Registrar cada chamada para auditoria, otimização e exibição no dashboard.
 ## 4. Modelagem da tabela `llm_usage`
 
 ```python
-# src/db/models.py (adicionar ao modelo existente)
-
+# src/db/models.py
 class LLMUsage(Base):
     __tablename__ = "llm_usage"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True)  # nullable para operações sem lead (ex: resumo batch)
-    conversation_turn = Column(Integer, nullable=True)
-    model = Column(String, nullable=False)
-    tokens_input = Column(Integer, nullable=False)
-    tokens_output = Column(Integer, nullable=False)
-    tokens_total = Column(Integer, nullable=False)
-    estimated_cost_usd = Column(Float, nullable=True)
-    operation = Column(String, nullable=False)  # chat, followup, perfil, busca
-    created_at = Column(DateTime, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    lead_id: Mapped[Optional[int]] = mapped_column(ForeignKey("leads.id"), nullable=True)
+    conversation_turn: Mapped[Optional[int]] = mapped_column(nullable=True)
+    model: Mapped[str] = mapped_column(String(80), nullable=False)
+    tokens_input: Mapped[int] = mapped_column(nullable=False)
+    tokens_output: Mapped[int] = mapped_column(nullable=False)
+    tokens_total: Mapped[int] = mapped_column(nullable=False)
+    estimated_cost_usd: Mapped[Optional[float]] = mapped_column(Numeric(12, 6), nullable=True)
+    operation: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ok")
+    error_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    latency_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 ```
+
+`lead_id` é anulável porque excluir um lead não apaga o consumo dele: a linha
+perde o vínculo e continua contando nos tetos diário e mensal. Os três totais
+de token têm `CHECK >= 0`.
 
 ### Valores de `operation`
 
@@ -174,150 +180,59 @@ de resposta exibido no painel.
 
 ## 5. Serviço de controle de custos
 
-```python
-# src/services/llm_usage_service.py (conceitual)
+`src/services/llm_usage_service.py`. Todo método recebe a sessão do banco
+(`db`) de quem chama, e nenhum é assíncrono.
 
-from src.config import settings
+**Preço.** `PRICING` é a tabela de USD por milhão de tokens, de entrada e de
+saída, para os modelos conhecidos (`gpt-4o-mini`, `gpt-4o`,
+`gemini-2.5-flash`, `gemini-2.5-pro`, `claude-sonnet-4`). Modelo fora dela usa
+`FALLBACK_PRICING` (1,00 / 3,00) e registra `event=preco_desconhecido` no log,
+para o custo não parecer mais preciso do que é.
 
-# Tabela de preços por modelo (USD por 1M tokens)
-PRICING = {
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gemini-2.5-flash": {"input": 0.15, "output": 0.60},
-    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
-}
-
-class LLMUsageService:
-    def __init__(self, db_session):
-        self.db = db_session
-
-    def estimate_cost(self, model: str, tokens_in: int, tokens_out: int) -> float:
-        """Calcula custo estimado em USD."""
-        prices = PRICING.get(model, {"input": 1.0, "output": 3.0})  # fallback conservador
-        cost = (tokens_in / 1_000_000) * prices["input"] + (tokens_out / 1_000_000) * prices["output"]
-        return round(cost, 6)
-
-    async def record(self, lead_id: int, model: str, tokens_in: int, tokens_out: int, operation: str, turn: int = None):
-        """Registra uso no banco."""
-        usage = LLMUsage(
-            lead_id=lead_id,
-            conversation_turn=turn,
-            model=model,
-            tokens_input=tokens_in,
-            tokens_output=tokens_out,
-            tokens_total=tokens_in + tokens_out,
-            estimated_cost_usd=self.estimate_cost(model, tokens_in, tokens_out),
-            operation=operation,
-        )
-        self.db.add(usage)
-        self.db.commit()
-
-    async def get_conversation_tokens(self, lead_id: int) -> int:
-        """Total de tokens consumidos por uma conversa."""
-        return self.db.query(func.sum(LLMUsage.tokens_total)).filter(
-            LLMUsage.lead_id == lead_id
-        ).scalar() or 0
-
-    async def get_conversation_turns(self, lead_id: int) -> int:
-        """Total de turnos de chat de uma conversa."""
-        return self.db.query(func.count(LLMUsage.id)).filter(
-            LLMUsage.lead_id == lead_id,
-            LLMUsage.operation == "chat",
-        ).scalar() or 0
-
-    async def get_daily_tokens(self) -> int:
-        """Total de tokens consumidos hoje."""
-        today = datetime.utcnow().date()
-        return self.db.query(func.sum(LLMUsage.tokens_total)).filter(
-            func.date(LLMUsage.created_at) == today
-        ).scalar() or 0
-
-    async def get_monthly_tokens(self) -> int:
-        """Total de tokens consumidos no mês atual."""
-        now = datetime.utcnow()
-        return self.db.query(func.sum(LLMUsage.tokens_total)).filter(
-            func.extract("year", LLMUsage.created_at) == now.year,
-            func.extract("month", LLMUsage.created_at) == now.month,
-        ).scalar() or 0
-
-    async def is_conversation_over_limit(self, lead_id: int) -> bool:
-        """Verifica se a conversa excedeu os limites."""
-        tokens = await self.get_conversation_tokens(lead_id)
-        turns = await self.get_conversation_turns(lead_id)
-        return (
-            tokens >= settings.LLM_MAX_TOKENS_PER_CONVERSATION or
-            turns >= settings.LLM_MAX_TURNS_PER_CONVERSATION
-        )
-
-    async def is_daily_budget_exceeded(self) -> bool:
-        """Verifica se o budget diário foi excedido."""
-        return await self.get_daily_tokens() >= settings.LLM_DAILY_TOKEN_BUDGET
-
-    async def is_monthly_budget_exceeded(self) -> bool:
-        """Verifica se o budget mensal foi excedido."""
-        return await self.get_monthly_tokens() >= settings.LLM_MONTHLY_TOKEN_BUDGET
-
-    async def get_dashboard_summary(self) -> dict:
-        """Dados para exibição no dashboard."""
-        return {
-            "daily_tokens": await self.get_daily_tokens(),
-            "daily_budget": settings.LLM_DAILY_TOKEN_BUDGET,
-            "monthly_tokens": await self.get_monthly_tokens(),
-            "monthly_budget": settings.LLM_MONTHLY_TOKEN_BUDGET,
-            "daily_cost_usd": self._sum_cost_today(),
-            "monthly_cost_usd": self._sum_cost_month(),
-        }
-```
+| Método | Para quê |
+|---|---|
+| `estimate_cost(model, tokens_in, tokens_out)` | custo estimado de uma chamada, em USD |
+| `record(lead_id, model, tokens_in, tokens_out, operation, db, turn, latency_ms)` | grava uma chamada bem-sucedida, com o custo já calculado |
+| `record_failure(lead_id, model, operation, error_type, latency_ms, db)` | grava uma chamada que falhou, com zero token e `status='erro'` |
+| `get_conversation_tokens(lead_id, db)` | total de tokens do lead, de todas as operações |
+| `get_conversation_cost(lead_id, db)` | custo estimado do lead, de todas as operações |
+| `get_conversation_turns(lead_id, db)` | turnos de `chat` bem-sucedidos do lead |
+| `is_conversation_over_limit(lead_id, db)` | tokens ou turnos da conversa no teto |
+| `get_daily_tokens` / `get_monthly_tokens` | consumo do dia e do mês |
+| `is_daily_budget_exceeded` / `is_monthly_budget_exceeded` | tetos globais atingidos |
+| `get_daily_cost` / `get_monthly_cost` | custo estimado do dia e do mês |
+| `get_daily_latency_ms` / `get_daily_error_rate` | saúde do agente no dia; `None` quando não houve chamada |
+| `get_dashboard_summary(db)` | tudo o que o painel de consumo mostra, numa chamada |
 
 ---
 
-## 6. Integração com o agente (PydanticAI)
+## 6. Integração com o agente
 
-```python
-# src/agent/sdr_agent.py (trecho conceitual)
+Em `process_message` (`src/agent/sdr_agent.py`), antes de chamar o modelo:
 
-async def process_message(lead_id: int, user_text: str, deps: dict) -> str:
-    usage_service = deps["llm_usage_service"]
+1. o histórico é reidratado e a fala recebida é gravada;
+2. teto **diário** ou **mensal** atingido: o turno é registrado como bloqueado
+   e a pessoa recebe a mensagem de atendimento indisponível;
+3. teto **da conversa** atingido: o handover é registrado uma vez só — nota
+   no perfil narrativo, resumo executivo gerado, lead em `inativo` — e a
+   pessoa recebe a mensagem de handover.
 
-    # 1. Checar limites ANTES de chamar a LLM
-    if await usage_service.is_daily_budget_exceeded():
-        logger.warning("Budget diário de LLM atingido!")
-        return MENSAGEM_INDISPONIVEL
+Depois da chamada:
 
-    if await usage_service.is_conversation_over_limit(lead_id):
-        logger.info(f"Lead {lead_id} atingiu limite de conversa. Fazendo handover.")
-        # Gera resumo final e retorna mensagem de handover
-        await registrar_handover(lead_id)  # gera o resumo e marca o lead como inativo
-        return MENSAGEM_HANDOVER
+- sucesso: `record(..., operation="chat", turn=<turnos até aqui + 1>, latency_ms=...)`;
+- falha do provider: `record_failure(..., operation="chat", ...)`, e a pessoa
+  recebe a mensagem de indisponibilidade.
 
-    # 2. Executar o agente
-    result = await sdr_agent.run(user_prompt=user_text, deps=deps)
-
-    # 3. Registrar uso DEPOIS da chamada
-    usage = result.usage()
-    await usage_service.record(
-        lead_id=lead_id,
-        model=settings.LLM_MODEL,
-        tokens_in=usage.request_tokens,
-        tokens_out=usage.response_tokens,
-        operation="chat",
-        turn=await usage_service.get_conversation_turns(lead_id) + 1,
-    )
-
-    return result.data
-```
+Os agentes auxiliares registram o próprio consumo com a operação deles:
+`busca` na tool de busca, `perfil` no consolidador, `followup` no runner de
+follow-up.
 
 ---
 
 ## 7. Exibição no dashboard
 
-Adicionar uma seção/card no dashboard do corretor:
-
-```python
-# src/ui/dashboard.py (trecho conceitual)
-
-resumo = LLMUsageService().get_dashboard_summary(db)
-```
+O dashboard lê `LLMUsageService().get_dashboard_summary(db)` e mostra o
+painel **Consumo de LLM** num expander, só para o `admin`.
 
 O alerta de estouro fica **fora** do expander, na página: dentro de um painel
 fechado ele não existe na prática, e quem abrisse o dashboard com o orçamento

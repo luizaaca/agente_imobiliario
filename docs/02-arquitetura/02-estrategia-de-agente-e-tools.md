@@ -93,18 +93,22 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | `detalhar_imoveis` | Relê do catálogo a ficha completa do que já foi apresentado |
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
-| `agendar_reuniao` | Registra visita ou reunião no banco |
+| `agendar_reuniao` | Registra a visita ou reunião — uma de pé por lead — com os imóveis de interesse na observação |
 | `listar_agendamentos` | Devolve o compromisso de pé do lead — tipo, data e status |
-| `confirmar_agendamento` | Move um compromisso para `confirmado`, quando a pessoa confirma |
-| `cancelar_agendamento` | Move um compromisso para `cancelado`, com o motivo registrado |
+| `confirmar_agendamento` | Move o compromisso do lead para `confirmado`, quando a pessoa confirma |
+| `cancelar_agendamento` | Move o compromisso do lead para `cancelado`, com o motivo registrado |
 | `encerrar_atendimento` | Fecha o atendimento, entrega o briefing executivo ao corretor e tira o lead da régua |
 
-As três tools de compromisso existente trabalham sobre IDs que o agente recebe
-nas instruções do turno, remontadas do banco. `agendar_reuniao` cria; as outras
-mudam o estado do que já existe — usar a primeira para confirmar criaria um
-segundo compromisso no mesmo horário.
+As tools de compromisso não recebem qual compromisso: é um de pé por lead, e o
+serviço o encontra pelo lead do turno. `agendar_reuniao` cria — e, havendo
+outro de pé, avisa em vez de marcar, até o agente voltar com `remarcar=true`;
+confirmar e cancelar mudam o estado do que já existe.
 
-> **Nota de escopo da POC:** a capacidade de geração de follow-up contextual existe no sistema, mas **não será exposta como tool do agente conversacional com o cliente**. Na POC, ela será usada exclusivamente pelo `FollowUpService`, que controla a régua, a elegibilidade, as tentativas e o envio, acionando a LLM apenas para compor a mensagem.
+> A geração de follow-up não é tool do agente conversacional. É um agente
+> próprio (`src/agent/followup_agent.py`), acionado pelo `followup_runner`:
+> quem escolhe o lead e a régua é o `FollowUpService`, quem grava e envia é o
+> runner, e o LLM só compõe a mensagem. Ver
+> [`04-contratos-das-tools.md`](./04-contratos-das-tools.md#7-geração-do-follow-up-fora-das-tools).
 
 ## 5. Boas práticas de tool calling adotadas
 
@@ -249,15 +253,17 @@ anterior.
 
 As consultas do agente de busca não viram mensagem — é o que torna a delegação
 barata —, então a única cópia delas é o `metadata_json` da chamada. A aba
-**Conversa** da ficha e o simulador leem dali e mostram, num painel fechado ao
-lado da fala que aquilo produziu: o pedido em texto livre, cada `SELECT`
+**Conversa** da ficha e o simulador leem dali e mostram ao `admin`, num painel
+fechado ao lado da fala que aquilo produziu: o pedido em texto livre, cada `SELECT`
 escrito, o custo em tokens e o que a ferramenta devolveu ao agente.
 
 Fechado por padrão porque quem abre a ficha quer ler a conversa; o painel existe
 para a pergunta seguinte, que é como aqueles imóveis foram parar ali.
 
-O renderizador é o mesmo nas duas telas (`src/ui/conversa.py`). O canal do
-Telegram não passa por ele: o que chega à pessoa lá é só a resposta final.
+O renderizador é o mesmo nas duas telas (`src/ui/conversa.py`). O `corretor`
+vê só as falas: as chamadas de ferramenta e o custo da conversa são
+bastidores, de quem opera. O canal do Telegram não passa por ele: o que chega à
+pessoa lá é só a resposta final.
 
 ### Quando o provider falha
 

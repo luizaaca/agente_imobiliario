@@ -172,8 +172,9 @@ Quatro réguas, escolhidas pelo estágio do lead no funil:
 | Pós-envio de imóveis | 24h de silêncio | 2 |
 | Pós-agendamento | até 24h antes da visita | 2 |
 
-Um job varre os leads a cada 30 minutos, mas ele roda **junto do processo do
-Telegram**. Sem esse processo no ar, o disparo automático não acontece.
+Um job varre os leads a cada 30 minutos — o intervalo vem de
+`FOLLOWUP_INTERVAL_MINUTES` —, mas ele roda **junto do processo do Telegram**.
+Sem esse processo no ar, o disparo automático não acontece.
 
 O botão **Disparar follow-up** na ficha usa a mesma lógica com outro gatilho:
 dispensa só a janela de tempo — quem está olhando o lead já decidiu que é hora
@@ -275,14 +276,19 @@ disparo manual de follow-up, que aliás não funciona para ele, porque `inativo`
     (
         "Disparei o follow-up e a mensagem não chegou no lead.",
         """
-A mensagem foi **gerada e registrada** na conversa, mas não despachada. Duas
+A mensagem foi **gerada e registrada** na conversa, mas não despachada. As
 causas possíveis:
 
 - **O lead não tem canal vinculado.** A aba **Canal** da ficha avisa quando é o
   caso. Sem identidade de canal não há para onde enviar.
-- **O canal não tem envio ativo.** Só o Telegram envia, e só com o processo do
-  bot no ar. Um lead que veio do simulador não tem para onde receber push — a
-  mensagem fica no histórico, visível para você.
+- **O canal não tem envio ativo.** Só o Telegram envia. Um lead que veio do
+  simulador não tem para onde receber push — a mensagem fica no histórico,
+  visível para você e no chat dele.
+- **O bot não pegou a mensagem a tempo.** Num lead do Telegram, quem envia o
+  que a tela gerou é o processo do bot, que olha as pendentes a cada 10
+  segundos. A mensagem é descartada se o bot não estiver no ar nos 15 minutos
+  seguintes, se o lead responder antes, ou se houver um follow-up mais novo
+  para ele — só o último sai.
 """,
     ),
     (
@@ -391,7 +397,7 @@ A exclusão é definitiva e pede confirmação.
     (
         "O que esta POC não faz?",
         """
-- **O canal Telegram nunca foi exercitado** com um bot real.
+- **O canal Telegram não teve conversa real**: o bot sobe e roda o follow-up, mas o fluxo completo não foi percorrido com uma pessoa do outro lado.
 - **Sem streaming**: a resposta do chat aparece inteira de uma vez.
 - **Sem CRM nem agenda externa**: agendamento é uma linha no banco.
 - **O custo é estimado** por tabela de preços fixa; modelo fora da tabela cai

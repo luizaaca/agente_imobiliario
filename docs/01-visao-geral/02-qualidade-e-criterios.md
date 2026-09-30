@@ -54,8 +54,8 @@ Medido em conversas reais: 28, 28, 36 e 40 segundos, dos quais 18 a 30 só na
 busca.
 
 O número é alto e é o que esta arquitetura entrega. A troca está registrada no
-[ADR 0007](../06-decisoes/adr/0007-agente-de-busca-dedicado.md): a busca deixou
-de ser uma consulta e passou a ser uma investigação, e é ela que produz "não há
+[ADR 0007](../06-decisoes/adr/0007-agente-de-busca-dedicado.md): a busca é uma
+investigação, e não uma consulta única, e é ela que produz "não há
 varanda gourmet em zona sul até 900 mil, mas há três com varanda e
 churrasqueira" em vez de uma lista vazia.
 
@@ -77,7 +77,7 @@ rodar num modelo mais rápido sem tocar no que escreve para o cliente.
 |---|---|---|
 | QS-01 | Segredos | todas as credenciais devem vir de `.env` ou variáveis de ambiente |
 | QS-02 | Controle de acesso | toda a UI protegida por autenticação obrigatória; o papel do usuário define quais menus aparecem, o que organiza a tela e não substitui autorização |
-| QS-03 | Logs | não registrar tokens, senhas ou dados sensíveis desnecessários |
+| QS-03 | Logs | não registrar tokens, senhas ou dados sensíveis desnecessários — por isso o `httpx` fica em `WARNING` no bot: em `INFO` ele grava a URL da API do Telegram, que carrega o token |
 | QS-04 | Minimização de dados | armazenar apenas dados necessários para atendimento, qualificação e demonstração |
 | QS-05 | SQL gerado por LLM | executado por role somente-leitura restrita a `imoveis`, em transação read-only com tempo limite |
 
@@ -88,7 +88,7 @@ rodar num modelo mais rápido sem tocar no que escreve para o cliente.
 | QO-01 | Logs estruturados | logs com `timestamp`, `level`, `event`, `lead_id` quando aplicável |
 | QO-02 | Rastreabilidade | cada interação relevante deve ser correlacionável por `lead_id` |
 | QO-03 | Diagnóstico | falhas de tool, banco e LLM devem ser distinguíveis nos logs |
-| QO-04 | Deploy local | ambiente deve subir com `docker-compose up --build` |
+| QO-04 | Deploy local | ambiente deve subir com `docker compose up --build`, com teto no log de cada container |
 
 ### 3.5 Testabilidade
 
@@ -189,7 +189,8 @@ rodar num modelo mais rápido sem tocar no que escreve para o cliente.
 
 ### 5.5 Agendamento
 - O sistema só deve sugerir agendamento quando houver sinal mínimo de aderência/interesse.
-- O agendamento deve ser persistido com data, tipo e observações.
+- O agendamento deve ser persistido com data, tipo e observações — numa visita, com os imóveis que a pessoa quer ver e o ID de cada um.
+- Cada lead tem no máximo um compromisso ativo; trocar de horário é remarcar.
 - O corretor deve conseguir visualizar o agendamento no dashboard.
 
 ### 5.6 Resumo para corretor
@@ -270,7 +271,7 @@ Todas visíveis no dashboard do corretor:
 |---|---|
 | total de leads | KPI no topo |
 | leads por status | KPIs de leads quentes e inativos, e filtro de status da lista |
-| follow-ups disparados | KPI no topo, contando toda tentativa que gerou mensagem; o *tooltip* separa quantas saíram por um canal com envio ativo |
+| follow-ups disparados | KPI no topo, contando toda tentativa registrada; o *tooltip* separa quantas saíram por um canal com envio ativo |
 | agendamentos criados | KPI no topo |
 | taxa de erro do agente | painel **Consumo de LLM**, sobre as chamadas do dia |
 | custo/token por dia | painel **Consumo de LLM**, por dia e por mês |

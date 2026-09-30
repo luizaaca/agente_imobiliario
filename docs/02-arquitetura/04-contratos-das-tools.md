@@ -230,16 +230,17 @@ Campos estruturados do lead, como:
 - `amenidades_desejadas`
 
 ### Nome e telefone
-O telefone e normalizado para `(11) 98765-4321`: aceita com ou sem DDI, com ou
-sem pontuacao, fixo de dez digitos ou celular de onze. Sem DDD a tool recusa com
-`ModelRetry` pedindo o DDD — gravar um numero incompleto so se descobre errado
+O telefone é normalizado para `(11) 98765-4321`: aceita com ou sem DDI, com ou
+sem pontuação, fixo de dez dígitos ou celular de onze. Sem DDD a tool recusa com
+`ModelRetry` pedindo o DDD — gravar um número incompleto só se descobre errado
 na hora em que o corretor liga.
 
-Quando pedir cada um e regra da persona, nao da tool: o nome cedo, na conversa;
-o telefone na hora de marcar a visita, que e quando ha um motivo que a pessoa
-entende. `agendar_reuniao` acrescenta ao proprio retorno a cobranca do que
-faltar, porque o retorno da tool e a ultima coisa que o modelo le antes de
-escrever.
+Quando pedir cada um é regra da persona, não da tool: os dois cedo, um por
+mensagem, e sem insistir se a pessoa não quiser dar. O que ainda faltar quando
+a visita é marcada, `agendar_reuniao` cobra no próprio retorno — ali há um
+motivo que a pessoa entende, e o retorno da tool é a última coisa que o modelo
+lê antes de escrever. O contexto do turno diz se o telefone já foi informado,
+sem o número, para o modelo não pedir de novo.
 
 ### Output esperado
 - lead atualizado;
@@ -315,9 +316,9 @@ os três saem de `SchedulingService.sincronizar_lead_com_a_agenda`.
 
 **Um compromisso de pé por pessoa.** O corretor vai uma vez e vê com ela os
 imóveis que ela quiser; não se marca uma visita por imóvel. A regra é cobrada
-por índice único parcial sobre `lead_id` para os status ativos — ela morava só
-no código e não se sustentou, e um lead chegou a ter duas visitas `pendente` ao
-mesmo tempo.
+por índice único parcial sobre `lead_id` para os status ativos, e não só no
+código: uma checagem na aplicação cede a dois turnos gravando ao mesmo tempo, e
+a um modelo que erra qual compromisso trocar.
 
 **Marcar sobre um compromisso existente avisa e não marca.** O retorno diz qual
 é o compromisso de pé e pede que o agente combine a troca com a pessoa; só com
@@ -394,15 +395,14 @@ Sendo o último compromisso de pé, o lead sai de `agendado`.
 - compromisso já no estado pedido.
 
 ### Por que nenhuma delas recebe id
-Porque errá-lo era a falha. Enquanto o `agendamento_id` foi argumento, o modelo
-pegava números antigos do histórico e chamava confirmar sobre um compromisso já
-apagado — e um id de outra pessoa alcançaria a agenda dela, o que obrigava a
-uma checagem de dono em cada tool. Com um compromisso por lead, cobrado por
-índice único, o argumento deixou de ter função: o dono passou a ser o lead do
-turno, por construção.
+Porque um id é algo que o modelo pode errar. Ele tiraria números antigos do
+histórico e agiria sobre um compromisso já apagado — e um id de outra pessoa
+alcançaria a agenda dela, o que exigiria uma checagem de dono em cada tool. Com
+um compromisso por lead, cobrado por índice único, o argumento não tem função:
+o dono é o lead do turno, por construção.
 
-O contexto do turno continua trazendo o compromisso, agora sem id, porque a
-conversa precisa saber **quando** ele é. São `@agent.instructions`, e não
+O contexto do turno traz o compromisso, sem id, porque a conversa precisa saber
+**quando** ele é. São `@agent.instructions`, e não
 `@agent.system_prompt`, por uma razão de mecânica: o pydantic-ai só insere o
 system prompt quando o `message_history` chega vazio. Como o histórico é
 reidratado do banco a cada turno, um system prompt valeria apenas na primeira
@@ -455,49 +455,46 @@ Confirmação do encerramento e a instrução de se despedir sem nova pergunta. 
 
 ---
 
-## 7. `gerar_followup`
+## 7. Geração do follow-up (fora das tools)
 
 ### Objetivo
-Gerar mensagem contextual de reengajamento com base no estágio do funil e histórico.
+Compor a mensagem contextual de reengajamento de um lead calado.
 
-### Papel arquitetural na POC
-Na POC, `gerar_followup` deve ser entendido como uma **capacidade interna de geração textual acionada pelo `FollowUpService`**, e não como uma tool exposta ao agente conversacional com o cliente.
+### Papel arquitetural
+Não é tool: o agente conversacional não a vê nem a chama. É um agente próprio,
+em `src/agent/followup_agent.py` (`gerar_mensagem_followup`), acionado pelo
+`followup_runner` — no ciclo automático, no disparo manual da tela e no ciclo
+avulso de `scripts/run_followup_once.py`.
 
-O `FollowUpService` continua responsável por:
-- selecionar leads elegíveis;
-- aplicar a régua correta;
-- verificar tentativas e janela temporal;
-- persistir mensagem e tentativa;
-- acionar o canal de envio.
+Quem decide tudo o que não é texto está fora dele:
 
-A responsabilidade de `gerar_followup` é apenas **compor a mensagem contextual** via LLM.
+| Responsabilidade | Onde |
+|---|---|
+| quais leads são elegíveis, em qual régua, e o teto de tentativas | `FollowUpService` |
+| orçamento de LLM, persistência da mensagem e da tentativa, envio pelo canal | `followup_runner` |
+| se o canal tem envio ativo | `src/channels/envio.py` (`CANAIS_COM_ENVIO`) |
 
-### Input esperado
-- `lead_id`
-- `regua_followup`
-- histórico recente;
-- `perfil_narrativo`;
-- número de tentativas anteriores.
+### Input
+- o contexto do lead, montado pelo runner: nome, intenção, orçamento, bairro,
+  região, quartos, urgência, motivo da busca, perfil narrativo, a última
+  mensagem trocada e, no pós-agendamento, o compromisso;
+- a régua, que escolhe a instrução da situação;
+- o número da tentativa, que deixa a mensagem mais curta e leve a cada vez.
 
-### Output esperado
-- mensagem de follow-up;
-- classificação da régua aplicada;
-- indicação se o envio é recomendado.
-
-### Efeitos colaterais
-Nenhum obrigatório na geração; o envio e registro ocorrem em camada superior, sob responsabilidade do `FollowUpService`.
+### Output
+`FollowUpGerado`: o texto da mensagem e os tokens de entrada e saída, que o
+runner registra em `llm_usage` com `operation="followup"`.
 
 ### Regras
-- respeitar limite de tentativas;
-- evitar tom insistente ou genérico;
-- usar contexto real da conversa.
-- não controlar elegibilidade, envio ou persistência;
-- não ser invocado pelo agente conversacional com o cliente na POC.
+- uma mensagem curta, com uma pergunta ou um próximo passo;
+- só cita o que está no contexto: o agente não busca imóveis, então não diz que
+  separou ou achou opções, nem comenta mercado ou clima;
+- não controla elegibilidade, envio nem persistência.
 
 ### Erros tratáveis
-- lead inexistente;
-- contexto insuficiente;
-- falha de geração.
+- configuração de LLM ausente — o runner registra e segue para o próximo lead;
+- falha do provider ou texto vazio — a tentativa é registrada como `failed`, e
+  no disparo manual a tela mostra o motivo.
 
 ---
 

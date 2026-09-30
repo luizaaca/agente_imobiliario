@@ -8,10 +8,10 @@
 
 Para executar a POC localmente, o ambiente deve ter:
 
-- Python 3.11+
-- Docker e Docker Compose
-- acesso a um banco PostgreSQL local ou remoto
-- arquivo `.env` configurado com as credenciais necessárias
+- Docker e Docker Compose (v2, o comando `docker compose`)
+- Python 3.11+, só para rodar fora dos containers ou rodar os testes
+- arquivo `.env`, opcional: sem ele o Compose sobe com defaults, e a
+  aplicação avisa na tela o que falta para o chat funcionar
 
 ---
 
@@ -26,8 +26,14 @@ As variáveis esperadas incluem:
 - `LLM_BASE_URL` (opcional; obrigatoria no `LLM_PROVIDER=custom`)
 - `LLM_MODEL_BUSCA` (opcional; vazio usa o `LLM_MODEL`)
 - `DB_PASSWORD_BUSCA` (senha da role somente-leitura do agente de busca)
-- `TELEGRAM_BOT_TOKEN`
-- `AUTH_COOKIE_KEY`
+- `TELEGRAM_BOT_TOKEN` (só para o canal Telegram)
+- `AUTH_COOKIE_KEY` (vazia, cada processo sorteia uma chave e as sessões caem no restart)
+- `LLM_DAILY_TOKEN_BUDGET`, `LLM_MONTHLY_TOKEN_BUDGET`,
+  `LLM_MAX_TURNS_PER_CONVERSATION`, `LLM_MAX_TOKENS_PER_CONVERSATION`
+  (tetos de custo, com defaults)
+- `FOLLOWUP_INTERVAL_MINUTES` (intervalo do ciclo automático de follow-up;
+  padrão 30)
+- `LOGFIRE_TOKEN` (opcional)
 
 Os detalhes completos de infraestrutura e exemplos de configuração estão em [`01-infraestrutura-e-deploy.md`](./01-infraestrutura-e-deploy.md).
 
@@ -37,17 +43,24 @@ Os detalhes completos de infraestrutura e exemplos de configuração estão em [
 
 ### 3.1 Docker Compose
 
-Modo recomendado para desenvolvimento reproduzível:
+Modo recomendado para desenvolvimento reproduzível. O serviço `migrate`
+aplica a migration e carrega o catálogo antes de a aplicação subir.
 
 ```bash
-docker-compose up --build
+# Banco, migrate e Streamlit
+docker compose up -d --build
+
+# Os mesmos, mais o bot do Telegram e o scheduler de follow-up
+docker compose --profile telegram up -d --build
 ```
 
 ### 3.2 Processos separados
 
-Modo útil para desenvolvimento iterativo:
+Modo útil para desenvolvimento iterativo, com o banco ainda no Compose e a
+`DATABASE_URL` do `.env` apontando para `127.0.0.1:5432`:
 
 ```bash
+docker compose up -d postgres migrate
 streamlit run app.py
 python run_telegram.py
 ```
@@ -65,6 +78,8 @@ python run_all.py
 ## 4. Recomendações operacionais
 
 - usar Docker Compose quando o objetivo for validar integração ponta a ponta;
+- para ver um ciclo de follow-up sem esperar o intervalo, rodar
+  `docker compose exec app python -m scripts.run_followup_once`;
 - usar processos separados quando o objetivo for depurar UI ou bot isoladamente;
 - validar o `.env` antes da demo para evitar falhas por configuração ausente;
 - manter o banco populado com dados de demonstração coerentes.

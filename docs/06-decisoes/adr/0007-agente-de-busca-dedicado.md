@@ -111,10 +111,12 @@ role somente-leitura com acesso a uma única tabela, transação read-only com
 tempo limite, validação sintática do statement e teto de linhas. A role é o
 limite de verdade; as outras três são profundidade.
 
-A consequência negativa sobre a troca da coisa procurada é endereçada em dois
+A consequência negativa sobre a troca da coisa procurada é endereçada em três
 lugares: nas instruções do agente de busca, que fixam operação, tipo e
-finalidade como inegociáveis, e num teste de regressão que exercita o caso
-— pedido de galpão que não pode voltar como sala comercial.
+finalidade como inegociáveis; num validador de saída do agente de busca, que
+recusa em código a lista que mistura residencial e comercial e a devolve como
+retentativa; e num teste de regressão que exercita o caso — pedido de galpão
+que não pode voltar como sala comercial.
 
 A busca estruturada do serviço de catálogo permanece como **caminho de
 degradação**: com o provider fora do ar, a tool monta filtros a partir da ficha
