@@ -40,10 +40,21 @@ x-ambiente-da-aplicacao: &ambiente-da-aplicacao
   LLM_MAX_TOKENS_PER_CONVERSATION: ${LLM_MAX_TOKENS_PER_CONVERSATION:-400000}
   LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
 
+# Teto do log de cada container. Sem isso o Docker guarda o log sem limite
+# enquanto o container estiver de pe: o `telegram-bot` escreve a cada poucos
+# segundos e cresceria ate encher o disco. Com o teto, ficam no maximo tres
+# arquivos de 10 MB por container, e o mais antigo e descartado.
+x-log-limitado: &log-limitado
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *log-limitado
     environment:
       POSTGRES_DB: agente_sdr
       POSTGRES_USER: sdr
@@ -66,6 +77,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: sh -c "alembic upgrade head && python -m scripts.seed_imoveis"
+    logging: *log-limitado
     environment:
       DATABASE_URL: postgresql+psycopg://sdr:${DB_PASSWORD:-sdr_dev_pass}@postgres:5432/agente_sdr
       # A migration cria a role `busca_ro` com esta senha. Se ela divergir da
@@ -81,6 +93,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    logging: *log-limitado
     ports:
       - "8501:8501"
     environment: *ambiente-da-aplicacao
@@ -97,6 +110,7 @@ services:
       context: .
       dockerfile: Dockerfile
     command: python run_telegram.py
+    logging: *log-limitado
     environment:
       <<: *ambiente-da-aplicacao
       # Sem `:?` de proposito: a interpolacao roda no arquivo inteiro ANTES de

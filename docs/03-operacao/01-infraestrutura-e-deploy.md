@@ -195,6 +195,25 @@ docker-compose down
 docker-compose down -v
 ```
 
+### Logs
+
+Os quatro serviços — `postgres`, `migrate`, `app` e `telegram-bot` — usam o
+driver `json-file` com teto: até três arquivos de 10 MB por container
+(`max-size: 10m`, `max-file: 3`), declarado uma vez no bloco
+`x-log-limitado` do `docker-compose.yml`. Passado o teto, o arquivo mais
+antigo é descartado; sem ele, o Docker guardaria o log sem limite enquanto o
+container estivesse de pé.
+
+No `telegram-bot`, dois loggers de terceiros ficam em `WARNING`, ajustados
+em `run_telegram.py` logo depois do `logging.basicConfig`:
+
+| Logger | O que escreveria em `INFO` |
+|---|---|
+| `apscheduler.executors` | "Running job" e "executed successfully" a cada execução do despacho pendente, de 10 em 10 segundos |
+| `httpx` | uma linha por `getUpdates` do long polling, com a URL da API do Telegram — que carrega o token do bot |
+
+Falhas de job e os logs da aplicação (`event=...`) continuam em `INFO`.
+
 ---
 
 ## 4. Desenvolvimento local sem Docker (alternativa)
