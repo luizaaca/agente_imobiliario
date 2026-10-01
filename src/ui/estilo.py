@@ -198,7 +198,6 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 [class*="st-key-acao_excluir_"] button,
 [class*="st-key-editar_ag_"] button,
 [class*="st-key-excluir_ag_"] button,
-[class*="st-key-fecha_followup_"] button,
 .st-key-novo_lead button {{
   width: {_ICONE}px !important;
   min-width: {_ICONE}px !important;
@@ -213,7 +212,6 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
 [class*="st-key-acao_editar_"] button:hover,
 [class*="st-key-acao_followup_"] button:hover,
 [class*="st-key-editar_ag_"] button:hover,
-[class*="st-key-fecha_followup_"] button:hover,
 .st-key-voltar_da_ficha button:hover,
 .st-key-acao_followup_da_ficha button:hover {{
   color: inherit !important;
@@ -240,10 +238,24 @@ section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stPopoverB
   margin-left: 14px !important;
 }}
 
-/* A mensagem que a Marina escreveu, citada no aviso de follow-up gerado. O
-   blockquote do Streamlit sai a 60% de opacidade, que e o tom de "nota de
-   rodape" — e aqui ela e justamente o que o corretor quer ler. */
-[class*="st-key-desfecho_followup_"] blockquote {{
+/* Toast inteiro, sem o "view more". O Streamlit corta em tres linhas, e o
+   aviso de follow-up gerado traz a mensagem da Marina citada: cortado, ele
+   mostraria so o titulo e sumiria antes de alguem abrir. Os toasts daqui sao
+   curtos o bastante para caber abertos. */
+[data-testid="stToastText"] {{
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  overflow: visible !important;
+}}
+[data-testid="stToastViewButton"] {{
+  display: none !important;
+}}
+
+/* A mensagem que a Marina escreveu, citada no aviso de follow-up gerado --
+   o unico toast com citacao. O blockquote do Streamlit sai a 60% de
+   opacidade, que e o tom de "nota de rodape" — e aqui ela e justamente o que
+   o corretor quer ler. */
+[data-testid="stToast"] blockquote {{
   opacity: 1 !important;
   border-left-color: currentColor !important;
   margin: 0.4rem 0 0.6rem 0 !important;

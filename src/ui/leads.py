@@ -66,8 +66,11 @@ CHAVE_LEAD_ABERTO = "lead_aberto"
 CHAVE_EXCLUSAO = "lead_a_excluir"
 # Lead cujo follow-up o corretor pediu; a geracao roda no rerun seguinte.
 CHAVE_FOLLOWUP_PENDENTE = "followup_pendente"
-# Desfecho do ultimo disparo manual, (lead_id, DisparoManual), ate ser fechado.
-CHAVE_DESFECHO_FOLLOWUP = "desfecho_followup"
+# Segundos que o aviso do follow-up fica na tela, se nao for fechado antes. O
+# gerado cita a mensagem da Marina, que o corretor quer ler inteira; recusa e
+# falha sao uma frase.
+DURACAO_DO_AVISO_GERADO = 15
+DURACAO_DO_AVISO_CURTO = 8
 # Formulario de agendamento aberto: (lead_id, agendamento_id ou None p/ novo).
 CHAVE_AGENDAMENTO = "agendamento_em_edicao"
 # Agendamento cujo botao de excluir foi clicado, para o segundo clique ser
@@ -261,7 +264,7 @@ def _pedir_exclusao(lead: Lead) -> None:
 
 
 def _confirmacao_na_lista(lead: Lead) -> None:
-    """Desfecho do follow-up e confirmacao de exclusao, abaixo da linha.
+    """Andamento do follow-up e confirmacao de exclusao, abaixo da linha.
 
     Na coluna dos botoes nao caberiam: o aviso quebraria em varias linhas e os
     botoes ficariam menores que o alvo confortavel de clique.
@@ -798,58 +801,49 @@ def _disparar_followup(lead: Lead) -> None:
     andamento quebraria em várias linhas.
     """
     st.session_state[CHAVE_FOLLOWUP_PENDENTE] = lead.id
-    st.session_state.pop(CHAVE_DESFECHO_FOLLOWUP, None)
     st.rerun()
 
 
 def _followup_do_lead(lead: Lead) -> None:
-    """Gera o follow-up pedido para este lead e mostra como terminou.
+    """Gera o follow-up pedido para este lead e avisa como terminou.
 
-    O desfecho fica na tela até o corretor fechá-lo, e não num toast: o que
-    ele quer ler é a mensagem que a Marina escreveu, e quatro segundos no
-    canto da tela não bastam para isso — nem para notar que deu errado.
+    O andamento fica na linha do lead, que e onde o corretor clicou. O
+    desfecho sai flutuando, fora da tabela: some sozinho depois de um tempo,
+    ou no X, sem empurrar as linhas de baixo.
     """
-    if st.session_state.get(CHAVE_FOLLOWUP_PENDENTE) == lead.id:
-        st.session_state.pop(CHAVE_FOLLOWUP_PENDENTE, None)
-        nome = markdown_seguro(rotulo_do_lead(lead))
-        with st.status(f"Escrevendo o follow-up de **{nome}**…"):
-            resultado = asyncio.run(run_followup_para_lead(lead.id))
-        st.session_state[CHAVE_DESFECHO_FOLLOWUP] = (lead.id, resultado)
-        # O rerun atualiza a linha e a conversa, que já estavam desenhadas.
-        st.rerun()
-
-    guardado = st.session_state.get(CHAVE_DESFECHO_FOLLOWUP)
-    if not guardado or guardado[0] != lead.id:
+    if st.session_state.get(CHAVE_FOLLOWUP_PENDENTE) != lead.id:
         return
 
-    resultado = guardado[1]
-    with st.container(
-        horizontal=True, vertical_alignment="top", key=f"desfecho_followup_{lead.id}"
-    ):
-        if resultado.executado:
-            st.success(
-                corpo_do_followup_gerado(resultado),
-                title=titulo_do_followup_gerado(resultado),
-                icon=":material/mark_chat_read:",
-            )
-        elif resultado.falhou:
-            st.error(
-                resultado.motivo,
-                title="Não foi possível gerar o follow-up",
-                icon=":material/error:",
-            )
-        else:
-            st.info(
-                resultado.motivo,
-                title="Follow-up não disparado",
-                icon=":material/block:",
-            )
-        if st.button(
-            "", icon=":material/close:", key=f"fecha_followup_{lead.id}",
-            help="Fechar aviso", type="tertiary",
-        ):
-            st.session_state.pop(CHAVE_DESFECHO_FOLLOWUP, None)
-            st.rerun()
+    st.session_state.pop(CHAVE_FOLLOWUP_PENDENTE, None)
+    nome = markdown_seguro(rotulo_do_lead(lead))
+    with st.status(f"Escrevendo o follow-up de **{nome}**…"):
+        resultado = asyncio.run(run_followup_para_lead(lead.id))
+    corpo, icone, duracao = aviso_do_followup(resultado)
+    st.toast(corpo, icon=icone, duration=duracao)
+    # O rerun atualiza a linha e a conversa, que ja estavam desenhadas.
+    st.rerun()
+
+
+def aviso_do_followup(resultado: DisparoManual) -> tuple[str, str, int]:
+    """Texto, icone e duracao do aviso de como o disparo terminou."""
+    if resultado.executado:
+        return (
+            f"**{titulo_do_followup_gerado(resultado)}**\n\n"
+            f"{corpo_do_followup_gerado(resultado)}",
+            ":material/mark_chat_read:",
+            DURACAO_DO_AVISO_GERADO,
+        )
+    if resultado.falhou:
+        return (
+            f"**Não foi possível gerar o follow-up**\n\n{resultado.motivo}",
+            ":material/error:",
+            DURACAO_DO_AVISO_CURTO,
+        )
+    return (
+        f"**Follow-up não disparado**\n\n{resultado.motivo}",
+        ":material/block:",
+        DURACAO_DO_AVISO_CURTO,
+    )
 
 
 def titulo_do_followup_gerado(resultado: DisparoManual) -> str:
@@ -886,7 +880,7 @@ def corpo_do_followup_gerado(resultado: DisparoManual) -> str:
 
 
 def _avisos_e_confirmacao(lead: Lead) -> None:
-    """Desfecho do follow-up e confirmacao de exclusao, na largura da pagina.
+    """Andamento do follow-up e confirmacao de exclusao, na largura da pagina.
 
     Fora do cabecalho de proposito: espremidos na faixa dos botoes de icone
     eles quebrariam em varias linhas, e a confirmacao de uma acao sem desfazer

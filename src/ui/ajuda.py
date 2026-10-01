@@ -180,7 +180,8 @@ O botão **Disparar follow-up** na ficha usa a mesma lógica com outro gatilho:
 dispensa só a janela de tempo — quem está olhando o lead já decidiu que é hora
 — e mantém o teto de tentativas da régua e o orçamento de LLM. Ao terminar,
 ele mostra a mensagem que a Marina escreveu, a régua e quantas tentativas dela
-já foram usadas; o aviso fica na tela até você fechá-lo. Num lead do Telegram,
+já foram usadas, num aviso no canto da tela que some sozinho em 15 segundos —
+ou antes, no X. Num lead do Telegram,
 quem envia é o processo do bot: se ele não estiver no ar nos 15 minutos
 seguintes, ou se o lead responder antes, a mensagem é descartada sem sair.
 

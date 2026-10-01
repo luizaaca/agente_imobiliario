@@ -15,7 +15,13 @@ from src.scheduler.followup_runner import DisparoManual, run_followup_para_lead
 from src.services.followup_service import REGUAS, FollowUpService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
-from src.ui.leads import corpo_do_followup_gerado, titulo_do_followup_gerado
+from src.ui.leads import (
+    DURACAO_DO_AVISO_CURTO,
+    DURACAO_DO_AVISO_GERADO,
+    aviso_do_followup,
+    corpo_do_followup_gerado,
+    titulo_do_followup_gerado,
+)
 
 
 @pytest.fixture
@@ -194,3 +200,30 @@ def test_mensagem_citada_inteira_e_como_a_conversa_a_mostra():
 )
 def test_corpo_diz_para_onde_a_mensagem_vai(campos, esperado):
     assert esperado in corpo_do_followup_gerado(_gerado(**campos))
+
+
+def test_aviso_do_gerado_traz_titulo_e_mensagem_e_fica_mais_tempo():
+    """A mensagem da Marina é para ler; a recusa é uma frase."""
+    corpo, icone, duracao = aviso_do_followup(_gerado(texto="Rita, ainda procurando?"))
+
+    assert corpo.startswith(f"**{titulo_do_followup_gerado(_gerado())}**")
+    assert "> Rita, ainda procurando?" in corpo
+    assert icone == ":material/mark_chat_read:"
+    assert duracao == DURACAO_DO_AVISO_GERADO > DURACAO_DO_AVISO_CURTO
+
+
+@pytest.mark.parametrize(
+    ("campos", "titulo", "icone"),
+    [
+        ({"falhou": True}, "Não foi possível gerar o follow-up", ":material/error:"),
+        ({}, "Follow-up não disparado", ":material/block:"),
+    ],
+)
+def test_aviso_de_falha_e_de_recusa_diz_o_motivo(campos, titulo, icone):
+    resultado = DisparoManual(executado=False, motivo="Régua esgotada.", **campos)
+
+    corpo, icone_do_aviso, duracao = aviso_do_followup(resultado)
+
+    assert corpo == f"**{titulo}**\n\nRégua esgotada."
+    assert icone_do_aviso == icone
+    assert duracao == DURACAO_DO_AVISO_CURTO
