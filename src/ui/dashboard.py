@@ -196,6 +196,31 @@ def _painel_de_custo(db) -> None:
         )
 
 
+def contar_followups(db) -> tuple[int, int]:
+    """(mensagens de follow-up geradas, quantas delas saíram pelo canal).
+
+    Conta a tentativa que produziu mensagem, e não toda tentativa: uma geração
+    que falhou fica registrada sem `message_id`, para o teto da régua a
+    enxergar, mas não há mensagem nenhuma a mostrar — e o cartão diz
+    "mensagens geradas".
+
+    Nem só as despachadas: contando apenas `sent`, quem dispara pela tela via
+    zero para sempre, porque a UI não tem canal de saída e a mensagem nasce
+    `generated`. O número diria "não aconteceu nada" sobre um trabalho que
+    aconteceu.
+    """
+    com_mensagem = FollowUpAttempt.message_id.is_not(None)
+    geradas = (
+        db.query(func.count(FollowUpAttempt.id)).filter(com_mensagem).scalar() or 0
+    )
+    enviadas = (
+        db.query(func.count(FollowUpAttempt.id))
+        .filter(com_mensagem, FollowUpAttempt.status == "sent")
+        .scalar() or 0
+    )
+    return geradas, enviadas
+
+
 def _kpis(db) -> None:
     total_leads = db.query(func.count(Lead.id)).scalar() or 0
     leads_quentes = db.query(func.count(Lead.id)).filter(Lead.score >= 7).scalar() or 0
@@ -207,17 +232,7 @@ def _kpis(db) -> None:
     leads_inativos = (
         db.query(func.count(Lead.id)).filter(Lead.status == "inativo").scalar() or 0
     )
-    # Toda tentativa que produziu mensagem, e nao so as despachadas. Contando
-    # apenas `sent`, quem dispara follow-up pela tela via zero para sempre: a
-    # UI nao tem canal de saida, entao a mensagem nasce `generated` e so o
-    # processo do Telegram a faria virar `sent`. O numero dizia "nao aconteceu
-    # nada" sobre um trabalho que aconteceu.
-    followups = db.query(func.count(FollowUpAttempt.id)).scalar() or 0
-    followups_enviados = (
-        db.query(func.count(FollowUpAttempt.id))
-        .filter(FollowUpAttempt.status == "sent")
-        .scalar() or 0
-    )
+    followups, followups_enviados = contar_followups(db)
 
     # `border=True` fecha cada numero em um cartao: sem a borda os cinco viram
     # texto solto no topo da pagina, sem separacao entre eles.

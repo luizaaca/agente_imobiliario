@@ -271,7 +271,7 @@ Todas visíveis no dashboard do corretor:
 |---|---|
 | total de leads | KPI no topo |
 | leads por status | KPIs de leads quentes e inativos, e filtro de status da lista |
-| follow-ups disparados | KPI no topo, contando toda tentativa registrada; o *tooltip* separa quantas saíram por um canal com envio ativo |
+| follow-ups disparados | KPI no topo, contando as tentativas que geraram mensagem — uma geração que falhou fica registrada para o teto da régua, mas não entra; o *tooltip* separa quantas saíram por um canal com envio ativo |
 | agendamentos criados | KPI no topo |
 | taxa de erro do agente | painel **Consumo de LLM**, sobre as chamadas do dia |
 | custo/token por dia | painel **Consumo de LLM**, por dia e por mês |
