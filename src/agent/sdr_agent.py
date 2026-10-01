@@ -222,8 +222,39 @@ FECHAMENTO_DA_BUSCA = (
     "primeira linha.\n"
     "Não ofereça um menu de próximos passos ('posso ampliar a busca, ou...') — "
     "a busca já foi refeita sozinha. Escolha você o próximo passo e termine "
-    "com UMA pergunta só, sobre o que ela achou destes imóveis — não sobre agendar, que vem depois de ela reagir."
+    "com UMA pergunta só, ligada a um destes imóveis, que peça a reação dela e "
+    "revele algo da vida dela que você ainda não sabe — 'o terceiro quarto "
+    "daria um bom escritório: você trabalha de casa?'. Não sobre agendar, que "
+    "vem depois de ela reagir."
 )
+
+# Menos que isto e a Marina busca de novo, uma vez, por alternativas alinhadas.
+# Com um ou dois imóveis a pessoa não tem entre o que escolher, e a conversa
+# morria em "gostou desse?".
+MINIMO_DE_OPCOES = 3
+
+PEDIDO_DE_COMPLEMENTO = (
+    "\n---\n"
+    "ANTES DE RESPONDER: vieram só {quantos} — menos de {minimo}. Chame "
+    "`buscar_imoveis` mais uma vez pedindo alternativas alinhadas ao que ela "
+    "quer: afrouxe o que ela não marcou como essencial — um bairro vizinho, um "
+    "preço um pouco acima — e mantenha o tipo, a operação e tudo o que ela já "
+    "recusou, dizendo no pedido o que ela recusou. Depois apresente tudo "
+    "junto, deixando claro o que atende ao pedido e o que é alternativa."
+)
+
+
+def _pedido_de_complemento(ctx, quantos: int, primeira_do_turno: bool) -> str:
+    """A ordem de buscar de novo, quando a lista ficou curta.
+
+    Só na primeira busca do turno: a segunda volta com o que achou, e pedir
+    uma terceira transformaria um catálogo sem opção num laço de buscas que
+    custam dezenas de milhares de tokens cada.
+    """
+    if not primeira_do_turno or quantos >= MINIMO_DE_OPCOES:
+        return ""
+    rotulo = "nenhum imóvel" if quantos == 0 else f"{quantos} imóvel(is)"
+    return PEDIDO_DE_COMPLEMENTO.format(quantos=rotulo, minimo=MINIMO_DE_OPCOES)
 
 
 def _formatar_imovel(imovel) -> str:
@@ -297,6 +328,8 @@ async def buscar_imoveis(
         perfil = lead.perfil_narrativo if lead else None
 
     ja_vistos = imoveis_mostrados.ja_mostrados(ctx.deps.lead_id)
+    # Lido antes de a busca deixar o próprio rastro: os rastros são do turno.
+    primeira_do_turno = not ctx.deps.rastros_de_busca
     comeco = time.monotonic()
 
     try:
@@ -332,7 +365,7 @@ async def buscar_imoveis(
         # da ficha: numa conversa real, quem recusou apartamento e 3 quartos
         # recebeu de volta, três vezes, os mesmos apartamentos de 3 quartos e
         # o sobrado que já tinha dispensado.
-        return _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos)
+        return _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos, primeira_do_turno)
 
     with get_db() as db:
         # Os números saem do banco, sempre: o agente de busca devolve IDs e
@@ -358,7 +391,9 @@ async def buscar_imoveis(
         _guardar_rastro(ctx, apresentados, recomendacao)
         # A formatação fica dentro da sessão: os objetos são do ORM e acessar
         # um atributo depois do close levanta DetachedInstanceError.
-        return _texto_da_recomendacao(imoveis, recomendacao)
+        return _texto_da_recomendacao(imoveis, recomendacao) + _pedido_de_complemento(
+            ctx, len(imoveis), primeira_do_turno
+        )
 
 
 # Quantas fichas `detalhar_imoveis` devolve quando não recebe IDs. Dez cobre
@@ -457,7 +492,9 @@ FECHAMENTO_SEM_IMOVEL = (
 )
 
 
-def _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos: list[int]) -> str:
+def _sem_imovel_que_sirva(
+    ctx, recomendacao, ja_vistos: list[int], primeira_do_turno: bool = False
+) -> str:
     """O retorno quando a busca rodou e concluiu que nada atende.
 
     Sem lista de imóveis e sem o fechamento de apresentação: com os dois, a
@@ -484,7 +521,9 @@ def _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos: list[int]) -> str:
     if recomendacao.observacao:
         linhas.append(_nota_da_busca(recomendacao.observacao))
     linhas.append(FECHAMENTO_SEM_IMOVEL)
-    return "\n".join(linhas)
+    return "\n".join(linhas) + _pedido_de_complemento(
+        ctx, len(apresentados), primeira_do_turno
+    )
 
 
 def _nota_da_busca(texto: str) -> str:

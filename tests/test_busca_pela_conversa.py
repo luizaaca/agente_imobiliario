@@ -292,6 +292,65 @@ def test_so_ids_inventados_ainda_caem_na_degradacao(
     assert "Nenhum imóvel do catálogo atende" not in retorno
 
 
+# --- Lista curta -------------------------------------------------------------
+
+
+def _turno_com_duas_buscas(lead_id, deps) -> list[str]:
+    """Um turno em que a Marina busca, obedece ao complemento e busca de novo."""
+    retornos = []
+
+    def modelo(messages, info):
+        if len(retornos) < 2:
+            if any(type(p).__name__ == "ToolReturnPart" for p in messages[-1].parts):
+                retornos.append(str(messages[-1].parts[0].content))
+            if len(retornos) < 2:
+                return ModelResponse(parts=[ToolCallPart(
+                    tool_name="buscar_imoveis",
+                    args={"pedido": f"busca {len(retornos) + 1}"},
+                )])
+        return ModelResponse(parts=[TextPart(content="ok")])
+
+    with agent_mod.sdr_agent.override(model=FunctionModel(modelo)):
+        asyncio.run(process_message(lead_id, "busque", "teste", deps()))
+    return retornos
+
+
+def test_lista_curta_manda_buscar_alternativas(catalogo, lead_id, deps, busca_fake):
+    """Com um imóvel só a pessoa não tem entre o que escolher."""
+    with busca_fake(escolha_da_busca((5, "o único 2 quartos no Tatuapé"))):
+        retorno = _turno_com_busca("apartamento no Tatuapé", lead_id, deps)
+
+    assert "ANTES DE RESPONDER: vieram só 1 imóvel(is)" in retorno
+    assert "tudo o que ela já recusou" in retorno
+
+
+def test_tres_opcoes_bastam(catalogo, lead_id, deps, busca_fake):
+    with busca_fake(escolha_da_busca((1, "a"), (2, "b"), (3, "c"))):
+        retorno = _turno_com_busca("algo à venda", lead_id, deps)
+
+    assert "ANTES DE RESPONDER" not in retorno
+
+
+def test_busca_vazia_tambem_manda_buscar_alternativas(
+    catalogo, lead_id, deps, busca_fake
+):
+    with busca_fake(escolha_da_busca(observacao=_NADA_SERVE, mais_proximo=5)):
+        retorno = _turno_com_busca("casa de 2 quartos na zona leste", lead_id, deps)
+
+    assert "ANTES DE RESPONDER: vieram só 1 imóvel(is)" in retorno
+
+
+def test_a_segunda_busca_do_turno_nao_pede_terceira(
+    catalogo, lead_id, deps, busca_fake
+):
+    """Catálogo sem opção não pode virar um laço de buscas caras."""
+    with busca_fake(escolha_da_busca((5, "o único que há"))):
+        primeira, segunda = _turno_com_duas_buscas(lead_id, deps)
+
+    assert "ANTES DE RESPONDER" in primeira
+    assert "ANTES DE RESPONDER" not in segunda
+
+
 # --- A observação da busca ---------------------------------------------------
 
 

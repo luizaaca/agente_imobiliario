@@ -44,21 +44,33 @@ agendamento.
 O agente não despeja um questionário de uma vez. O fluxo é:
 
 1. identificar intenção principal;
-2. **perguntas sobre a vida do lead entre as buscas**, uma de cada vez —
-   quem vai morar junto, o que o faz sair de onde mora, como é a rotina, o que
-   seria decisivo. As respostas compõem o perfil que vai no pedido à
-   ferramenta: "casal com um filho, ela atende pacientes em casa" procura coisa
-   diferente de "2 ou 3 quartos até 900 mil";
+2. **curiosidade em toda resposta, junto da apresentação de imóveis** — um
+   fio da vida do lead por vez, com educação: o que faz, quem vai morar junto
+   (filhos e idades, pets, alguém mais velho), por que aquele bairro, o que o
+   faz sair de onde mora, a rotina, o que seria decisivo, e a faixa de renda —
+   por faixa, nunca o valor exato, com o porquê (a renda que o aluguel exige,
+   o financiamento na compra) e só depois de alguma conversa. O prazo vem
+   cedo, até a terceira mensagem do lead: é o dado que mais mexe no score e o
+   que as conversas mais deixavam de colher. Profissão, família e renda vão
+   para o perfil narrativo, e não para campos próprios; o perfil vai no pedido
+   à ferramenta: "casal com um filho, ela atende pacientes em casa" procura
+   coisa diferente de "2 ou 3 quartos até 900 mil";
 3. atualizar o estado estruturado do lead;
 4. **atualizar o perfil narrativo** com novas informações, objeções ou preferências capturadas;
 5. buscar imóveis quando houver contexto mínimo suficiente;
 6. apresentar em duas camadas: **um destaque** de duas ou três linhas, com o
    que a descrição tem de concreto e a ligação com o que ele contou de si, e
    até cinco alternativas de uma linha, cada uma dizendo sua diferença para o
-   destaque, com o ID de cada imóvel;
+   destaque, com o ID de cada imóvel. A pergunta do fim se liga a um dos
+   imóveis e puxa a vida do lead — "o terceiro quarto daria um escritório:
+   você trabalha de casa?". Com menos de três imóveis, o retorno da busca manda
+   buscar mais uma vez, por alternativas que afrouxam o que o lead não marcou
+   como essencial e nunca o que ele recusou; só na primeira busca do turno,
+   para um catálogo sem opção não virar um laço de buscas;
 7. oferecer agendamento quando houver aderência e interesse.
 
-Uma pergunta por mensagem, sempre. E o que o lead conta sem ser perguntado
+Uma pergunta por mensagem — a exceção é o pedido de nome e telefone da
+abertura. E o que o lead conta sem ser perguntado
 reaparece na mensagem seguinte, ligado a um imóvel concreto: ouvir e não usar
 é o mesmo que não ter perguntado.
 
@@ -73,7 +85,10 @@ um sobrado de 3 quartos recusa os 3 quartos, não o sobrado: o perfil e o pedido
 repetir o que entendeu. Quando a recusa não diz o quê — "não gostei", um "não"
 seco —, o agente pergunta antes de buscar de novo. Estender a recusa às outras
 características do imóvel tirou da busca, numa conversa real, os sobrados de 2
-quartos que a pessoa queria.
+quartos que a pessoa queria. A mesma regra está nas instruções do agente de
+busca, que lê o perfil e o pedido: a recusa se escreve pelo motivo — "não
+aceita 3 quartos" —, e não pelo imóvel — "sem sobrado de 3 quartos" —, que ele
+lia como recusa a todo sobrado.
 
 ## 3. Estratégia de perfil narrativo incremental
 

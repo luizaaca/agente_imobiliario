@@ -125,3 +125,25 @@ def test_recusa_vale_pelo_motivo_e_a_duvida_vira_pergunta():
     assert "Uma recusa vale pelo motivo que ela deu" in SYSTEM_PROMPT
     assert "Sobrado é casa" in SYSTEM_PROMPT
     assert "pergunte antes de buscar de novo" in SYSTEM_PROMPT
+
+
+def test_marina_e_curiosa_e_sabe_o_que_perguntar():
+    """Profissão, família, renda e o porquê do bairro alimentam a busca e o corretor."""
+    secao = SYSTEM_PROMPT.split("**Seja curiosa.**")[1].split("## 2. Buscar")[0]
+
+    for assunto in ("profissão", "filhos", "por que este bairro", "faixa de renda"):
+        assert assunto in secao
+    assert "nunca o valor exato" in secao
+    assert "atualizar_perfil_lead" in secao
+
+
+def test_prazo_vem_cedo():
+    """Urgência faltava em 21 de 23 leads: é até 2,5 pontos de score por lead."""
+    assert "O prazo vem cedo" in SYSTEM_PROMPT
+
+
+def test_pergunta_da_apresentacao_se_liga_a_um_imovel():
+    from src.agent.sdr_agent import FECHAMENTO_DA_BUSCA
+
+    assert "Uma pergunta, ligada a um dos imóveis" in SYSTEM_PROMPT
+    assert "ligada a um destes imóveis" in FECHAMENTO_DA_BUSCA
