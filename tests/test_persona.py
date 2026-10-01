@@ -114,3 +114,14 @@ def test_com_nome_e_telefone_a_abertura_vai_direto_a_pergunta():
 
 def test_sem_lead_a_abertura_pede_os_dois():
     assert PEDIDO_DE_NOME_E_TELEFONE in abertura_da_conversa(None)
+
+
+def test_recusa_vale_pelo_motivo_e_a_duvida_vira_pergunta():
+    """Recusar os 3 quartos de um sobrado virou "não quer sobrado" no perfil.
+
+    A busca seguinte excluiu os sobrados de 2 quartos, que eram o que ele
+    queria. A regra pede o motivo dito, e uma pergunta quando ele não foi dito.
+    """
+    assert "Uma recusa vale pelo motivo que ela deu" in SYSTEM_PROMPT
+    assert "Sobrado é casa" in SYSTEM_PROMPT
+    assert "pergunte antes de buscar de novo" in SYSTEM_PROMPT

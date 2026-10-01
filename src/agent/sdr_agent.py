@@ -748,8 +748,10 @@ async def atualizar_perfil_lead(
     novidades: Annotated[str, Field(min_length=3, description=(
         "O que esta conversa acabou de revelar sobre a pessoa, em uma ou duas "
         "frases: uma preferência, uma restrição, uma objeção, o motivo de ter "
-        "recusado um imóvel, o contexto de vida dela. Escreva SÓ a novidade — "
-        "o perfil que já existe é preservado e não precisa ser repetido."))],
+        "recusado um imóvel, o contexto de vida dela. Recusa vai com o motivo "
+        "que ela deu, sem estender às outras características do imóvel. "
+        "Escreva SÓ a novidade — o perfil que já existe é preservado e não "
+        "precisa ser repetido."))],
 ) -> str:
     """Registrar no perfil narrativo algo qualitativo que a conversa revelou.
 

@@ -67,6 +67,14 @@ o agente pergunta o que não serviu, registra no perfil e busca de novo. Só o
 pedido explícito de parar, o pedido de falar com uma pessoa ou a visita marcada
 encerram a conversa.
 
+**A recusa vale pelo motivo dito.** "Não, quero algo com 2 quartos" diante de
+um sobrado de 3 quartos recusa os 3 quartos, não o sobrado: o perfil e o pedido
+à busca levam só o que a pessoa disse, e o agente não acrescenta restrição ao
+repetir o que entendeu. Quando a recusa não diz o quê — "não gostei", um "não"
+seco —, o agente pergunta antes de buscar de novo. Estender a recusa às outras
+características do imóvel tirou da busca, numa conversa real, os sobrados de 2
+quartos que a pessoa queria.
+
 ## 3. Estratégia de perfil narrativo incremental
 
 O `perfil_narrativo` é tratado como um artefato vivo:
