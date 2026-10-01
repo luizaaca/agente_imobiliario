@@ -325,6 +325,15 @@ async def buscar_imoveis(
         ctx, comeco, tokens=(recomendacao.tokens_in, recomendacao.tokens_out)
     )
 
+    if not recomendacao.ids:
+        # Lista vazia de uma busca que rodou é a resposta, e não uma falha.
+        # Mandá-la para a degradação trocava o julgamento do agente — que leu
+        # o pedido, o perfil e o que já foi mostrado — por filtros afrouxados
+        # da ficha: numa conversa real, quem recusou apartamento e 3 quartos
+        # recebeu de volta, três vezes, os mesmos apartamentos de 3 quartos e
+        # o sobrado que já tinha dispensado.
+        return _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos)
+
     with get_db() as db:
         # Os números saem do banco, sempre: o agente de busca devolve IDs e
         # julgamento, e preço escrito por modelo é exatamente o que a persona
@@ -339,9 +348,9 @@ async def buscar_imoveis(
             )
 
         if not imoveis:
-            # Ou o catálogo não tinha nada (e a observação explica), ou os IDs
-            # não existem. Nos dois casos a degradação é melhor que a mão
-            # vazia, e o que ela achar vem com a observação junto.
+            # O agente devolveu IDs que não existem no banco. Aí sim a
+            # degradação é melhor que a mão vazia, e o que ela achar vem com
+            # a observação junto.
             return _busca_sem_agente(ctx, pedido, recomendacao.observacao)
 
         apresentados = [i.id for i in imoveis]
@@ -431,6 +440,50 @@ def _texto_da_recomendacao(imoveis, recomendacao) -> str:
         linhas.append(_nota_da_busca(recomendacao.observacao))
 
     linhas.append(FECHAMENTO_DA_BUSCA)
+    return "\n".join(linhas)
+
+
+FECHAMENTO_SEM_IMOVEL = (
+    "\n---\n"
+    "Ao responder: nada no catálogo atende ao que ela pediu. Diga isso em uma "
+    "linha, sem pedir desculpa e sem repetir o pedido inteiro.\n"
+    "Se acima houver um imóvel mais próximo, apresente-o em uma ou duas "
+    "linhas — o que é, o preço e no que difere do pedido —, sem vendê-lo como "
+    "se atendesse. Sem ele, use a nota da busca para dizer o que o catálogo "
+    "tem.\n"
+    "Não volte a oferecer imóvel que ela já recusou nesta conversa.\n"
+    "Termine com UMA pergunta: se ela quer conhecer o mais próximo, ou o que "
+    "aceita mudar — bairro, tipo, quartos ou preço."
+)
+
+
+def _sem_imovel_que_sirva(ctx, recomendacao, ja_vistos: list[int]) -> str:
+    """O retorno quando a busca rodou e concluiu que nada atende.
+
+    Sem lista de imóveis e sem o fechamento de apresentação: com os dois, a
+    Marina apresentava o que tinha na mão, atendesse ou não. A alternativa
+    mais próxima vem com a ficha relida do banco, rotulada como o que ela é —
+    o preço que a Marina citar sai do PostgreSQL, não da nota do agente.
+    """
+    linhas = ["Nenhum imóvel do catálogo atende ao pedido."]
+    apresentados: list[int] = []
+
+    alternativa = recomendacao.mais_proximo
+    if alternativa is not None and alternativa not in ja_vistos:
+        with get_db() as db:
+            achados = ctx.deps.catalog_service.get_by_ids([alternativa], db)
+            if achados:
+                linhas.append("\nO mais próximo, que NÃO atende ao pedido:")
+                linhas.append(_formatar_imovel(achados[0]))
+                apresentados = [alternativa]
+
+    if apresentados:
+        imoveis_mostrados.registrar(ctx.deps.lead_id, apresentados)
+    _guardar_rastro(ctx, apresentados, recomendacao)
+
+    if recomendacao.observacao:
+        linhas.append(_nota_da_busca(recomendacao.observacao))
+    linhas.append(FECHAMENTO_SEM_IMOVEL)
     return "\n".join(linhas)
 
 

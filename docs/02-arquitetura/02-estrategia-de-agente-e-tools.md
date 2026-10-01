@@ -272,6 +272,10 @@ pessoa lá é só a resposta final.
 
 ### Quando o provider falha
 
+Só quando a busca falha — provider fora do ar ou IDs que não existem. Lista
+vazia de uma busca que rodou é a conclusão do agente de busca e chega ao agente
+conversacional como tal (ver contratos das tools).
+
 A tool monta filtros a partir da ficha estruturada do lead, usa o pedido como
 termo livre e consulta o catálogo sem LLM nenhum, com a escada de relaxamento
 determinística do `CatalogService`. A busca degrada em qualidade, não em

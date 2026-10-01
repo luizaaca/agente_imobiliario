@@ -73,6 +73,13 @@ class Recomendacao(BaseModel):
         "O que precisou ser afrouxado em relação ao pedido, ou o que o "
         "catálogo tem de verdade quando não há nada. Vazia quando o pedido foi "
         "atendido como veio."))] = ""
+    mais_proximo: Annotated[Optional[int], Field(description=(
+        "Só quando `escolhidos` vier vazio: o `id` do imóvel que mais se "
+        "aproxima do pedido sem atendê-lo — mesma operação, finalidade e tipo "
+        "(a família do tipo pedido), diferindo só em bairro, preço, quartos ou "
+        "metragem. Nunca um já apresentado nem um que o perfil diga que ela "
+        "recusou. A `observacao` diz no que ele difere do pedido. Nulo se nem "
+        "isso existir."))] = None
 
 
 @dataclass
@@ -96,6 +103,9 @@ class ResultadoDaBusca:
     consultas: list[str]
     tokens_in: int
     tokens_out: int
+    # Preenchido só quando nada atende: o que a Marina pode oferecer como
+    # alternativa, com a ficha relida do banco como a dos escolhidos.
+    mais_proximo: Optional[int] = None
 
     @property
     def ids(self) -> list[int]:
@@ -292,4 +302,6 @@ async def buscar(
         consultas=deps.consultas,
         tokens_in=usage.input_tokens or 0,
         tokens_out=usage.output_tokens or 0,
+        # Com imóveis que atendem, uma alternativa que não atende é ruído.
+        mais_proximo=None if recomendacao.escolhidos else recomendacao.mais_proximo,
     )

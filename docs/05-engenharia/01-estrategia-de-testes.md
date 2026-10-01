@@ -58,6 +58,7 @@ Cobrem os 3 cenários obrigatórios do desafio.
 - o que foi pedido não é trocado por outra coisa: galpão não volta como sala comercial;
 - imóvel já apresentado na conversa não volta como novidade;
 - provider fora do ar: a busca degrada para o caminho sem LLM e ainda devolve imóveis;
+- busca que conclui que nada atende: não degrada, não traz lista nem instrução de apresentação, e o mais próximo, quando há, vem com a ficha do banco e não repete o que já foi mostrado;
 - os números do retorno conferem com o banco, e não com o texto do modelo;
 - contenção do SQL: comando que não é `SELECT`, tabela fora de `imoveis`, múltiplos statements e consulta sem `LIMIT`;
 - o consumo é registrado com `operation="busca"`, separado do turno de conversa.

@@ -226,22 +226,24 @@ def consulta_do_catalogo(sql: str) -> ModelResponse:
     )
 
 
-def escolha_da_busca(*pares, observacao: str = "") -> ModelResponse:
+def escolha_da_busca(
+    *pares, observacao: str = "", mais_proximo: int | None = None
+) -> ModelResponse:
     """A saída estruturada do agente de busca: `(imovel_id, porque)`.
 
     O pydantic-ai entrega saída estruturada por uma tool chamada
     `final_result`, e não como texto.
     """
+    args = {
+        "escolhidos": [
+            {"imovel_id": id_, "porque": porque} for id_, porque in pares
+        ],
+        "observacao": observacao,
+    }
+    if mais_proximo is not None:
+        args["mais_proximo"] = mais_proximo
     return ModelResponse(
-        parts=[ToolCallPart(
-            tool_name="final_result",
-            args={
-                "escolhidos": [
-                    {"imovel_id": id_, "porque": porque} for id_, porque in pares
-                ],
-                "observacao": observacao,
-            },
-        )]
+        parts=[ToolCallPart(tool_name="final_result", args=args)]
     )
 
 

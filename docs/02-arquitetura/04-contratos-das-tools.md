@@ -84,7 +84,7 @@ permissão para isso.
 - o que a pessoa procura não é trocado por outra coisa (ver abaixo).
 
 ### Erros tratáveis
-- provider fora do ar ou resposta vazia — degrada para a busca estruturada, sem LLM;
+- provider fora do ar, ou IDs devolvidos que não existem no banco — degrada para a busca estruturada, sem LLM. Lista vazia de uma busca que rodou não é falha e não degrada (ver abaixo);
 - SQL inválido gerado pelo agente de busca — volta a ele como texto, para reescrever;
 - falha de banco;
 - catálogo indisponível.
@@ -110,6 +110,23 @@ Quando não há nada, o retorno traz os números do catálogo: quantos existem d
 que foi pedido, qual o mais barato, em que bairros há. É com eles que o agente
 diz o que existe de verdade, em vez de pedir desculpa no vazio ou oferecer
 outra coisa.
+
+O agente de busca pode indicar um `mais_proximo`: o imóvel que chega mais perto
+sem atender — mesma operação, finalidade e tipo, diferindo só em bairro, preço,
+quartos ou metragem, e nunca um já apresentado. A ficha dele é relida do banco,
+como a dos escolhidos, e vai rotulada como o que não atende ao pedido. Sem ele,
+nenhum imóvel volta.
+
+O retorno vazio não traz a instrução de apresentação: ela manda abrir pelo que
+há, e com um imóvel na mão o agente conversacional o apresentava, atendesse ou
+não. No lugar vem uma instrução própria — dizer em uma linha que não há, citar o
+mais próximo se houver, não reoferecer o que a pessoa recusou e perguntar o que
+ela aceita mudar.
+
+Por isso lista vazia não cai na degradação. Ela fazia isso, e a degradação
+afrouxa filtros da ficha sem saber o que a pessoa recusou: numa conversa real,
+quem dispensou apartamento e 3 quartos recebeu de volta, três vezes, os mesmos
+apartamentos de 3 quartos e o sobrado que já tinha recusado.
 
 ### Uma operação por lista
 Venda e aluguel não se misturam numa lista só: ordenada por preço, os aluguéis
