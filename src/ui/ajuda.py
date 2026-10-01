@@ -398,7 +398,6 @@ A exclusão é definitiva e pede confirmação.
     (
         "O que esta POC não faz?",
         """
-- **O canal Telegram não teve conversa real**: o bot sobe e roda o follow-up, mas o fluxo completo não foi percorrido com uma pessoa do outro lado.
 - **Sem streaming**: a resposta do chat aparece inteira de uma vez.
 - **Sem CRM nem agenda externa**: agendamento é uma linha no banco.
 - **O custo é estimado** por tabela de preços fixa; modelo fora da tabela cai

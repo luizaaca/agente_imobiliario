@@ -4,7 +4,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 567 testes automatizados. O bot do Telegram sobe com token real e o scheduler de follow-up roda nele, mas **nenhuma conversa pelo Telegram foi feita ainda** — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 604 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e o scheduler de follow-up roda junto dele — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -299,7 +299,7 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 pytest
 ```
 
-567 testes, ~50 segundos. Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+604 testes, ~1 minuto. Rodam no ambiente da [Opção 2](#opção-2--local) — Python local e o PostgreSQL do Compose (`docker compose up -d postgres`) —, porque a pasta `tests/` fica fora da imagem. Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -327,9 +327,8 @@ O processo de geração do catálogo está documentado em `seed/` (`planejamento
 
 São limitações reais da entrega, não do desenho:
 
-- **O canal Telegram não teve conversa real.** O bot sobe com token real, faz polling e roda o scheduler de follow-up, e o `/start` e o despacho têm teste automatizado — mas o fluxo Telegram → agente → banco → dashboard não foi percorrido com uma pessoa do outro lado.
 - **Sem streaming de resposta.** O chat espera a resposta completa e então a exibe.
-- **A UI quase não tem teste de renderização.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), mas a renderização foi verificada manualmente no navegador. A exceção é o chat, que roda pelo `AppTest` para provar que mostra o que chegou à conversa por fora dele.
+- **A UI tem pouco teste de renderização.** As regras por trás dela têm (visibilidade de menu, edição de lead, vínculo de canal, disparo de follow-up), e toda página roda pelo `AppTest` numa instalação sem nenhum lead, nos dois papéis — é o que garante que a primeira tela de quem clona não quebra. O resto da renderização foi verificado manualmente no navegador; a exceção é o chat, que também roda pelo `AppTest` para provar que mostra o que chegou à conversa por fora dele.
 - **O follow-up só envia ativamente pelo Telegram.** Sem canal com push, a mensagem é gerada e registrada com status `generated`, mas não sai. No Streamlit ela aparece no histórico do lead. O que o painel gera para um lead do Telegram fica à espera do processo do bot, que o envia se ainda for recente (até 15 minutos) e se o lead não tiver respondido nesse meio-tempo; senão, a tentativa vira `skipped`.
 - **Custo estimado por tabela fixa** (`LLMUsageService.PRICING`). Modelo fora da tabela cai num preço genérico e registra aviso no log — o número aparece no dashboard, mas é um palpite.
 - **O tom do agente degrada em conversas longas.** Ele tende a voltar a listar opções e oferecer menus de próximos passos, porque imita as próprias mensagens anteriores no histórico.
@@ -358,7 +357,7 @@ agente_imobiliario/
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 567 testes
+├── tests/                  # 604 testes
 └── docs/                   # especificação funcional e técnica
 ```
 

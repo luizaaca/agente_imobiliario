@@ -280,7 +280,10 @@ def _contagem(db, coluna, ordem: list[str] | None = None) -> pd.DataFrame:
     if contagens.get(None):
         linhas.append({"categoria": NAO_INFORMADO, "leads": contagens[None]})
 
-    return pd.DataFrame(linhas)
+    # Colunas explícitas: sem lead nenhum — a instalação recém-clonada — a
+    # intenção, que não tem ordem fixa, não gera linha, e um DataFrame de
+    # lista vazia nasce sem colunas. Era um KeyError na primeira tela.
+    return pd.DataFrame(linhas, columns=["categoria", "leads"])
 
 
 def _grafico(dados: pd.DataFrame, cores: dict[str, str]) -> alt.Chart:
