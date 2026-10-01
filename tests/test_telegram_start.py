@@ -75,3 +75,27 @@ def test_mensagem_comum_chega_ao_agente_como_foi_escrita(db, agente_fake):
 
     assert agente_fake == ["quero um 2 quartos na Mooca"]
     assert update.message.respostas == ["Olá! Eu sou a Marina."]
+
+
+def test_mensagem_comum_tambem_cria_o_lead_com_o_nome(db, agente_fake):
+    """O Telegram só manda /start na primeira vez que o chat é aberto.
+
+    Com o lead excluído, a pessoa volta a escrever no mesmo chat sem /start, e
+    o lead novo nascia sem nome — a Marina pedia o que o perfil já dizia.
+    """
+    asyncio.run(telegram_bot.message_handler(_update("oi"), None))
+
+    lead = db.query(Lead).filter(Lead.nome == "Rita Almeida").one()
+    assert lead.canal_origem == "telegram"
+
+
+def test_nome_do_perfil_nao_sobrescreve_o_que_a_pessoa_disse(db, agente_fake):
+    asyncio.run(telegram_bot.message_handler(_update("oi"), None))
+    lead = db.query(Lead).filter(Lead.nome == "Rita Almeida").one()
+    lead.nome = "Ritinha"
+    db.commit()
+
+    asyncio.run(telegram_bot.message_handler(_update("tudo bem?"), None))
+
+    db.refresh(lead)
+    assert lead.nome == "Ritinha"

@@ -23,7 +23,7 @@ Lead inicia conversa pelo Telegram e recebe primeira resposta do agente SDR.
 
 ### Fluxo
 1. Usuário envia mensagem ao bot — ou `/start`, que abre a conversa.
-2. `telegram_bot.py` resolve o lead pelo `chat_id` com `LeadService.get_or_create_lead`: acha o lead dono dessa identidade de canal ou cria um novo. No `/start` o nome do usuário do Telegram entra na criação.
+2. `telegram_bot.py` resolve o lead pelo `chat_id` com `LeadService.get_or_create_lead`: acha o lead dono dessa identidade de canal ou cria um novo. O nome do perfil do Telegram vai em toda mensagem, e não só no `/start` — que o Telegram só manda na primeira vez que o chat é aberto: ele preenche o nome de um lead que ainda não tem nenhum, sem sobrescrever o que a pessoa disse na conversa.
 3. O adaptador entrega o texto e o `lead_id` a `process_message`. O `/start` não tem texto do usuário, então vai uma saudação sintética, para a primeira resposta sair do agente e não de uma mensagem fixa.
 4. `process_message` reidrata o histórico do banco, grava a fala recebida, devolve ao funil um lead `novo` ou `inativo` e confere os tetos de custo — diário e mensal bloqueiam o turno; o da conversa faz handover ao corretor. As instruções do turno trazem o que se sabe do lead, o `perfil_narrativo` e o compromisso de pé.
 5. O agente processa a mensagem e, se necessário, chama tools de qualificação, atualização de perfil, busca e agendamento.

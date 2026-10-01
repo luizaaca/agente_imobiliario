@@ -39,19 +39,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     python-telegram-bot são imutáveis, e atribuir a `update.message.text`
     levanta `AttributeError` — o /start ficava sem resposta.
     """
-    chat_id = str(update.effective_chat.id)
-    user = update.effective_user
-
-    # Garante a criação do lead com o nome do usuário antes de delegar;
-    # o fluxo comum chamaria get_or_create_lead também, mas sem o nome.
-    with get_db() as db:
-        LeadService().get_or_create_lead(
-            channel="telegram",
-            external_id=chat_id,
-            db=db,
-            nome=user.full_name if user else None,
-        )
-
     await _responder(update, SAUDACAO_DO_START)
 
 
@@ -63,16 +50,24 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _responder(update: Update, user_text: str) -> None:
     """Passa a fala ao agente e devolve a resposta no mesmo chat."""
     chat_id = str(update.effective_chat.id)
+    user = update.effective_user
 
     # Show typing indicator
     await update.effective_chat.send_action(ChatAction.TYPING)
-    
+
+    # O nome do perfil vai em toda mensagem, e nao so no /start: o Telegram so
+    # manda /start na primeira vez que a pessoa abre o chat com o bot. Quem
+    # volta a escrever num chat que ja existia — com o lead excluido, por
+    # exemplo — chega por aqui, e sem o nome a Marina pediria o que o perfil
+    # ja diz. Ele so preenche um nome vazio; o que a pessoa disse na conversa
+    # nao e sobrescrito.
     with get_db() as db:
         lead_service = LeadService()
         lead = lead_service.get_or_create_lead(
             channel="telegram",
             external_id=chat_id,
             db=db,
+            nome=user.full_name if user else None,
         )
         lead_id = lead.id
     
