@@ -138,13 +138,55 @@ def _instrumentada(funcao):
 # direto para a pergunta de descoberta. Como instrucao de runtime, ela e a
 # ultima coisa que o modelo le antes de escrever — o mesmo motivo que fez o
 # FECHAMENTO_DA_BUSCA funcionar.
+#
+# Nome e telefone se pedem aqui, e so o que falta: no Telegram o nome ja vem do
+# perfil, e perguntar "como posso te chamar?" logo depois de "Oi, Luiz!" soaria
+# como formulario.
 ABERTURA_DA_CONVERSA = (
     "\n\n---\n"
-    "ESTA É A SUA PRIMEIRA MENSAGEM DESTA CONVERSA. Comece se apresentando em "
-    "UMA linha: seu nome, que você é a assistente virtual da imobiliária e que "
-    "seu papel é entender o que a pessoa procura e marcar a visita com o "
-    "corretor. A pergunta vem depois disso."
+    "ESTA É A SUA PRIMEIRA MENSAGEM DESTA CONVERSA. Abra como alguém da equipe "
+    "abriria: um oi, seu nome e que você é da imobiliária, em uma linha. Não "
+    "diga que é assistente virtual nem robô, e não explique o seu papel."
 )
+
+PEDIDO_DE_NOME_E_TELEFONE = (
+    " Em seguida, numa frase só, pergunte como pode chamá-la e peça um "
+    "telefone, dizendo para que serve: é por ele que o corretor fala com ela."
+)
+PEDIDO_DE_TELEFONE = (
+    " O nome dela você já tem: chame por ele. Em seguida peça um telefone, "
+    "dizendo para que serve: é por ele que o corretor fala com ela."
+)
+PEDIDO_DE_NOME = " Em seguida pergunte como pode chamá-la."
+FECHO_DO_PEDIDO_DE_CONTATO = (
+    " Peça sem obrigar, e sem anunciar que é opcional: se ela não der, a "
+    "conversa segue igual. Nesta mensagem não pergunte o que ela procura; isso "
+    "fica para a próxima.\n"
+    "Releia a mensagem dela antes de escrever. Se ela trouxe qualquer coisa "
+    "além de um cumprimento — o que procura, uma dúvida, um imóvel —, a sua "
+    "mensagem tem que mostrar que ouviu, em meia linha, antes do pedido de "
+    "contato. Ignorar o que ela disse para pedir telefone é o que um formulário "
+    "faz."
+)
+SEM_PEDIDO_DE_CONTATO = (
+    " Nome e telefone ela já deu: chame pelo nome e siga para a primeira "
+    "pergunta."
+)
+
+
+def abertura_da_conversa(lead) -> str:
+    """A ordem da primeira mensagem, pedindo só o contato que ainda falta."""
+    tem_nome = bool(lead and lead.nome)
+    tem_telefone = bool(lead and lead.telefone)
+    if tem_nome and tem_telefone:
+        return ABERTURA_DA_CONVERSA + SEM_PEDIDO_DE_CONTATO
+    if tem_nome:
+        pedido = PEDIDO_DE_TELEFONE
+    elif tem_telefone:
+        pedido = PEDIDO_DE_NOME
+    else:
+        pedido = PEDIDO_DE_NOME_E_TELEFONE
+    return ABERTURA_DA_CONVERSA + pedido + FECHO_DO_PEDIDO_DE_CONTATO
 
 
 # O que o corretor lê quando foi a trava, e não a pessoa, que terminou a
@@ -1202,6 +1244,7 @@ async def instrucoes_do_agente(ctx: RunContext[SDRDependencies]) -> str:
         lead = ctx.deps.lead_service.get_lead(ctx.deps.lead_id, db)
         lead_context = montar_contexto_do_lead(lead)
         ja_respondeu = ctx.deps.lead_service.ja_respondeu(ctx.deps.lead_id, db)
+        abertura = "" if ja_respondeu else abertura_da_conversa(lead)
         perfil = (lead.perfil_narrativo if lead else None) or (
             "Ainda não há perfil escrito. Comece um assim que souber algo "
             "que valha a pena o corretor saber."
@@ -1212,7 +1255,7 @@ async def instrucoes_do_agente(ctx: RunContext[SDRDependencies]) -> str:
         lead_context=lead_context,
         perfil_narrativo=perfil,
     )
-    return instrucoes if ja_respondeu else instrucoes + ABERTURA_DA_CONVERSA
+    return instrucoes + abertura
 
 
 def _registrar_handover(

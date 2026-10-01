@@ -235,8 +235,8 @@ sem pontuação, fixo de dez dígitos ou celular de onze. Sem DDD a tool recusa 
 `ModelRetry` pedindo o DDD — gravar um número incompleto só se descobre errado
 na hora em que o corretor liga.
 
-Quando pedir cada um é regra da persona, não da tool: os dois cedo, um por
-mensagem, e sem insistir se a pessoa não quiser dar. O que ainda faltar quando
+Quando pedir cada um é regra da persona, não da tool: o que faltar dos dois,
+na primeira mensagem, e sem insistir se a pessoa não quiser dar. O que ainda faltar quando
 a visita é marcada, `agendar_reuniao` cobra no próprio retorno — ali há um
 motivo que a pessoa entende, e o retorno da tool é a última coisa que o modelo
 lê antes de escrever. O contexto do turno diz se o telefone já foi informado,
