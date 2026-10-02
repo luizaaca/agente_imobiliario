@@ -118,3 +118,6 @@ htmlcov/
 # =============================================
 # Configuracao local do editor/assistente; nao interessa a quem clona.
 .claude/
+
+# Enunciado do Tech Challenge: material da FIAP, fica so na copia local.
+/POSTECH - Hacka*.pdf
