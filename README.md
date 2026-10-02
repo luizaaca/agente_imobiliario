@@ -8,7 +8,7 @@
 [![PydanticAI](https://img.shields.io/badge/PydanticAI-2.46-E92063?logo=pydantic&logoColor=white)](https://ai.pydantic.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
-[![Telegram](https://img.shields.io/badge/Telegram-bot-26A5E4?logo=telegram&logoColor=white)](#telegram-opcional)
+[![Telegram](https://img.shields.io/badge/Telegram-bot-26A5E4?logo=telegram&logoColor=white)](#telegram)
 [![LLM](https://img.shields.io/badge/LLM-OpenAI--compatible-412991?logo=openai&logoColor=white)](#o-que-llm_provider-faz--e-o-que-n%C3%A3o-faz)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -75,11 +75,7 @@ docker compose up --build
 
 Sobem três serviços, nesta ordem: `postgres`, depois `migrate` (que aplica as migrations e **carrega os 300 imóveis do catálogo**, versionado em `data/imoveis_catalogo.csv`) e por fim `app`. A primeira build leva alguns minutos. O Streamlit fica em **http://localhost:8501**.
 
-O canal Telegram fica fora do conjunto padrão de propósito — sem token ele subiria só para falhar. Para incluí-lo:
-
-```bash
-docker compose --profile telegram up --build
-```
+Assim, sem nenhuma configuração, a aplicação já abre e o painel funciona. Para o agente conversar é preciso uma chave de LLM, e para o canal Telegram, um token de bot — os dois entram pelo `.env`, explicado logo abaixo em [Chaves: o `.env`](#chaves-o-env). O Telegram tem [seção própria](#telegram).
 
 #### Credenciais de acesso
 
@@ -126,17 +122,29 @@ O `roles` aceita `[admin]` ou `[corretor]`. Sem ele, o usuário entra com o menu
 docker compose up -d --build app
 ```
 
-#### Para o chat responder de verdade
+#### Chaves: o `.env`
 
-Sem chave de LLM a aplicação sobe normalmente — dashboard e menu de Leads funcionam, incluindo a ficha e a conversa já registrada —, mas o chat fica desativado e o disparo de follow-up não gera mensagem. Para conversar com o agente:
+O `.env` é o arquivo onde entram as chaves. Ele é **opcional para subir** — o `docker-compose.yml` tem valor padrão para tudo —, mas **sem ele não há chat nem Telegram**: dashboard e Leads funcionam, inclusive ficha e conversa já registrada, mas o chat fica desativado, o disparo de follow-up não gera mensagem e o bot não sobe.
+
+Crie a partir do exemplo, na raiz do repositório:
 
 ```bash
 cp .env.example .env
 ```
 
-Preencha `LLM_API_KEY` e `LLM_MODEL` (e `LLM_BASE_URL`, se não for a OpenAI), depois suba de novo. Qualquer provider OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local.
+| Para quê | Variáveis | Onde conseguir |
+|---|---|---|
+| **o agente conversar** | `LLM_API_KEY` e `LLM_MODEL`; `LLM_BASE_URL` se o provider não for a OpenAI | o painel do seu provider. Qualquer OpenAI-compatible serve: OpenAI, Azure AI Foundry, Groq, Gemini ou Ollama local — ver [Configuração](#configuração) |
+| **o canal Telegram** | `TELEGRAM_BOT_TOKEN` | o @BotFather, no próprio Telegram — passo a passo em [Telegram](#telegram) |
+| a sessão não cair a cada reinício | `AUTH_COOKIE_KEY` | gerada por você — ver [Autenticação](#autenticação). Opcional |
 
-> O `.env` é opcional para o Compose: ele só preenche os `${VAR}` do `docker-compose.yml`, que tem default para tudo. O `DATABASE_URL` que estiver nele não chega aos containers — o compose monta a URL apontando para `postgres:5432`, porque `127.0.0.1` dentro do container seria o próprio container.
+Depois de editar, suba de novo — o Compose relê o `.env` a cada `up`:
+
+```bash
+docker compose up -d
+```
+
+> **Como o `.env` chega aos containers.** O Compose lê o `.env` da raiz sozinho e o usa para preencher os `${VAR}` do `docker-compose.yml`; só as variáveis listadas lá entram nos containers. Por isso a alternativa ao arquivo funciona igual: variáveis do shell, como `LLM_API_KEY=... docker compose up`. A exceção é o `DATABASE_URL`: o que estiver no `.env` não chega aos containers, porque o compose monta a URL apontando para `postgres:5432` — `127.0.0.1` dentro do container seria o próprio container.
 
 #### Se algo der errado
 
@@ -187,13 +195,47 @@ streamlit run app.py
 
 O login é o mesmo das [credenciais de acesso](#credenciais-de-acesso) acima.
 
-### Telegram (opcional)
+### Telegram
 
-```bash
-python run_telegram.py
+O canal real do agente. O interessado conversa com a Marina num bot do Telegram, o lead aparece no painel e os follow-ups chegam a ele pelo bot. Cada avaliador usa **o próprio bot**: o token não vai no repositório.
+
+**1. Crie o bot.** No Telegram, abra uma conversa com o **@BotFather** e mande `/newbot`. Ele pede um nome de exibição (por exemplo, `Marina Imóveis`) e um nome de usuário que termine em `bot` (por exemplo, `marina_avaliacao_bot`). No fim, responde com o **token**, no formato `123456789:AAH...`. O token é uma senha: quem o tem controla o bot.
+
+**2. Ponha o token no `.env`**, junto das chaves de LLM — o bot conversa pelo agente, então sem LLM ele sobe mas não responde:
+
+```env
+TELEGRAM_BOT_TOKEN=123456789:AAH...
 ```
 
-Precisa de `TELEGRAM_BOT_TOKEN` no `.env`, obtido com o @BotFather. O mesmo processo roda o scheduler de follow-up: sem ele no ar, o ciclo automático não acontece. Pelo Compose, é o `--profile telegram` da Opção 1.
+**3. Suba com o profile `telegram`.** O bot fica fora do conjunto padrão de propósito — sem token ele subiria só para falhar. O profile **acrescenta** o serviço `telegram-bot` aos demais:
+
+```bash
+docker compose --profile telegram up -d --build
+```
+
+Para conferir que ele está no ar:
+
+```bash
+docker compose logs telegram-bot
+```
+
+As linhas que importam são `Scheduler de follow-up iniciado junto ao bot` e `Application started`. Sem token, o serviço sai com uma mensagem dizendo isso.
+
+**4. Converse.** No Telegram, procure o bot pelo nome de usuário e toque em **Iniciar**. A Marina se apresenta, pede o telefone — o nome ela já tira do seu perfil — e segue a conversa: o que você procura, imóveis, visita.
+
+**5. Veja o lead no painel.** Ele aparece em **Leads** com o nome do seu perfil do Telegram, e a aba **Conversa** da ficha mostra o histórico — inclusive as ferramentas que o agente chamou, para quem entra como `admin`.
+
+**6. Receba um follow-up.** Na ficha do lead, ou na linha dele na lista, use **Disparar follow-up**. A mensagem é gerada na hora e o bot a entrega no Telegram em até uns 10 segundos.
+
+**O follow-up automático** roda no mesmo processo do bot, a cada 30 minutos (`FOLLOWUP_INTERVAL_MINUTES`), e só alcança quem está em silêncio há tempo suficiente para a régua: 2 horas para lead novo, 6 horas para qualificação interrompida, 24 horas depois de receber imóveis; o lembrete de visita sai 24 horas antes dela. Numa avaliação curta, o botão do passo 6 é o jeito de vê-lo funcionar. Sem o bot no ar, o ciclo automático não acontece.
+
+**Cuidados**
+
+- **Um token, um processo.** O Telegram entrega as mensagens de um bot a um consumidor só. Rodar o bot no Compose e localmente ao mesmo tempo dá `Conflict: terminated by other getUpdates request`: pare um dos dois.
+- **O bot não inicia conversa.** O Telegram não deixa um bot escrever para quem nunca falou com ele, então o follow-up só alcança quem já mandou mensagem ao bot.
+- **Token vazado** se revoga no @BotFather com `/revoke`; ponha o novo no `.env` e suba o bot de novo.
+
+Na [Opção 2](#opção-2--local), o bot roda com `python run_telegram.py`, com o mesmo `.env`.
 
 ---
 
