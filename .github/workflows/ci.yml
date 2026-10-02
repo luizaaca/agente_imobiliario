@@ -15,7 +15,9 @@ on:
 
 jobs:
   testes:
-    runs-on: ubuntu-latest
+    # Fixo, e nao `ubuntu-latest`: o latest muda de versao sozinho, e o
+    # ambiente da avaliacao nao deve mudar no meio dela.
+    runs-on: ubuntu-24.04
 
     services:
       postgres:

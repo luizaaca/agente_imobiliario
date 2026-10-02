@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/luizaaca/agente_imobiliario/actions/workflows/ci.yml/badge.svg)](https://github.com/luizaaca/agente_imobiliario/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/luizaaca/agente_imobiliario?label=vers%C3%A3o)](https://github.com/luizaaca/agente_imobiliario/releases)
-[![Licença](https://img.shields.io/badge/licen%C3%A7a-todos%20os%20direitos%20reservados-lightgrey)](LICENSE)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-PolyForm%20Noncommercial%201.0.0-blue)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.64-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![PydanticAI](https://img.shields.io/badge/PydanticAI-2.46-E92063?logo=pydantic&logoColor=white)](https://ai.pydantic.dev/)
@@ -431,4 +431,6 @@ As versões têm teto de major em `requirements.txt` de propósito: sem isso o p
 
 ## Licença
 
-**Todos os direitos reservados.** Este repositório não é de código aberto: ler, clonar, executar e testar são permitidos exclusivamente para avaliar este trabalho no POSTECH/FIAP — Tech Challenge, Fase 5. Qualquer outro uso, comercial ou não, depende de autorização por escrito. Ver [`LICENSE`](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE). O código é aberto para ler, usar, modificar e redistribuir **sem finalidade comercial**: estudo, pesquisa, uso pessoal, avaliação, ensino e organizações sem fins lucrativos. Uso comercial depende de autorização do autor.
+
+Por restringir uso comercial, ela não é uma licença *open source* pela definição da OSI, e sim *source-available*.
