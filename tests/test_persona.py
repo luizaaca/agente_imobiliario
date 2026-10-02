@@ -147,3 +147,9 @@ def test_pergunta_da_apresentacao_se_liga_a_um_imovel():
 
     assert "Uma pergunta, ligada a um dos imóveis" in SYSTEM_PROMPT
     assert "ligada a um destes imóveis" in FECHAMENTO_DA_BUSCA
+
+
+def test_abertura_que_pede_contato_nao_busca():
+    """A busca da primeira mensagem custava ~8 mil tokens e não aparecia."""
+    assert "não chame `buscar_imoveis` agora" in abertura_da_conversa(_lead(nome=None))
+    assert "buscar_imoveis" not in abertura_da_conversa(_lead(telefone="(11) 98765-4321"))
