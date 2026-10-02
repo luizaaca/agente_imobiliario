@@ -20,6 +20,16 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
+# Dois loggers de terceiros que, em INFO, escrevem a cada poucos segundos sem
+# dizer nada que precise ser lido. Em WARNING continuam mostrando o que falha.
+#
+# - `apscheduler.executors`: "Running job" e "executed successfully" a cada
+#   execução do despacho pendente, que roda de 10 em 10 segundos.
+# - `httpx`: uma linha por `getUpdates` do long polling, e com a URL inteira
+#   da API do Telegram, que carrega o token do bot. Em INFO o token ia parar
+#   no log em texto puro.
+for ruidoso in ("apscheduler.executors", "httpx"):
+    logging.getLogger(ruidoso).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

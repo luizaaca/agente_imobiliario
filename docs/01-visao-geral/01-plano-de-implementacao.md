@@ -90,7 +90,7 @@ Para evitar reinventar a roda e acelerar a implementação da prova de conceito,
 - **`streamlit-authenticator`** para login obrigatório em toda a UI (ver [`03-autenticacao-da-ui.md`](../03-operacao/03-autenticacao-da-ui.md))
 
 ### Canal de mensageria real
-- **Telegram Bot API** via `python-telegram-bot` (v21+, asyncio nativo)
+- **Telegram Bot API** via `python-telegram-bot` (v22, asyncio nativo)
 - Custo zero, sem burocracia de aprovação, funciona com Long Polling em localhost
 - Papel complementar ao chat Streamlit: experiência mobile autêntica para demonstração
 
@@ -107,16 +107,17 @@ Para evitar reinventar a roda e acelerar a implementação da prova de conceito,
 - **Alembic** para migrations de schema
 
 ### Infraestrutura e deploy
-- **Docker Compose** para desenvolvimento local (postgres + app + telegram-bot)
+- **Docker Compose** para desenvolvimento local (postgres, migrate e app; telegram-bot pelo profile `telegram`)
 - Deploy cloud-ready via **Railway**, **Render** ou VPS com Docker (ver [`01-infraestrutura-e-deploy.md`](../03-operacao/01-infraestrutura-e-deploy.md))
 
 ### Busca e recomendação
-- **Filtros estruturados por metadados** (SQL nativo) como estratégia inicial
-- **Full-Text Search (FTS) do PostgreSQL** para ranking textual sobre descrição e tags
+- **Agente de busca dedicado** que escreve SQL sobre o catálogo, com uma role somente-leitura restrita a `imoveis` (ADR 0007)
+- **Full-Text Search (FTS) do PostgreSQL** para ranking textual sobre título, descrição, tags, bairro e tipo
+- **Filtros estruturados** do `CatalogService` como caminho de degradação, sem LLM
 - **Embeddings / busca vetorial** (`pgvector`) ficam como evolução opcional
 
 ### Automação e scheduling
-- **APScheduler** para job periódico de follow-up automático de leads inativos
+- **APScheduler** para o ciclo periódico de follow-up automático e para o despacho, a cada 10 s, do que o painel gerou para leads do Telegram
 - Roda no mesmo processo do Telegram Bot (já é long-running com event loop asyncio)
 
 ### Observabilidade e qualidade
@@ -157,17 +158,17 @@ flowchart LR
     end
 
     subgraph Tools ["Ferramentas Tipadas"]
-        Buscar["buscar_imoveis"]
+        Buscar["buscar_imoveis / detalhar_imoveis"]
         Qualificar["registrar_qualificacao"]
         PerfilTool["atualizar_perfil_lead"]
-        Agendar["agendar_reuniao"]
+        Agendar["agendar_reuniao / listar / confirmar / cancelar"]
         Encerrar["encerrar_atendimento"]
-        FollowUp["gerar_followup"]
     end
 
     subgraph Auxiliares ["Agentes Auxiliares"]
         BuscaAgent["Agente de Busca"]
         PerfilAgent["Consolidador de Perfil"]
+        FollowUpAgent["Agente de Follow-up"]
     end
 
     subgraph Services ["Serviços de Domínio"]
@@ -184,7 +185,11 @@ flowchart LR
 
     ChatTab <--> SDRAgent
     TgBot <--> SDRAgent
-    Scheduler --> FollowUpService
+    Scheduler --> Runner["followup_runner"]
+    DashTab -->|"disparo manual"| Runner
+    Runner --> FollowUpService
+    Runner --> FollowUpAgent
+    Runner -->|"envio ativo"| TgBot
     DashTab <--> LeadService
     SDRAgent <--> Prompt
     SDRAgent <--> State
@@ -199,8 +204,7 @@ flowchart LR
     PerfilTool --> LeadService
     Agendar --> SchedulingService
     Encerrar --> SummaryService
-    FollowUp --> SummaryService
-    FollowUpService -.->|"composição textual via LLM"| LLM["LLM Provider"]
+    FollowUpAgent -.->|"composição textual"| LLM["LLM Provider"]
     CatalogService <--> DB
     LeadService <--> DB
     SchedulingService <--> DB
@@ -289,9 +293,11 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 - [x] Implementar agente de busca em `src/agent/busca_agent.py`, com role somente-leitura sobre `imoveis`.
 - [x] Implementar tools tipadas:
   - [x] `buscar_imoveis` — pedido em texto livre, atendido pelo agente de busca
+  - [x] `detalhar_imoveis` — relê a ficha do que já foi apresentado, sem nova busca
   - [x] `registrar_qualificacao`
   - [x] `atualizar_perfil_lead` — acréscimo ao perfil narrativo, consolidado por agente dedicado
-  - [x] `agendar_reuniao`
+  - [x] `agendar_reuniao` — um compromisso de pé por lead, com os imóveis na observação
+  - [x] `listar_agendamentos`
   - [x] `encerrar_atendimento` — fecha o atendimento e entrega o resumo executivo ao corretor
   - [x] `confirmar_agendamento` e `cancelar_agendamento` — o lead confirma ou desmarca pela conversa
 - [x] Injetar `perfil_narrativo` atual como contexto do agente a cada turno.
@@ -299,11 +305,11 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Fase 3: Qualificação, Score e Perfil Narrativo
 - [x] Definir critérios explícitos de score do lead:
-  - Completude dos dados (quantos campos estruturados preenchidos)
+  - Completude da ficha (meio ponto por campo-chave, telefone incluso)
   - Urgência declarada (alta/média/baixa)
-  - Aderência com catálogo (existem imóveis compatíveis?)
-  - Engajamento conversacional (turnos, perguntas feitas pelo lead)
-  - Intenção de agendamento manifestada
+  - Definição do pedido (tipo de imóvel escolhido)
+  - Engajamento conversacional (mensagens escritas pelo lead)
+  - Visita marcada, com piso de 7.0 para quem tem compromisso de pé
 - [x] Implementar score baseado nos critérios acima.
 - [x] Atualizar status do lead conforme avanço no funil.
 - [x] Garantir que o resumo do corretor explique o score de forma simples.
@@ -312,11 +318,13 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
 
 ### Fase 4: Follow-up Automático com Scheduler
 - [x] Implementar `src/services/followup_service.py`:
-  - Consulta leads inativos por régua/etapa do funil.
-  - Gera mensagem contextual via LLM com base no `perfil_narrativo` e histórico.
+  - Consulta leads calados por régua/etapa do funil.
   - Respeita limite de tentativas (2-3 por régua).
+- [x] Implementar `src/agent/followup_agent.py`: compõe a mensagem com base no `perfil_narrativo`, nos dados do lead e na última mensagem, mais curta a cada tentativa.
+- [x] Implementar `src/scheduler/followup_runner.py`: orquestra geração, gravação, envio e registro da tentativa, para o ciclo e para o disparo manual.
 - [x] Implementar `src/scheduler/followup_scheduler.py` com APScheduler:
-  - Job periódico (a cada 30 min) que varre leads inativos automaticamente.
+  - Ciclo periódico (a cada `FOLLOWUP_INTERVAL_MINUTES`, padrão 30) que varre os leads elegíveis.
+  - Despacho, a cada 10 s, do que ficou gerado sem remetente para leads do Telegram — só o recente, só o mais novo de cada lead, e nada para quem já respondeu.
   - Integrado ao processo do Telegram Bot (event loop asyncio compartilhado).
 - [x] Réguas diferenciadas por estágio do funil:
   - **Lead novo sem resposta** (>2h): tom amigável, pergunta se é bom horário.
@@ -324,13 +332,13 @@ Além dos sub-planos funcionais, a especificação técnica complementar da solu
   - **Pós-envio de imóveis** (>24h): pergunta se viu as opções, qual agradou mais.
   - **Pós-agendamento** (<24h antes): confirmação/lembrete de visita ou ligação.
 - [x] Registrar cada follow-up no histórico do lead.
-- [x] Manter botão "Disparar Follow-up" no dashboard para ação manual sob demanda (mesma lógica, gatilho diferente).
-  > O botão do cartão dispensa apenas a janela de inatividade — quem está olhando o lead já decidiu que é hora. O teto de tentativas da régua e o orçamento de LLM continuam valendo. `python -m scripts.run_followup_once` roda um ciclo inteiro pela linha de comando.
+- [x] Botão de disparar follow-up na lista e na ficha do lead, para ação manual sob demanda (mesma lógica, gatilho diferente). A tela mostra a mensagem gerada, a régua e a tentativa, e distingue falha de recusa por regra.
+  > O botão dispensa apenas a janela de inatividade — quem está olhando o lead já decidiu que é hora. O teto de tentativas da régua e o orçamento de LLM continuam valendo. `python -m scripts.run_followup_once` roda um ciclo inteiro pela linha de comando.
 
 ### Fase 5: Canal Telegram
-- [ ] Criar bot via @BotFather e configurar `TELEGRAM_BOT_TOKEN` no `.env`.
+- [x] Criar bot via @BotFather e configurar `TELEGRAM_BOT_TOKEN` no `.env`.
 - [x] Implementar `src/channels/telegram_bot.py`:
-  - Handler `/start` com saudação e criação do lead no banco.
+  - Handler `/start` com criação do lead no banco e primeira resposta gerada pelo agente.
   - Handler de mensagens de texto com despacho para o agente SDR.
   - Mapeamento `telegram_chat_id` → `lead_id` no banco.
   - Indicador "digitando..." (`ChatAction.TYPING`) enquanto a LLM processa.
@@ -369,8 +377,9 @@ cada lead.
 - [x] Restringir o simulador ao papel `admin`: é ferramenta de teste, não de atendimento.
 - [x] **Página de ajuda** com o estado desta instalação (chat configurado, papel do usuário, estabilidade da sessão), o que cada menu faz e um FAQ. Responde de dentro da tela o que hoje só o README responde — e o que só aparece usando, como *por que sumiu um menu* ou *por que a sessão caiu*.
 - [x] **Conversa em caixa de altura fixa**, no simulador e na ficha: solta na página ela empurrava para fora da tela o seletor de conversa e as ações do lead.
+- [x] **Simulador que se atualiza sozinho**: a conversa é relida do banco a cada 5 s, então o que chega por fora — follow-up, mensagem do Telegram — aparece sem clique.
 - [x] **Dashboard** centrado no **goal principal: agendar ligação do corretor com o cliente**.
-  - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups enviados, Leads inativos.
+  - [x] **KPIs no topo** (`st.metric`): Total de leads, Leads quentes (score≥7), Agendamentos, Follow-ups (o *tooltip* diz quantos saíram por canal com envio), Leads inativos.
   - [x] **Distribuição da carteira**: leads por status, na ordem do funil, e leads por intenção.
   - [x] **Carteira ordenável**: mesmas linhas e selos da listagem de Leads, sem as ações de escrita. A lupa de cada linha abre a ficha daquele lead.
   - [x] **Consumo de LLM**, só para o admin: tokens, custo, tempo médio de resposta e taxa de erro. O alerta de orçamento estourado aparece para todos — ele explica por que o chat parou de responder.
@@ -383,8 +392,8 @@ cada lead.
   - [x] **Criação manual de lead**, para o corretor cadastrar quem chegou por fora do agente.
   - [x] **Vínculo de canal**: liga o lead a um `channel` + identificador, que é o que torna um lead criado à mão alcançável pelo follow-up. Vincula-se uma vez só; depois os campos travam, porque o identificador é a identidade da pessoa no canal e reapontá-lo mandaria a conversa dela para outra pessoa.
   - [x] **Resumo** em aba: o briefing executivo escrito no encerramento do atendimento — qualificação, score com interpretação, perfil narrativo e engajamento. É o que o corretor lê antes de ligar, para não precisar reconstruir a conversa inteira a partir do histórico.
-  - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável.
-  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, imóvel opcional, observações e status — e exclusão com confirmação. O status do lead e a agenda ficam sincronizados nos dois sentidos: aparecendo compromisso o lead vai para `agendado`, sumindo o último ele volta para onde os dados o colocam. `agendado` não é julgamento, é fato verificável — por isso a sincronização vale inclusive por cima do status escolhido à mão na ficha. `inativo` fica de fora: quem parou de responder continua parado mesmo com uma visita antiga no calendário.
+  - [x] **Conversa** em aba, somente leitura, dentro de caixa rolável. Para o `admin`, também o custo da conversa contra o teto de tokens e os painéis com o que cada ferramenta fez.
+  - [x] **Agendamentos** em aba, com formulário de criação e edição — tipo, data e hora em seletores próprios, observações e status — e exclusão com confirmação. Um compromisso de pé por lead: com um ativo, o botão de novo agendamento fica desabilitado. O status do lead e a agenda ficam sincronizados nos dois sentidos: aparecendo compromisso o lead vai para `agendado`, sumindo o último ele volta para onde os dados o colocam. `agendado` não é julgamento, é fato verificável — por isso a sincronização vale inclusive por cima do status escolhido à mão na ficha. `inativo` fica de fora: quem parou de responder continua parado mesmo com uma visita antiga no calendário.
   - [x] **Ações**: disparar follow-up e excluir lead.
 
 ### Fase 7: Observabilidade, Testes e Refino
@@ -393,7 +402,7 @@ cada lead.
 - [x] Criar testes das tools principais.
 - [x] Validar os 3 cenários obrigatórios ponta a ponta.
 - [ ] Testar fluxo completo: Telegram → agente → banco → dashboard (sincronização entre processos).
-  > Depende de um bot real; nunca foi executado.
+  > O bot sobe com token real e roda o scheduler, e `/start` e despacho têm teste automatizado; falta percorrer o fluxo com uma conversa real.
 
 > Critérios de qualidade, cenários mensuráveis e estratégia de testes: [02-qualidade-e-criterios.md](./02-qualidade-e-criterios.md) e [01-estrategia-de-testes.md](../05-engenharia/01-estrategia-de-testes.md)
 

@@ -48,10 +48,11 @@ A nomenclatura definitiva adotada para o projeto é:
 
 | Variável | Obrigatória | Descrição | Exemplo |
 |---|:---:|---|---|
-| `LLM_PROVIDER` | Sim | Identificador do provedor | `openai`, `groq`, `gemini`, `ollama` |
+| `LLM_PROVIDER` | Não (padrão `openai`) | Identificador do provedor; escolhe a base URL padrão e se a chave é obrigatória | `openai`, `groq`, `gemini`, `ollama`, `custom` |
 | `LLM_MODEL` | Sim | Nome do modelo específico | `gpt-4o-mini`, `gemini-2.5-flash` |
-| `LLM_API_KEY` | Sim | Credencial do provedor escolhido | `sk-...`, `gsk_...` |
-| `LLM_BASE_URL` | Não | Endpoint OpenAI-compatible; vazio usa o padrão do `LLM_PROVIDER` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `LLM_API_KEY` | Sim, exceto no `ollama` | Credencial do provedor escolhido | `sk-...`, `gsk_...` |
+| `LLM_BASE_URL` | Só no `custom` | Endpoint OpenAI-compatible; vazio usa o padrão do `LLM_PROVIDER` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `LLM_MODEL_BUSCA` | Não | Modelo do agente de busca (ADR 0007); vazio usa o `LLM_MODEL` | `gpt-4o-mini` |
 
 > **Nomenclatura**: todas as variáveis usam o prefixo `LLM_`. A credencial é do provedor escolhido em `LLM_PROVIDER`, não da OpenAI — por isso `LLM_API_KEY`, e não `OPENAI_API_KEY`. A aplicação passa `api_key` e `base_url` explicitamente ao `OpenAIProvider`, sem depender da leitura automática de variáveis pelo SDK.
 

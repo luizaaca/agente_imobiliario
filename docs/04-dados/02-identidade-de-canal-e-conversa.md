@@ -1,6 +1,6 @@
 # Identidade de Canal e Estratégia de Conversa
 
-**Objetivo:** registrar a decisão de negócio e modelagem para identificar leads no Telegram e orientar as próximas lacunas de modelagem (`mensagens`, sessão/conversa e identidade de canal).
+**Objetivo:** registrar a decisão de negócio e de modelagem para identificar leads nos canais de conversa, e como ela se reflete em `lead_channel_identities`, `mensagens` e no follow-up.
 
 ---
 
@@ -26,18 +26,25 @@ Essas decisões impactam diretamente:
 ### 2.1 Entidade principal de negócio
 A entidade principal de negócio continua sendo o **`Lead`**.
 
-### 2.2 Identidade do Telegram
-O `telegram_chat_id` **não será tratado como identidade definitiva da pessoa**.
-
-Na POC, ele será tratado como uma **identidade de canal vinculada a um lead**.
+### 2.2 Identidade do canal
+O `chat_id` do Telegram **não é tratado como identidade definitiva da pessoa**.
+É uma **identidade de canal vinculada a um lead**. O mesmo vale para o
+simulador do Streamlit, onde cada conversa nova recebe um identificador
+próprio.
 
 ### 2.3 Regra operacional
-Quando uma mensagem chegar do Telegram:
+Quando uma mensagem chega por um canal (`LeadService.get_or_create_lead`):
 
-1. o sistema procura uma identidade de canal já conhecida para aquele `telegram_chat_id`;
-2. se encontrar, recupera o `lead_id` associado;
-3. se não encontrar, cria um **lead provisório** e vincula o canal a esse lead;
+1. o sistema procura a identidade de canal já conhecida para aquele par
+   (`channel`, `external_chat_id`);
+2. se encontrar, recupera o `lead_id` associado e atualiza `last_seen_at`;
+3. se não encontrar, cria um **lead** em `novo`, com `canal_origem`, e a
+   identidade como primária;
 4. ao longo da conversa, dados informados pelo cliente enriquecem o cadastro do lead.
+
+O corretor também pode ligar um lead a um canal pela aba **Canal** da ficha
+(`LeadService.definir_identidade`) — é o que torna alcançável pelo follow-up
+um lead criado à mão. O canal ligado passa a ser o primário.
 
 ### 2.4 Histórico
 O histórico de mensagens deve ser persistido **por lead**, com rastreabilidade do canal de origem.
@@ -64,44 +71,45 @@ Não introduzimos, neste momento, uma modelagem completa de sessão/conversa mul
 
 ---
 
-## 4. Consequências para a modelagem
+## 4. Como isso está no banco
 
-### 4.1 `Lead`
-A tabela `leads` continua representando a pessoa/oportunidade comercial.
+### 4.1 `leads`
+Representa a pessoa/oportunidade comercial e o estado consolidado do
+relacionamento. `canal_origem` guarda por onde ela chegou.
 
-### 4.2 Identidade de canal
-A POC deve prever uma entidade específica para identidade de canal, em vez de depender apenas de um campo solto em `leads`.
+### 4.2 `lead_channel_identities`
+Um vínculo entre um lead e um identificador externo de canal:
 
-### 4.3 `Mensagens`
-A tabela `mensagens` deverá ser enriquecida para registrar:
-- o canal de origem;
-- a identidade de canal associada;
-- metadados mínimos de rastreabilidade.
+| Campo | Papel |
+|---|---|
+| `lead_id` | o lead dono da identidade |
+| `channel` | `telegram`, `streamlit` |
+| `external_user_id`, `external_chat_id` | identificadores no canal; o follow-up envia para o `external_chat_id` |
+| `is_primary` | a identidade preferencial do lead para envio ativo |
+| `created_at`, `last_seen_at` | quando surgiu e quando falou pela última vez |
+
+Um lead pode ter mais de uma identidade; `get_primary_identity` escolhe a
+primária, e na falta dela a mais antiga.
+
+### 4.3 `mensagens`
+O histórico é persistido por lead, com o canal de cada mensagem (`channel`),
+o tipo (`chat`, `followup`, `system_notice`, `handover`), o status de envio e
+um `metadata_json` — onde as chamadas de ferramenta guardam o que fizeram,
+inclusive os imóveis apresentados.
 
 ### 4.4 Sessão/conversa
-A criação de uma entidade explícita `conversation` / `session` fica **adiada** nesta fase, salvo se a modelagem de `mensagens` mostrar necessidade imediata.
+Não há entidade `conversation` / `session`: a conversa é o histórico do lead.
 
 ---
 
-## 5. Modelo conceitual recomendado para a POC
+## 5. Consequência para o follow-up
 
-### 5.1 `Lead`
-Representa a oportunidade comercial e o estado consolidado do relacionamento.
-
-### 5.2 `LeadChannelIdentity` (nome conceitual)
-Representa um vínculo entre um lead e um identificador externo de canal.
-
-Campos conceituais sugeridos:
-- `id`
-- `lead_id`
-- `channel`
-- `external_user_id` ou `external_chat_id`
-- `is_primary`
-- `created_at`
-- `last_seen_at`
-
-### 5.3 `Mensagem`
-Representa uma mensagem persistida no histórico, vinculada ao lead e rastreável por canal.
+O follow-up sai pela identidade primária do lead. Só se tenta enviar por
+canal com envio ativo — hoje o Telegram (`src/channels/envio.py`). Num lead
+do Streamlit, a mensagem gravada aparece no chat dele, e esse é o desfecho
+normal, não uma falha. O bot do Telegram não consegue iniciar conversa com
+quem nunca falou com ele, então vincular um `chat_id` a um lead criado à mão
+só funciona se a pessoa já escreveu ao bot.
 
 ---
 
@@ -155,14 +163,3 @@ Para a POC:
 - **Histórico = persistido por lead com rastreabilidade de canal**
 - **Sessão/conversa explícita = adiada nesta fase**
 - **Merge de duplicados = futuro, não obrigatório agora**
-
----
-
-## 9. Próximos impactos documentais
-
-Esta decisão deve orientar as próximas lacunas:
-
-1. enriquecer `mensagens`;
-2. modelar identidade de canal;
-3. decidir se `conversation_id` entra agora ou não;
-4. modelar tentativas de follow-up sem confundir tentativa operacional com mensagem.

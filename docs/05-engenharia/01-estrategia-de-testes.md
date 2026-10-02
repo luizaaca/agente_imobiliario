@@ -58,6 +58,7 @@ Cobrem os 3 cenários obrigatórios do desafio.
 - o que foi pedido não é trocado por outra coisa: galpão não volta como sala comercial;
 - imóvel já apresentado na conversa não volta como novidade;
 - provider fora do ar: a busca degrada para o caminho sem LLM e ainda devolve imóveis;
+- busca que conclui que nada atende: não degrada, não traz lista nem instrução de apresentação, e o mais próximo, quando há, vem com a ficha do banco e não repete o que já foi mostrado;
 - os números do retorno conferem com o banco, e não com o texto do modelo;
 - contenção do SQL: comando que não é `SELECT`, tabela fora de `imoveis`, múltiplos statements e consulta sem `LIMIT`;
 - o consumo é registrado com `operation="busca"`, separado do turno de conversa.
@@ -72,12 +73,18 @@ Cobrem os 3 cenários obrigatórios do desafio.
 - elegibilidade por régua;
 - bloqueio por limite de tentativas;
 - prevenção de duplicidade;
-- geração contextual com histórico.
+- geração contextual com histórico;
+- disparo manual: falha de geração distinguida de recusa por regra;
+- despacho pendente: só canal com envio, só o recente, só o mais novo de cada
+  lead, nada para quem já respondeu, e nenhuma mensagem enviada duas vezes;
+- canal sem envio ativo não conta como falha de envio.
 
 ### 3.4 Agendamento
 - criação válida;
 - rejeição de payload inválido;
-- atualização de status do lead quando aplicável.
+- um compromisso ativo por lead, cobrado pelo banco;
+- visita sem observação recusada; remarcar cancela o antigo e marca o novo;
+- atualização de status e score do lead.
 
 ### 3.5 Resumo do corretor
 - presença dos campos essenciais;
@@ -93,12 +100,20 @@ Cobrem os 3 cenários obrigatórios do desafio.
 - manter poucos testes manuais com provider real para validação final.
 
 ### 4.2 Telegram
-- testar handlers com objetos simulados;
-- não depender do bot real para a maior parte da suíte.
+- testar handlers com objetos simulados — imutáveis como os do
+  python-telegram-bot, para que um handler que reescreva o `update` quebre no
+  teste como quebraria no bot;
+- não depender do bot real para a suíte.
 
 ### 4.3 Banco de dados
-- preferir banco PostgreSQL de teste para integração;
-- isolar dados por fixture e rollback quando possível.
+- PostgreSQL de teste para tudo, num banco próprio (`<banco>_test`) recriado a
+  cada execução e montado por `alembic upgrade head`;
+- isolar dados com `TRUNCATE` entre testes.
+
+### 4.4 Interface
+- as regras da tela ficam em funções puras, testadas sem Streamlit;
+- o chat roda pelo `AppTest` do Streamlit quando o defeito é de estado de
+  sessão, que só aparece com a página desenhada.
 
 ---
 
@@ -156,6 +171,7 @@ tests/
 ├── test_scheduling_service.py
 ├── test_followup_service.py
 ├── test_llm_usage_service.py          # tetos, custo, latência, taxa de erro
+├── test_resumo_do_corretor.py         # o briefing do corretor, com o compromisso marcado
 │
 │   # Agente e tools, com modelo falso
 ├── test_agent_tools.py                # contrato de cada tool
@@ -167,12 +183,17 @@ tests/
 ├── test_perfil_narrativo.py           # consolidador e caminho de degradação
 ├── test_prompt_chega_ao_modelo.py
 ├── test_provider.py                   # configuração ausente, provider custom
+├── test_persona.py                    # decisões de persona que o prompt precisa sustentar
 ├── test_cenarios.py                   # os casos obrigatórios de regressão da seção 5
-├── test_followup_manual.py
+├── test_followup_manual.py            # o botão de follow-up e o desfecho que a tela mostra
+├── test_despacho_pendente.py          # o que o bot envia do que ficou gerado sem remetente
+├── test_telegram_start.py             # /start e mensagens comuns pelo adaptador
 │
 │   # UI e schemas
 ├── test_papeis.py                     # visibilidade de menu por papel
 ├── test_menu_e_chat.py
+├── test_conversa_na_tela.py           # falas, painéis de ferramenta e custo por papel
+├── test_chat_relido.py                # o chat mostra o que chegou por fora (AppTest)
 ├── test_selo_de_status.py
 ├── test_texto_ui.py
 ├── test_aviso_de_budget.py

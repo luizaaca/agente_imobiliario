@@ -14,18 +14,18 @@ Relacionar requisitos do desafio, cenários de negócio, componentes da soluçã
 
 | ID | Requisito / Objetivo | Cenário | Componentes principais | Validação / Teste | Evidência esperada |
 |---|---|---|---|---|---|
-| RT-01 | Atendimento conversacional humanizado | Compra residencial / Investimento | `sdr_agent.py`, `prompts.py`, canal Streamlit/Telegram | testes E2E + roteiro manual | resposta contextual e tom consultivo |
+| RT-01 | Atendimento conversacional humanizado | Compra residencial / Investimento | `sdr_agent.py`, `prompts.py`, canal Streamlit/Telegram | `test_cenarios.py`, `test_persona.py`, `test_telegram_start.py` + roteiro manual | resposta contextual e tom consultivo |
 | RT-02 | Qualificação de leads | Compra residencial / Investimento | `LeadService`, `registrar_qualificacao`, schemas | testes unitários + integração | lead com intenção, orçamento, região, urgência |
 | RT-03 | Recomendação de imóveis | Compra residencial / Investimento | `busca_agent.py`, `buscar_imoveis`, `CatalogService` | testes unitários de catálogo + agente de busca com modelo falso | lista coerente de imóveis, com justificativa e números do banco |
 | RT-03b | Contenção do SQL gerado por LLM | Todos | role `busca_ro`, validação do statement | testes de recusa por tabela, por comando e por tempo limite | statement recusado e registrado; nenhuma leitura fora de `imoveis` |
-| RT-04 | Follow-up automático | Follow-up automático | `FollowUpService`, `followup_runner`, scheduler | `test_followup_service.py`, `test_followup_manual.py`, E2E | follow-up contextual registrado, pelo ciclo ou pelo botão do dashboard |
-| RT-05 | Agendamento | Compra residencial / Investimento | `SchedulingService`, `agendar_reuniao` | testes unitários + integração | agendamento persistido e visível |
-| RT-06 | Resumo para corretor | Todos | `SummaryService`, `encerrar_atendimento` | testes de contrato + revisão manual | resumo com score, objeções e próximos passos |
+| RT-04 | Follow-up automático | Follow-up automático | `FollowUpService`, `followup_runner`, `followup_agent`, scheduler | `test_followup_service.py`, `test_followup_manual.py`, `test_despacho_pendente.py`, E2E | follow-up contextual registrado, pelo ciclo ou pelo botão da tela, e enviado só quando ainda cabe |
+| RT-05 | Agendamento | Compra residencial / Investimento | `SchedulingService`, `agendar_reuniao`, índice único parcial | `test_scheduling_service.py`, `test_agendamento_pela_conversa.py` | um compromisso por lead, persistido e visível, com os imóveis na observação |
+| RT-06 | Resumo para corretor | Todos | `SummaryService`, `encerrar_atendimento` | `test_resumo_do_corretor.py` + revisão manual | resumo com score, objeções, compromisso e próximos passos |
 | RT-07 | Persistência de dados | Todos | PostgreSQL, SQLAlchemy, Alembic | testes de integração | leads, mensagens e agendamentos no banco |
 | RT-08 | Dashboard operacional | Todos | `app.py`, `ui/dashboard.py`, `ui/estilo.py` | validação manual + integração | KPIs, distribuição da carteira e tabela ordenável |
-| RT-08b | Operação sobre o lead | Todos | `ui/leads.py`, `LeadService` | `test_lead_crud.py` + validação manual | ficha editável, vínculo de canal, follow-up manual, conversa e exclusão |
+| RT-08b | Operação sobre o lead | Todos | `ui/leads.py`, `ui/chat.py`, `LeadService` | `test_lead_crud.py`, `test_chat_relido.py` + validação manual | ficha editável, vínculo de canal, follow-up manual, conversa atualizada e exclusão |
 | RT-09 | Controle de custos LLM | Todos | `LLMUsageService`, tabela `llm_usage` | `test_llm_usage_service.py` + integração | consumo, latência e erro por chamada; limites aplicados |
-| RT-10 | Autenticação da UI | Todos | `app.py`, `ui/papeis.py`, `streamlit-authenticator` | `test_papeis.py` + validação manual | acesso protegido a toda a UI; menu conforme o papel |
+| RT-10 | Autenticação da UI | Todos | `app.py`, `ui/papeis.py`, `streamlit-authenticator` | `test_papeis.py`, `test_conversa_na_tela.py` + validação manual | acesso protegido a toda a UI; menu e bastidores conforme o papel |
 
 ---
 

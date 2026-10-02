@@ -24,6 +24,7 @@ from src.services.catalog_service import CatalogService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
 from src.services.scheduling_service import SchedulingService
+from src.tempo import formatar
 
 
 @pytest.fixture
@@ -91,8 +92,8 @@ def test_turno_com_historico_leva_o_contexto_do_lead(lead_id, deps, db):
     assert "Mooca" in recebido
 
 
-def test_turno_com_historico_leva_os_ids_dos_compromissos(lead_id, deps, db):
-    """Sem isto o modelo chuta o argumento — e chutou o ID do imóvel."""
+def test_turno_com_historico_leva_o_compromisso_marcado(lead_id, deps, db):
+    """Sem isto o modelo responde pelo que a conversa disse, e ela envelhece."""
     agendamento = SchedulingService().create(
         lead_id=lead_id,
         tipo="visita",
@@ -101,7 +102,7 @@ def test_turno_com_historico_leva_os_ids_dos_compromissos(lead_id, deps, db):
     )
     _conversar(lead_id, deps)
 
-    assert f"ID {agendamento.id}" in _turno(lead_id, deps)
+    assert formatar(agendamento.data_hora) in _turno(lead_id, deps)
 
 
 def test_contexto_do_turno_reflete_o_banco_agora(lead_id, deps, db):
@@ -114,4 +115,4 @@ def test_contexto_do_turno_reflete_o_banco_agora(lead_id, deps, db):
         db=db,
     )
 
-    assert f"ID {agendamento.id}" in _turno(lead_id, deps)
+    assert formatar(agendamento.data_hora) in _turno(lead_id, deps)

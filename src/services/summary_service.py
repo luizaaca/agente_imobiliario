@@ -5,6 +5,8 @@ import logging
 from sqlalchemy.orm import Session
 
 from src.db.models import Lead, Mensagem
+from src.services.scheduling_service import SchedulingService
+from src.tempo import formatar
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,28 @@ class SummaryService:
             "total_messages": len(messages),
             "user_messages": sum(1 for m in messages if m.role == "user"),
         }
+
+    def _compromisso(self, lead_id: int, db: Session) -> list[str]:
+        """O compromisso de pé, com o que o corretor precisa ler antes de ir.
+
+        A `observacoes` entra inteira, e é a parte que importa: desde que o
+        agendamento deixou de apontar para um imóvel, é ali que estão os
+        imóveis que a pessoa quer ver, com ID. Sem isto o resumo dizia que
+        havia visita marcada sem dizer para ver o quê, e o corretor tinha de
+        abrir outra aba para descobrir.
+        """
+        agendamento = SchedulingService().compromisso_ativo(lead_id, db)
+        if agendamento is None:
+            return []
+
+        linhas = [
+            "### Compromisso marcado",
+            f"- **Quando:** {agendamento.tipo} em "
+            f"{formatar(agendamento.data_hora)} ({agendamento.status})",
+        ]
+        if agendamento.observacoes:
+            linhas.append(f"- **Para ver:** {agendamento.observacoes}")
+        return linhas
 
     def generate_resumo(self, lead_id: int, db: Session) -> str:
         """Gera o resumo executivo textual para o corretor.
@@ -84,6 +108,8 @@ class SummaryService:
         else:
             interpretacao = "⚪ Lead frio — pouco qualificado"
         sections.append(f"- **Interpretação:** {interpretacao}")
+
+        sections.extend(self._compromisso(lead_id, db))
 
         # Perfil narrativo
         if lead.perfil_narrativo:

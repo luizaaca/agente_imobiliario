@@ -16,11 +16,14 @@ Um ciclo, para cada lead elegível:
 
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Optional, Protocol
 
 from src.agent.followup_agent import gerar_mensagem_followup
 from src.agent.provider import LLMConfigError
+from src.channels.envio import CANAIS_COM_ENVIO
 from src.config import settings
+from src.db.models import FollowUpAttempt, Mensagem
 from src.db.session import get_db
 from src.services.followup_service import REGUAS, FollowUpService
 from src.services.lead_service import LeadService
@@ -114,11 +117,33 @@ async def run_followup_cycle(sender: Optional[Sender] = None) -> dict[str, int]:
 
 @dataclass
 class DisparoManual:
-    """Desfecho de um follow-up disparado pelo corretor na tela."""
+    """Desfecho de um follow-up disparado pelo corretor na tela.
+
+    `executado` falso tem duas causas que a tela mostra de jeitos diferentes:
+    uma regra que barrou o disparo (teto, budget, status sem régua), que é
+    informação, e uma falha na geração (`falhou`), que é erro.
+    """
 
     executado: bool
     motivo: str = ""
     stats: dict[str, int] = field(default_factory=dict)
+    falhou: bool = False
+    texto: str = ""
+    regua: str = ""
+    tentativa: int = 0
+    maximo: int = 0
+    canal: str = ""
+    enviado: bool = False
+
+
+@dataclass
+class _Desfecho:
+    """O que `_processar_lead` fez com um lead; o ciclo automático o ignora."""
+
+    texto: str = ""
+    canal: str = ""
+    enviado: bool = False
+    erro: str = ""
 
 
 async def run_followup_para_lead(
@@ -170,8 +195,21 @@ async def run_followup_para_lead(
         "event=followup_disparo_manual lead_id=%s regua=%s tentativa=%s",
         lead_id, regua, tentativas + 1,
     )
-    await _processar_lead(lead_id, canal_origem, regua, contexto, sender, stats)
-    return DisparoManual(True, "", stats)
+    desfecho = await _processar_lead(
+        lead_id, canal_origem, regua, contexto, sender, stats
+    )
+    return DisparoManual(
+        executado=not desfecho.erro,
+        motivo=desfecho.erro,
+        stats=stats,
+        falhou=bool(desfecho.erro),
+        texto=desfecho.texto,
+        regua=regua,
+        tentativa=tentativas + 1,
+        maximo=maximo,
+        canal=desfecho.canal,
+        enviado=desfecho.enviado,
+    )
 
 
 async def _processar_lead(
@@ -181,12 +219,15 @@ async def _processar_lead(
     contexto: dict[str, object],
     sender: Optional[Sender],
     stats: dict[str, int],
-) -> None:
+) -> _Desfecho:
     """Gera, persiste, despacha e registra o follow-up de um lead.
 
     Extraido do ciclo para que o disparo manual do dashboard passe exatamente
     pelo mesmo caminho: mesma geracao, mesma persistencia, mesmo registro de
     tentativa. O que muda entre os dois e so quem escolhe o lead.
+
+    Nao propaga excecao — um lead com problema nao derruba o ciclo. Quem
+    precisa saber se deu certo, como o botao do dashboard, le o desfecho.
     """
     followup_service = FollowUpService()
     lead_service = LeadService()
@@ -227,7 +268,11 @@ async def _processar_lead(
 
         enviado = False
         motivo_falha: Optional[str] = None
-        if sender and chat_id:
+        # Só se tenta enviar por canal que tem envio. No Streamlit a mensagem
+        # gravada já é o desfecho — aparece no chat do lead —, e pedir ao
+        # remetente para enviá-la só produzia uma recusa registrada como falha.
+        vai_pelo_canal = bool(sender and chat_id and canal in CANAIS_COM_ENVIO)
+        if vai_pelo_canal:
             try:
                 enviado = await sender(canal, chat_id, gerado.texto)
                 if not enviado:
@@ -237,7 +282,7 @@ async def _processar_lead(
                 logger.exception(
                     "event=followup_envio_falhou lead_id=%s canal=%s", lead_id, canal
                 )
-        elif not sender:
+        elif not sender and canal in CANAIS_COM_ENVIO:
             motivo_falha = "sem remetente ativo para o canal"
 
         with get_db() as db:
@@ -248,7 +293,7 @@ async def _processar_lead(
             else:
                 # A mensagem existe e aparece no painel do corretor mesmo
                 # sem despacho ativo — isso não é uma falha de geração.
-                status_tentativa = "failed" if chat_id and sender else "generated"
+                status_tentativa = "failed" if vai_pelo_canal else "generated"
                 stats["gerados" if status_tentativa == "generated" else "falhas"] += 1
 
             followup_service.record_attempt(
@@ -272,18 +317,182 @@ async def _processar_lead(
             "event=followup_processado lead_id=%s regua=%s tentativa=%s enviado=%s",
             lead_id, regua, tentativa, enviado,
         )
+        return _Desfecho(texto=gerado.texto, canal=canal, enviado=enviado)
 
     except LLMConfigError as e:
         logger.error("event=followup_llm_config_error lead_id=%s erro=%s", lead_id, e)
         stats["falhas"] += 1
+        return _Desfecho(erro=f"O modelo de linguagem não está configurado: {e}")
     except Exception as e:
         stats["falhas"] += 1
         logger.exception(
             "event=followup_falhou lead_id=%s regua=%s tipo_erro=%s",
             lead_id, regua, type(e).__name__,
         )
+        motivo = f"{type(e).__name__}: {e}"[:120]
         with get_db() as db:
             followup_service.record_attempt(
                 lead_id=lead_id, regua=regua, status="failed", db=db,
-                failure_reason=f"{type(e).__name__}: {e}"[:120],
+                failure_reason=motivo,
             )
+        return _Desfecho(erro=f"A geração falhou ({motivo}).")
+
+
+# Quanto tempo um follow-up gerado sem despacho ainda pode sair pelo canal. Ele
+# nasce assim quando quem o gerou não tinha remetente — o botão do painel, o
+# script de ciclo avulso — e fica à espera do processo do Telegram. Passado
+# isso ele perdeu a hora: a conversa andou, ou a pessoa já não espera por ele.
+VALIDADE_DO_PENDENTE = timedelta(minutes=15)
+
+
+@dataclass
+class _Pendente:
+    """Um follow-up à espera de despacho, lido numa transação curta."""
+
+    tentativa_id: int
+    message_id: int
+    lead_id: int
+    canal: str
+    chat_id: str
+    texto: str
+
+
+async def dispatch_pending_followups(sender: Optional[Sender] = None) -> dict[str, int]:
+    """Envia pelo canal os follow-ups que ficaram gerados sem despacho.
+
+    Só sai o que ainda faz sentido mandar: canal com envio, gerado há menos
+    de `VALIDADE_DO_PENDENTE`, sem resposta do lead depois dele, e só o mais
+    recente de cada lead. O resto vira `skipped`, com o motivo — e continua
+    contando no teto da régua, como qualquer tentativa.
+
+    A tentativa é reservada como `sent` antes de ir à rede, numa transação
+    curta, e só volta a `failed` se o envio der errado. Assim nenhuma linha
+    fica travada enquanto o canal responde, e duas execuções nunca mandam a
+    mesma mensagem: a segunda não consegue reservar. O preço é o caso inverso
+    — o processo cair entre a reserva e o envio deixa `sent` o que não saiu —,
+    e uma mensagem perdida é melhor que a mesma mensagem duas vezes para uma
+    pessoa.
+    """
+    stats = {"enviados": 0, "falhas": 0, "descartados": 0}
+    if sender is None:
+        return stats
+
+    for pendente in _triar_pendentes(stats):
+        with get_db() as db:
+            reservou = (
+                db.query(FollowUpAttempt)
+                .filter(
+                    FollowUpAttempt.id == pendente.tentativa_id,
+                    FollowUpAttempt.status == "generated",
+                )
+                .update({"status": "sent"}, synchronize_session=False)
+            )
+        if not reservou:
+            continue
+
+        falha: Optional[str] = None
+        try:
+            if not await sender(pendente.canal, pendente.chat_id, pendente.texto):
+                falha = "canal recusou o envio"
+        except Exception as e:
+            falha = f"{type(e).__name__}: {e}"[:120]
+            logger.exception(
+                "event=followup_pendente_falhou lead_id=%s", pendente.lead_id
+            )
+
+        with get_db() as db:
+            if falha is None:
+                LeadService().mark_message_sent(pendente.message_id, db)
+                stats["enviados"] += 1
+            else:
+                db.query(FollowUpAttempt).filter(
+                    FollowUpAttempt.id == pendente.tentativa_id
+                ).update(
+                    {"status": "failed", "failure_reason": falha},
+                    synchronize_session=False,
+                )
+                stats["falhas"] += 1
+
+        logger.info(
+            "event=followup_pendente_despachado lead_id=%s message_id=%s enviado=%s",
+            pendente.lead_id, pendente.message_id, falha is None,
+        )
+
+    return stats
+
+
+def _triar_pendentes(stats: dict[str, int]) -> list[_Pendente]:
+    """Separa o que ainda deve sair e marca o resto como `skipped`.
+
+    Lê e decide numa transação só, sem ir à rede. Mensagem de canal sem envio
+    nem entra na consulta: para ela `generated` já é o estado final.
+    """
+    agora = datetime.now(UTC)
+    lead_service = LeadService()
+    a_enviar: list[_Pendente] = []
+    ja_vistos: set[int] = set()
+
+    with get_db() as db:
+        pendentes = (
+            db.query(FollowUpAttempt, Mensagem)
+            .join(Mensagem, FollowUpAttempt.message_id == Mensagem.id)
+            .filter(
+                FollowUpAttempt.status == "generated",
+                Mensagem.channel.in_(CANAIS_COM_ENVIO),
+            )
+            # O mais recente de cada lead primeiro: é ele que sai.
+            .order_by(FollowUpAttempt.lead_id, Mensagem.id.desc())
+            .all()
+        )
+
+        for tentativa, mensagem in pendentes:
+            identidade = lead_service.get_primary_identity(tentativa.lead_id, db)
+            if tentativa.lead_id in ja_vistos:
+                motivo = "substituído por um follow-up mais recente"
+            elif agora - tentativa.created_at > VALIDADE_DO_PENDENTE:
+                motivo = "expirou sem despacho"
+            elif _lead_respondeu_depois(mensagem, db):
+                motivo = "o lead respondeu antes do envio"
+            elif (
+                identidade is None
+                or identidade.channel not in CANAIS_COM_ENVIO
+                or not identidade.external_chat_id
+            ):
+                motivo = "sem chat_id em canal com envio"
+            else:
+                motivo = None
+            ja_vistos.add(tentativa.lead_id)
+
+            if motivo:
+                tentativa.status = "skipped"
+                tentativa.failure_reason = motivo
+                stats["descartados"] += 1
+                logger.info(
+                    "event=followup_pendente_descartado lead_id=%s motivo=%s",
+                    tentativa.lead_id, motivo,
+                )
+                continue
+
+            a_enviar.append(_Pendente(
+                tentativa_id=tentativa.id,
+                message_id=mensagem.id,
+                lead_id=tentativa.lead_id,
+                canal=identidade.channel,
+                chat_id=identidade.external_chat_id,
+                texto=mensagem.content,
+            ))
+
+    return a_enviar
+
+
+def _lead_respondeu_depois(mensagem: Mensagem, db) -> bool:
+    """O lead escreveu depois deste follow-up ter sido gerado?"""
+    return db.query(
+        db.query(Mensagem)
+        .filter(
+            Mensagem.lead_id == mensagem.lead_id,
+            Mensagem.role == "user",
+            Mensagem.id > mensagem.id,
+        )
+        .exists()
+    ).scalar()

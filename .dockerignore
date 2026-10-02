@@ -23,15 +23,16 @@ htmlcov/
 .claude/
 .gemini/
 
-# Segredos: as variaveis chegam por env_file no compose, nunca pela imagem
+# Segredos: as variaveis chegam por interpolacao no compose, nunca pela imagem
 .env
 .env.local
 .env.*.local
 
-# Nao servem para rodar a aplicacao
+# Nao servem para rodar a aplicacao. `tests/` fica: com ela na imagem, quem
+# avalia roda a suite com `docker compose exec app pytest`, sem Python na
+# maquina. Sao alguns centos de KB.
 docs/
 seed/
-tests/
 *.md
 *.pdf
 Dockerfile

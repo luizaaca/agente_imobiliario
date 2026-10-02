@@ -110,8 +110,11 @@ def test_cenario_1_compra_residencial(llm_fake, busca_fake, catalogo, db):
     # 4. Agendamento: handover operacional para o corretor
     conversar(lead_id, "Quero visitar a primeira.", llm_fake(
         ("agendar_reuniao", {
-            "tipo": "visita", "data_hora": "2027-04-15 14:00", "imovel_id": 1,
-            "observacoes": "Lead prefere a tarde",
+            "tipo": "visita", "data_hora": "2027-04-15 14:00",
+            # A observacao e o unico lugar onde o corretor descobre o que
+            # sera visitado: a tool recusa a visita que nao cita nenhum
+            # imovel ja apresentado a esta pessoa.
+            "observacoes": "Quer ver o imovel 1. Prefere a tarde.",
         }),
         "Visita agendada!",
     ), db)
@@ -121,6 +124,7 @@ def test_cenario_1_compra_residencial(llm_fake, busca_fake, catalogo, db):
 
     assert lead.status == "agendado"
     assert agendamento.tipo == "visita"
+    assert "imovel 1" in agendamento.observacoes
     assert float(lead.score) > 0
 
     # As falas da conversa, mais uma linha por ferramenta chamada: sem elas o

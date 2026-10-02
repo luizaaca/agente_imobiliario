@@ -36,6 +36,55 @@ VALORES_PERMITIDOS = {
     "urgencia": {"baixa", "media", "alta"},
 }
 
+# Pesos das cinco dimensões do score, que somados dão 10. Forma de pagamento
+# não está entre elas: a conversa nunca chega nesse dado, e um ponto que
+# ninguém consegue ganhar só empurra a régua inteira para baixo.
+PESO_URGENCIA = {"alta": 2.0, "media": 1.0, "baixa": 0.5}
+PESO_TIPOLOGIA = 1.0
+PESO_AGENDAMENTO = 2.5
+
+# Cada um dos seis campos-chave da ficha vale meio ponto, e juntos fecham os
+# 3.0 da completude. Meio ponto por campo em vez de faixas largas: assim todo
+# dado que a conversa arranca move o número, e não só o que cruza um degrau.
+PONTO_POR_CAMPO_DA_FICHA = 0.5
+
+# Quantas mensagens da pessoa valem quantos pontos de engajamento.
+FAIXAS_DE_ENGAJAMENTO = ((11, 1.5), (6, 1.0), (1, 0.5))
+
+# Visita marcada é o evento de conversão do funil, e o score existe para
+# ordenar a fila de quem o corretor liga primeiro. Sem um piso próprio ela
+# valia menos que a completude do cadastro: um lead com visita na agenda
+# empatava com um lead que já tinha parado de responder.
+PISO_COM_VISITA_MARCADA = 7.0
+
+
+def _campos_da_ficha(lead: Lead) -> tuple[bool, ...]:
+    """Os seis campos-chave da qualificação, cada um presente ou ausente.
+
+    Telefone está na lista porque o score ordena a fila de ligações: uma
+    ficha impecável sem número não chega a virar contato, e o corretor que
+    liga primeiro para ela perde o turno.
+
+    Devolve a tupla, e não a contagem, para que o tamanho da ficha seja um
+    fato do código — é dele que o teto da régua é conferido.
+    """
+    return (
+        bool(lead.intencao),
+        lead.orcamento_min is not None or lead.orcamento_max is not None,
+        bool(lead.bairro_interesse or lead.regiao_interesse),
+        lead.quartos is not None,
+        bool(lead.urgencia),
+        bool(lead.telefone),
+    )
+
+
+def _degrau(quantidade: int, faixas: tuple[tuple[int, float], ...]) -> float:
+    """Pontos da primeira faixa que a quantidade alcança; zero se nenhuma."""
+    for piso, pontos in faixas:
+        if quantidade >= piso:
+            return pontos
+    return 0.0
+
 
 @dataclass(frozen=True)
 class ConversaResumo:
@@ -344,84 +393,51 @@ class LeadService:
         return lead
 
     def calculate_score(self, lead_id: int, db: Session) -> Decimal:
-        """Calcula o score do lead baseado em 5 dimensões.
+        """Calcula e persiste o score do lead, de 0 a 10.
 
-        Dimensões e pesos:
-        1. Completude dos dados: até 3.0
-        2. Urgência declarada: até 2.0
-        3. Aderência com catálogo: até 2.0
-        4. Engajamento conversacional: até 1.5
-        5. Intenção de agendamento: até 1.5
-        Total máximo: 10.0
+        Cinco dimensões: completude da ficha (3.0), urgência declarada (2.0),
+        tipologia definida (1.0), engajamento na conversa (1.5) e visita
+        marcada (2.5), com piso de 7.0 para quem tem compromisso de pé.
+
+        Urgência aparece duas vezes de propósito, e não é engano de contagem:
+        na completude conta ter o dado, na dimensão própria conta o quanto
+        ele aperta. Quem precisa mudar em trinta dias e quem pode esperar um
+        ano contaram a mesma coisa, mas não valem a mesma ligação.
         """
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         if not lead:
             return Decimal("0.0")
 
-        score = 0.0
-
-        # 1. Completude dos dados (até 3.0)
-        campos_preenchidos = 0
-        if lead.intencao:
-            campos_preenchidos += 1
-        if lead.orcamento_min or lead.orcamento_max:
-            campos_preenchidos += 1
-        if lead.bairro_interesse or lead.regiao_interesse:
-            campos_preenchidos += 1
-        if lead.quartos is not None:
-            campos_preenchidos += 1
-        if lead.urgencia:
-            campos_preenchidos += 1
-
-        if campos_preenchidos >= 5:
-            score += 3.0
-        elif campos_preenchidos >= 3:
-            score += 2.5
-        elif campos_preenchidos >= 2:
-            score += 1.5
-        elif campos_preenchidos >= 1:
-            score += 0.5
-
-        # 2. Urgência declarada (até 2.0)
-        if lead.urgencia == "alta":
-            score += 2.0
-        elif lead.urgencia == "media":
-            score += 1.0
-        elif lead.urgencia == "baixa":
-            score += 0.5
-
-        # 3. Aderência com catálogo (até 2.0)
-        if lead.tipologia_interesse:
-            score += 1.0
-        if lead.forma_pagamento:
-            score += 1.0
-
-        # 4. Engajamento conversacional (até 1.5)
-        msg_count = (
+        mensagens = (
             db.query(func.count(Mensagem.id))
-            .filter(
-                Mensagem.lead_id == lead.id,
-                Mensagem.role == "user",
-            )
+            .filter(Mensagem.lead_id == lead.id, Mensagem.role == "user")
             .scalar() or 0
         )
-        if msg_count > 10:
-            score += 1.5
-        elif msg_count > 5:
-            score += 1.0
-        elif msg_count > 0:
-            score += 0.5
+        score = (
+            sum(_campos_da_ficha(lead)) * PONTO_POR_CAMPO_DA_FICHA
+            + PESO_URGENCIA.get(lead.urgencia or "", 0.0)
+            + (PESO_TIPOLOGIA if lead.tipologia_interesse else 0.0)
+            + _degrau(mensagens, FAIXAS_DE_ENGAJAMENTO)
+        )
+        if self._tem_visita_marcada(lead_id, db):
+            score = max(score + PESO_AGENDAMENTO, PISO_COM_VISITA_MARCADA)
 
-        # 5. Intenção de agendamento (até 1.5)
-        agendamentos_count = len(lead.agendamentos) if lead.agendamentos else 0
-        if agendamentos_count > 0:
-            score += 1.5
-
-        final_score = min(10.0, max(0.0, score))
-        lead.score = Decimal(str(round(final_score, 2)))
+        lead.score = Decimal(str(round(score, 2)))
         db.commit()
 
         return lead.score
+
+    @staticmethod
+    def _tem_visita_marcada(lead_id: int, db: Session) -> bool:
+        """Se há visita ou reunião de pé — cancelada e realizada não contam.
+
+        O import é tardio porque `scheduling_service` importa este módulo; no
+        topo seria um ciclo. Vale a volta para não haver duas definições de
+        quais status ainda estão de pé.
+        """
+        from src.services.scheduling_service import SchedulingService
+
+        return SchedulingService().tem_compromisso_ativo(lead_id, db)
 
     def update_status(
         self, lead_id: int, new_status: str, db: Session

@@ -9,8 +9,31 @@ from sqlalchemy.orm import Session
 from src.db.models import Agendamento, Lead
 from src.schemas.lead import LeadStatus
 from src.services.lead_service import LeadService
+from src.tempo import formatar
 
 logger = logging.getLogger(__name__)
+
+
+class CompromissoJaMarcado(Exception):
+    """Este lead já tem um compromisso de pé, e só se permite um.
+
+    Carrega o compromisso existente porque quem trata isto precisa dizer qual
+    é: ao modelo, para ele combinar a troca com a pessoa antes de insistir; ao
+    corretor, para ele ver na tela o que já está marcado.
+    """
+
+    def __init__(self, existente):
+        self.existente = existente
+        super().__init__(
+            f"Lead {existente.lead_id} já tem {existente.tipo} em "
+            f"{formatar(existente.data_hora)}."
+        )
+
+
+def _com_nota(observacoes: Optional[str], nota: str) -> str:
+    """Acrescenta uma linha à observação sem apagar o que já estava escrito."""
+    anterior = (observacoes or "").strip()
+    return f"{anterior}\n{nota}".strip()
 
 
 class SchedulingService:
@@ -23,35 +46,58 @@ class SchedulingService:
     # ela.
     STATUS_ATIVOS = ("pendente", "confirmado")
 
-    def tem_compromisso_ativo(self, lead_id: int, db: Session) -> bool:
-        """Se existe visita ou reuniao de pe para este lead."""
+    def compromisso_ativo(self, lead_id: int, db: Session) -> Optional[Agendamento]:
+        """O compromisso de pé deste lead, ou `None`.
+
+        No máximo um, e não por convenção: há índice único parcial sobre
+        `lead_id` para os status ativos. A regra morava só aqui no código e
+        não se sustentou — um lead chegou a ter duas visitas pendentes ao
+        mesmo tempo, marcadas em turnos diferentes.
+        """
         return (
-            db.query(Agendamento.id)
+            db.query(Agendamento)
             .filter(
                 Agendamento.lead_id == lead_id,
                 Agendamento.status.in_(self.STATUS_ATIVOS),
             )
             .first()
-            is not None
         )
 
-    def sincronizar_status_do_lead(self, lead_id: int, db: Session) -> Optional[str]:
-        """Faz o status do lead concordar com os compromissos dele.
+    def tem_compromisso_ativo(self, lead_id: int, db: Session) -> bool:
+        """Se existe visita ou reuniao de pe para este lead."""
+        return self.compromisso_ativo(lead_id, db) is not None
 
-        `agendado` nao e opiniao, e fato verificavel: ou existe visita marcada,
-        ou nao existe. Por isso a sincronizacao vale nos dois sentidos —
-        aparecendo compromisso o lead vai para `agendado`, sumindo o ultimo ele
-        volta para onde os dados o colocam.
+    def sincronizar_lead_com_a_agenda(
+        self, lead_id: int, db: Session
+    ) -> Optional[str]:
+        """Faz status e score do lead concordarem com os compromissos dele.
 
-        Os outros estagios sao julgamento de quem atende e nao sao tocados
-        aqui; `inativo` tambem fica de fora, porque um lead que parou de
-        responder continua parado mesmo com uma visita antiga no calendario.
+        Os dois fatos que a agenda determina saem daqui juntos, e não de cada
+        chamador. Enquanto o score ficava por conta de quem lembrasse, marcar
+        a visita não recalculava nada: o lead com visita na agenda carregava a
+        nota de antes de ela existir e empatava com quem já tinha parado de
+        responder.
 
-        Devolve o novo status quando houve mudanca, e `None` quando ja estava
-        certo — e o que permite a quem chama saber se precisa avisar na tela.
+        `agendado` não é opinião, é fato verificável: ou existe visita
+        marcada, ou não existe. Por isso a sincronização vale nos dois
+        sentidos — aparecendo compromisso o lead vai para `agendado`, sumindo
+        o último ele volta para onde os dados o colocam.
+
+        Os outros estágios são julgamento de quem atende e não são tocados
+        aqui; `inativo` também fica de fora, porque um lead que parou de
+        responder continua parado mesmo com uma visita antiga no calendário.
+        O score não tem essa ressalva: quem cancelou a visita perde o ponto
+        dela mesmo estando inativo, senão o número mente para sempre.
+
+        Devolve o novo status quando houve mudança, e `None` quando já estava
+        certo — é o que permite a quem chama saber se precisa avisar na tela.
         """
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
-        if lead is None or lead.status == LeadStatus.INATIVO.value:
+        if lead is None:
+            return None
+
+        LeadService().calculate_score(lead_id, db)
+        if lead.status == LeadStatus.INATIVO.value:
             return None
 
         tem = self.tem_compromisso_ativo(lead_id, db)
@@ -79,45 +125,44 @@ class SchedulingService:
         data_hora: datetime,
         observacoes: Optional[str] = None,
         db: Session = None,
-        imovel_id: Optional[int] = None,
+        remarcar: bool = False,
     ) -> Agendamento:
-        """Cria um agendamento, ou devolve o que ja existe igual a este.
+        """Marca o compromisso do lead. Um de pé por vez.
 
-        Idempotente de proposito. Sem isso, pedir duas vezes o mesmo
-        compromisso — o que o agente faz quando nao tem a ferramenta certa a
-        mao, e o que um duplo clique faz na tela — cria duas linhas para a
-        mesma visita, e o painel passa a contar dois compromissos onde ha um.
+        Pedir de novo exatamente o mesmo horário devolve o que já existe, em
+        vez de recusar: é o que o duplo clique na tela faz, e é o que o modelo
+        faz quando repete a chamada sem ter lido o retorno da primeira.
 
-        "Igual" e mesmo lead, mesma data e hora, mesmo imovel e ainda de pe.
-        Um compromisso cancelado nao impede remarcar para o mesmo horario.
+        Horário diferente com compromisso de pé é outra coisa, e não se
+        resolve sozinho — pode ser remarcação, pode ser o modelo esquecendo o
+        que já marcou. Por isso levanta `CompromissoJaMarcado`, e só remarca
+        quem disser `remarcar=True`, depois de ter combinado com a pessoa.
+
+        Remarcar cancela e cria, em vez de mover a linha: o corretor precisa
+        ver que a data mudou, e uma linha só reescrita apagaria o fato de que
+        a pessoa já desmarcou uma vez — que é informação de venda.
         """
         if tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"Tipo de agendamento inválido: {tipo}")
 
-        ja_existe = (
-            db.query(Agendamento)
-            .filter(
-                Agendamento.lead_id == lead_id,
-                Agendamento.data_hora == data_hora,
-                Agendamento.imovel_id == imovel_id,
-                Agendamento.status.in_(self.STATUS_ATIVOS),
-            )
-            .first()
-        )
-        if ja_existe is not None:
-            logger.info(
-                "event=agendamento_ja_existia lead_id=%s agendamento_id=%s "
-                "data_hora=%s imovel_id=%s acao=reaproveitado",
-                lead_id, ja_existe.id, data_hora, imovel_id,
-            )
-            return ja_existe
+        ativo = self.compromisso_ativo(lead_id, db)
+        if ativo is not None:
+            if ativo.tipo == tipo and ativo.data_hora == data_hora:
+                logger.info(
+                    "event=agendamento_ja_existia lead_id=%s agendamento_id=%s "
+                    "data_hora=%s acao=reaproveitado",
+                    lead_id, ativo.id, data_hora,
+                )
+                return ativo
+            if not remarcar:
+                raise CompromissoJaMarcado(ativo)
+            self._cancelar_por_remarcacao(ativo, data_hora, db)
 
         agendamento = Agendamento(
             lead_id=lead_id,
             tipo=tipo,
             data_hora=data_hora,
             observacoes=observacoes,
-            imovel_id=imovel_id,
             status="pendente",
         )
         db.add(agendamento)
@@ -125,12 +170,32 @@ class SchedulingService:
         db.refresh(agendamento)
         logger.info(
             "event=agendamento_criado lead_id=%s agendamento_id=%s tipo=%s "
-            "data_hora=%s imovel_id=%s status=ok",
-            lead_id, agendamento.id, tipo, data_hora, imovel_id,
+            "data_hora=%s remarcacao=%s status=ok",
+            lead_id, agendamento.id, tipo, data_hora, ativo is not None,
         )
-        self.sincronizar_status_do_lead(lead_id, db)
+        self.sincronizar_lead_com_a_agenda(lead_id, db)
         db.refresh(agendamento)
         return agendamento
+
+    @staticmethod
+    def _cancelar_por_remarcacao(
+        antigo: Agendamento, nova_data: datetime, db: Session
+    ) -> None:
+        """Encerra o compromisso antigo dizendo, na ficha, que ele foi movido.
+
+        Sem a nota, o corretor abre a agenda e vê um cancelamento: conclui que
+        a pessoa desistiu, quando ela só trocou de dia.
+        """
+        antigo.status = "cancelado"
+        antigo.observacoes = _com_nota(
+            antigo.observacoes, f"Remarcado para {formatar(nova_data)}."
+        )
+        db.commit()
+        logger.info(
+            "event=agendamento_remarcado agendamento_id=%s lead_id=%s "
+            "nova_data=%s",
+            antigo.id, antigo.lead_id, nova_data,
+        )
 
     def list_by_lead(
         self,
@@ -159,7 +224,6 @@ class SchedulingService:
         data_hora: datetime,
         status: str,
         observacoes: Optional[str] = None,
-        imovel_id: Optional[int] = None,
     ) -> Optional[Agendamento]:
         """Reescreve um agendamento com o que o corretor deixou na ficha.
 
@@ -171,6 +235,10 @@ class SchedulingService:
         Cancelar ou dar por realizado o último compromisso de pé tira o lead de
         `agendado`, pelo mesmo motivo de `excluir`: o status afirma que existe
         visita ou reunião marcada. Confirmar não mexe em nada.
+
+        Ressuscitar um compromisso cancelado enquanto outro está de pé levanta
+        `CompromissoJaMarcado`. Sem esta checagem o índice único recusaria o
+        `UPDATE` e o corretor veria um erro de banco no lugar do motivo.
         """
         if tipo not in self.TIPOS_VALIDOS:
             raise ValueError(f"Tipo de agendamento inválido: {tipo}")
@@ -181,21 +249,24 @@ class SchedulingService:
         if not agendamento:
             return None
 
+        if status in self.STATUS_ATIVOS:
+            ativo = self.compromisso_ativo(agendamento.lead_id, db)
+            if ativo is not None and ativo.id != agendamento_id:
+                raise CompromissoJaMarcado(ativo)
+
         agendamento.tipo = tipo
         agendamento.data_hora = data_hora
         agendamento.status = status
         agendamento.observacoes = observacoes
-        agendamento.imovel_id = imovel_id
 
         db.commit()
         db.refresh(agendamento)
         logger.info(
             "event=agendamento_editado agendamento_id=%s lead_id=%s tipo=%s "
-            "data_hora=%s status=%s imovel_id=%s",
+            "data_hora=%s status=%s",
             agendamento_id, agendamento.lead_id, tipo, data_hora, status,
-            imovel_id,
         )
-        self.sincronizar_status_do_lead(agendamento.lead_id, db)
+        self.sincronizar_lead_com_a_agenda(agendamento.lead_id, db)
         db.refresh(agendamento)
         return agendamento
 
@@ -221,7 +292,7 @@ class SchedulingService:
             "event=agendamento_excluido agendamento_id=%s lead_id=%s",
             agendamento_id, lead_id,
         )
-        self.sincronizar_status_do_lead(lead_id, db)
+        self.sincronizar_lead_com_a_agenda(lead_id, db)
         return True
 
     def update_status(
@@ -230,7 +301,12 @@ class SchedulingService:
         status: str,
         db: Session,
     ) -> Optional[Agendamento]:
-        """Atualiza o status de um agendamento."""
+        """Atualiza o status de um agendamento.
+
+        Devolver um compromisso encerrado à ativa enquanto outro está de pé
+        levanta `CompromissoJaMarcado`: só se permite um por lead, e sem esta
+        checagem o índice único recusaria o `UPDATE` com erro de banco.
+        """
         if status not in self.STATUS_VALIDOS:
             raise ValueError(
                 f"Status inválido: {status}. Válidos: {self.STATUS_VALIDOS}"
@@ -240,6 +316,10 @@ class SchedulingService:
             Agendamento.id == agendamento_id
         ).first()
         if agendamento:
+            if status in self.STATUS_ATIVOS:
+                ativo = self.compromisso_ativo(agendamento.lead_id, db)
+                if ativo is not None and ativo.id != agendamento_id:
+                    raise CompromissoJaMarcado(ativo)
             agendamento.status = status
             db.commit()
             db.refresh(agendamento)
@@ -248,7 +328,7 @@ class SchedulingService:
                 "novo_status=%s",
                 agendamento_id, agendamento.lead_id, status,
             )
-            self.sincronizar_status_do_lead(agendamento.lead_id, db)
+            self.sincronizar_lead_com_a_agenda(agendamento.lead_id, db)
             db.refresh(agendamento)
         return agendamento
 

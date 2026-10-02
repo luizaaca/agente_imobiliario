@@ -13,6 +13,7 @@ import pytest
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
+from src.agent import imoveis_mostrados
 from src.agent import sdr_agent as agent_mod
 from src.agent.history import (
     HISTORY_LIMIT,
@@ -223,6 +224,131 @@ def test_id_inventado_nao_vira_ficha(catalogo, lead_id, deps, busca_fake):
     assert "Galpao Belem Logistico" in retorno
     assert "9999" not in retorno
     assert "fantasma inventado" not in retorno
+
+
+# --- Quando nada atende ------------------------------------------------------
+
+_NADA_SERVE = "Não há casa de 2 quartos para alugar na zona leste."
+
+
+def test_busca_que_conclui_que_nada_serve_nao_vira_lista(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """Lista vazia de uma busca que rodou é a resposta, não uma falha.
+
+    Ela caía na degradação, que afrouxa os filtros da ficha sem saber o que a
+    pessoa recusou: quem dispensou apartamento recebia apartamento, e a
+    instrução de apresentar mandava mostrá-lo.
+    """
+    LeadService().update_qualification(
+        lead_id, {"intencao": "aluguel", "regiao_interesse": "zona leste"}, db
+    )
+
+    with busca_fake(escolha_da_busca(observacao=_NADA_SERVE)):
+        retorno = _turno_com_busca("casa de 2 quartos na zona leste", lead_id, deps)
+
+    assert "Nenhum imóvel do catálogo atende" in retorno
+    assert _NADA_SERVE in retorno
+    assert "(ID: " not in retorno
+    assert "Apartamento Tatuape Aluguel" not in retorno
+    assert agent_mod.FECHAMENTO_SEM_IMOVEL in retorno
+    assert agent_mod.FECHAMENTO_DA_BUSCA not in retorno
+
+
+def test_o_mais_proximo_vem_com_a_ficha_do_banco_e_o_rotulo(
+    catalogo, lead_id, deps, busca_fake
+):
+    """O preço que a Marina citar sai do banco, não da nota do agente."""
+    with busca_fake(escolha_da_busca(observacao=_NADA_SERVE, mais_proximo=5)):
+        retorno = _turno_com_busca("casa de 2 quartos na zona leste", lead_id, deps)
+
+    assert "O mais próximo, que NÃO atende ao pedido" in retorno
+    assert "Apartamento Tatuape Aluguel" in retorno
+    assert "(ID: 5)" in retorno
+    assert 5 in imoveis_mostrados.ja_mostrados(lead_id)
+
+
+def test_o_mais_proximo_ja_mostrado_nao_volta(catalogo, lead_id, deps, busca_fake):
+    """O imóvel que ela já viu — e talvez recusou — não reaparece como saída."""
+    imoveis_mostrados.registrar(lead_id, [5])
+
+    with busca_fake(escolha_da_busca(observacao=_NADA_SERVE, mais_proximo=5)):
+        retorno = _turno_com_busca("casa de 2 quartos na zona leste", lead_id, deps)
+
+    assert "Apartamento Tatuape Aluguel" not in retorno
+    assert "Nenhum imóvel do catálogo atende" in retorno
+
+
+def test_so_ids_inventados_ainda_caem_na_degradacao(
+    catalogo, lead_id, deps, busca_fake, db
+):
+    """A degradação continua para o que é falha: ID que não existe no banco."""
+    LeadService().update_qualification(lead_id, {"intencao": "aluguel"}, db)
+
+    with busca_fake(escolha_da_busca((9999, "fantasma"))):
+        retorno = _turno_com_busca("algo para alugar", lead_id, deps)
+
+    assert "(ID: " in retorno
+    assert "Nenhum imóvel do catálogo atende" not in retorno
+
+
+# --- Lista curta -------------------------------------------------------------
+
+
+def _turno_com_duas_buscas(lead_id, deps) -> list[str]:
+    """Um turno em que a Marina busca, obedece ao complemento e busca de novo."""
+    retornos = []
+
+    def modelo(messages, info):
+        if len(retornos) < 2:
+            if any(type(p).__name__ == "ToolReturnPart" for p in messages[-1].parts):
+                retornos.append(str(messages[-1].parts[0].content))
+            if len(retornos) < 2:
+                return ModelResponse(parts=[ToolCallPart(
+                    tool_name="buscar_imoveis",
+                    args={"pedido": f"busca {len(retornos) + 1}"},
+                )])
+        return ModelResponse(parts=[TextPart(content="ok")])
+
+    with agent_mod.sdr_agent.override(model=FunctionModel(modelo)):
+        asyncio.run(process_message(lead_id, "busque", "teste", deps()))
+    return retornos
+
+
+def test_lista_curta_manda_buscar_alternativas(catalogo, lead_id, deps, busca_fake):
+    """Com um imóvel só a pessoa não tem entre o que escolher."""
+    with busca_fake(escolha_da_busca((5, "o único 2 quartos no Tatuapé"))):
+        retorno = _turno_com_busca("apartamento no Tatuapé", lead_id, deps)
+
+    assert "ANTES DE RESPONDER: vieram só 1 imóvel(is)" in retorno
+    assert "tudo o que ela já recusou" in retorno
+
+
+def test_tres_opcoes_bastam(catalogo, lead_id, deps, busca_fake):
+    with busca_fake(escolha_da_busca((1, "a"), (2, "b"), (3, "c"))):
+        retorno = _turno_com_busca("algo à venda", lead_id, deps)
+
+    assert "ANTES DE RESPONDER" not in retorno
+
+
+def test_busca_vazia_tambem_manda_buscar_alternativas(
+    catalogo, lead_id, deps, busca_fake
+):
+    with busca_fake(escolha_da_busca(observacao=_NADA_SERVE, mais_proximo=5)):
+        retorno = _turno_com_busca("casa de 2 quartos na zona leste", lead_id, deps)
+
+    assert "ANTES DE RESPONDER: vieram só 1 imóvel(is)" in retorno
+
+
+def test_a_segunda_busca_do_turno_nao_pede_terceira(
+    catalogo, lead_id, deps, busca_fake
+):
+    """Catálogo sem opção não pode virar um laço de buscas caras."""
+    with busca_fake(escolha_da_busca((5, "o único que há"))):
+        primeira, segunda = _turno_com_duas_buscas(lead_id, deps)
+
+    assert "ANTES DE RESPONDER" in primeira
+    assert "ANTES DE RESPONDER" not in segunda
 
 
 # --- A observação da busca ---------------------------------------------------

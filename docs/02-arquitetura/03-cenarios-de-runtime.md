@@ -22,18 +22,16 @@ A proposta é manter poucos cenários, mas representativos.
 Lead inicia conversa pelo Telegram e recebe primeira resposta do agente SDR.
 
 ### Fluxo
-1. Usuário envia mensagem ao bot.
-2. `telegram_bot.py` atua como adaptador de canal e encaminha a mensagem para a camada do agente.
-3. O agente identifica a necessidade de localizar ou criar o lead por meio das tools/services apropriadas.
-4. O histórico relevante e o `perfil_narrativo` atual são recuperados pela camada de domínio.
-5. O agente processa a mensagem com base no contexto disponível.
-6. Se necessário, o agente chama tools de qualificação, atualização de perfil e registro de estado.
-7. A resposta final e os efeitos de persistência são realizados pela camada de tools/services.
-8. `telegram_bot.py` envia a resposta final ao usuário.
+1. Usuário envia mensagem ao bot — ou `/start`, que abre a conversa.
+2. `telegram_bot.py` resolve o lead pelo `chat_id` com `LeadService.get_or_create_lead`: acha o lead dono dessa identidade de canal ou cria um novo. O nome do perfil do Telegram vai em toda mensagem, e não só no `/start` — que o Telegram só manda na primeira vez que o chat é aberto: ele preenche o nome de um lead que ainda não tem nenhum, sem sobrescrever o que a pessoa disse na conversa.
+3. O adaptador entrega o texto e o `lead_id` a `process_message`. O `/start` não tem texto do usuário, então vai uma saudação sintética, para a primeira resposta sair do agente e não de uma mensagem fixa.
+4. `process_message` reidrata o histórico do banco, grava a fala recebida, devolve ao funil um lead `novo` ou `inativo` e confere os tetos de custo — diário e mensal bloqueiam o turno; o da conversa faz handover ao corretor. As instruções do turno trazem o que se sabe do lead, o `perfil_narrativo` e o compromisso de pé.
+5. O agente processa a mensagem e, se necessário, chama tools de qualificação, atualização de perfil, busca e agendamento.
+6. Os efeitos persistentes acontecem nas tools, que delegam aos services.
+7. A resposta é gravada e `telegram_bot.py` a envia ao usuário. Falha do provider vira, dentro de `process_message`, a mensagem de atendimento indisponível (cenário R5); qualquer outra exceção que chegue ao adaptador vira um pedido de desculpas, e o erro vai para o log.
 
 ### Notas arquiteturais
-- O canal Telegram não contém regra de negócio.
-- O canal Telegram não acessa o banco diretamente; ele delega o processamento à camada do agente.
+- O canal Telegram não contém regra de negócio: resolve a identidade pelo service e delega o resto.
 - O agente não acessa banco diretamente; usa tools/services.
 - Toda interação relevante deve ser rastreável por `lead_id`.
 
@@ -46,11 +44,12 @@ sequenceDiagram
     participant Services
     participant DB
 
-    Lead->>TelegramBot: envia mensagem
-    TelegramBot->>Agent: encaminhar mensagem recebida
-    Agent->>Tools: localizar/criar lead e registrar interação
-    Tools->>Services: executar regras de domínio
-    Services->>DB: read/write lead e mensagens
+    Lead->>TelegramBot: envia mensagem (ou /start)
+    TelegramBot->>Services: get_or_create_lead(chat_id)
+    Services->>DB: identidade de canal e lead
+    TelegramBot->>Agent: process_message(lead_id, texto)
+    Agent->>Services: reidratar histórico, gravar fala, conferir tetos
+    Services->>DB: read/write mensagens
     Agent->>Tools: registrar_qualificacao / atualizar_perfil_lead
     Tools->>Services: persistir alterações
     Services->>DB: atualizar estado do lead
@@ -119,45 +118,71 @@ sequenceDiagram
 ## 4. Cenário R3 — Follow-up automático
 
 ### Descrição
-Scheduler identifica lead inativo e dispara follow-up contextual.
+Scheduler identifica lead calado e gera um follow-up contextual.
 
 ### Fluxo
-1. APScheduler dispara job periódico.
-2. `FollowUpService` consulta leads elegíveis.
-3. Para cada lead elegível, carrega histórico, status e `perfil_narrativo`.
-4. Sistema verifica limite de tentativas e janela da régua.
-5. `FollowUpService` monta o contexto necessário para a composição da mensagem.
-6. `FollowUpService` aciona uma chamada de LLM focada apenas em gerar a mensagem contextual de follow-up.
-7. A LLM retorna a mensagem pronta, sem executar tools nem controlar o fluxo operacional.
-8. `FollowUpService` persiste a mensagem e registra a tentativa pela camada de domínio.
-9. Se o canal permitir envio automático, a mensagem é enviada.
-10. O status do envio é registrado.
+1. O APScheduler, dentro do processo do Telegram, dispara o ciclo a cada
+   `FOLLOWUP_INTERVAL_MINUTES` (padrão 30).
+2. `run_followup_cycle` confere os tetos diário e mensal de LLM; estourados,
+   o ciclo nem começa.
+3. `FollowUpService.get_eligible_leads` devolve os leads elegíveis e a régua de
+   cada um: status alvo da régua, silêncio mínimo (ou visita nas próximas 24 h,
+   no pós-agendamento), última mensagem que não seja do lead, e tentativas
+   abaixo do teto. Um lead recebe no máximo uma régua por ciclo.
+4. Para cada lead, o runner monta o contexto — dados estruturados, perfil
+   narrativo, última mensagem e, no pós-agendamento, o compromisso.
+5. O agente de follow-up gera o texto. Ele não tem tools: só compõe a
+   mensagem, com instruções que ficam mais curtas a cada tentativa.
+6. A mensagem é gravada (`message_type='followup'`, status `generated`) e o
+   consumo de LLM registrado.
+7. Só se tenta enviar por canal com envio ativo (`CANAIS_COM_ENVIO`, hoje o
+   Telegram). No Streamlit, a mensagem gravada já é o desfecho: aparece no
+   chat do lead.
+8. A tentativa é registrada: `sent` quando saiu, `failed` quando se tentou
+   enviar e deu errado, `generated` quando não havia para onde enviar.
+9. Esgotada uma régua de silêncio, o lead vai para `inativo`.
+
+### Variações do mesmo caminho
+- **Disparo manual** — o botão da lista e da ficha chama
+  `run_followup_para_lead`: mesma geração e mesmo registro, dispensando só a
+  janela de silêncio. Teto de tentativas e budget continuam valendo. Como o
+  Streamlit não tem remetente, a mensagem fica `generated`, e a tela mostra o
+  texto gerado, a régua e a tentativa.
+- **Despacho pendente** — a cada 10 s, o processo do Telegram envia o que
+  ficou `generated` num canal com envio. Só sai o que tem até 15 minutos, cujo
+  lead não respondeu depois, e só o mais recente de cada lead; o resto vira
+  `skipped`, com o motivo. A tentativa é reservada como `sent` antes de ir à
+  rede, para duas execuções nunca enviarem a mesma mensagem.
+- **Ciclo avulso** — `python -m scripts.run_followup_once` roda um ciclo
+  sem esperar o intervalo.
 
 ### Regras importantes
-- evitar duplicidade por janela;
-- respeitar estágio do funil;
-- não insistir além do limite configurado.
-- o controle da régua pertence ao `FollowUpService`, não à LLM;
-- a LLM é usada apenas para composição textual contextual.
+- respeitar o estágio do funil e o silêncio mínimo da régua;
+- não insistir além do limite de tentativas;
+- o controle da régua pertence ao `FollowUpService` e ao runner, não à LLM;
+- a LLM é usada apenas para composição textual, e só cita o que o lead já
+  informou: ela não busca imóveis.
 
 ```mermaid
 sequenceDiagram
     participant Scheduler
+    participant Runner as followup_runner
     participant FollowUpService
-    participant LLM
-    participant Services
+    participant LLM as Agente de follow-up
     participant DB
-    participant Channel
+    participant Channel as Remetente do canal
 
-    Scheduler->>FollowUpService: executar job
-    FollowUpService->>Services: buscar leads elegíveis
-    Services->>DB: consultar leads, histórico e perfil
-    FollowUpService->>LLM: gerar mensagem contextual
-    LLM-->>FollowUpService: mensagem pronta
-    FollowUpService->>Services: persistir follow-up e tentativa
-    Services->>DB: registrar mensagem e tentativa
-    FollowUpService->>Channel: enviar mensagem
-    Channel-->>FollowUpService: status de envio
+    Scheduler->>Runner: run_followup_cycle
+    Runner->>FollowUpService: leads elegíveis e régua de cada um
+    FollowUpService->>DB: status, silêncio, tentativas, agenda
+    Runner->>LLM: contexto do lead + régua + tentativa
+    LLM-->>Runner: texto da mensagem
+    Runner->>DB: gravar mensagem (generated) e consumo
+    alt canal com envio ativo
+        Runner->>Channel: enviar
+        Channel-->>Runner: enviado ou erro
+    end
+    Runner->>DB: registrar tentativa (sent / failed / generated)
 ```
 
 ---
@@ -168,18 +193,29 @@ sequenceDiagram
 Lead demonstra interesse suficiente e o agente propõe agendamento.
 
 ### Fluxo
-1. Agente detecta intenção de avançar.
-2. Chama `agendar_reuniao` com dados mínimos.
-3. A tool delega a operação ao `SchedulingService`.
-4. `SchedulingService` valida o payload.
-5. O agendamento é persistido pela camada de domínio.
-6. O resumo do corretor pode ser atualizado por tool/service apropriado.
-7. O dashboard passa a exibir o compromisso.
+1. A pessoa confirma interesse e disponibilidade.
+2. O agente chama `agendar_reuniao` com tipo, data e hora e — numa visita —
+   a observação com os imóveis que ela quer ver e o ID de cada um.
+3. Visita sem observação é recusada com `ModelRetry`, que diz ao modelo o que
+   escrever; ele chama de novo.
+4. `SchedulingService.create` valida e grava. É **um compromisso ativo por
+   lead**, garantido por índice único parcial no banco. Se já houver outro, a
+   tool não marca nada e devolve o compromisso existente; o agente pergunta se
+   a pessoa quer trocar e, com o sim dela, chama de novo com `remarcar=true`,
+   que cancela o antigo e marca o novo.
+5. O status do lead vai para `agendado` e o score é recalculado — visita
+   marcada garante piso de 7,0.
+6. Se ainda faltar nome ou telefone, o retorno da tool lembra o agente de
+   pedir na mesma mensagem: um corretor vai ligar.
+7. A ficha do lead, o resumo do corretor e o dashboard passam a mostrar o
+   compromisso.
 
 ### Regras importantes
-- agendamento não deve ocorrer sem contexto mínimo;
-- data/hora e tipo devem ser persistidos;
-- observações devem ser registradas quando existirem.
+- agendar só com interesse e disponibilidade confirmados;
+- a observação é o que o corretor lê: o compromisso não guarda imóvel em
+  campo próprio;
+- confirmar e cancelar agem sobre o compromisso de pé do lead, sem receber
+  qual — é um só.
 
 ---
 

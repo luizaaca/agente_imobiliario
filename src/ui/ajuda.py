@@ -15,7 +15,7 @@ from src.agent.provider import configuracao_ausente
 from src.config import settings
 from src.ui.papeis import e_admin, papeis_da_sessao
 
-VERSAO = "0.1"
+VERSAO = "0.1.0"
 
 
 def _estado_da_aplicacao() -> None:
@@ -46,7 +46,7 @@ def _estado_da_aplicacao() -> None:
         st.caption(
             "Vê todos os menus."
             if e_admin(papeis)
-            else "O Simulador de Chat e o custo de LLM são exclusivos do admin."
+            else "Simulador, custo de LLM e bastidores da conversa são do admin."
         )
 
     with col_sessao:
@@ -118,10 +118,14 @@ Ele é exclusivo do papel `admin`. É uma ferramenta de teste: conversa com o
 agente fingindo ser um lead e cria leads de mentira na base, então na tela de
 quem atende de verdade seria ruído.
 
-Pelo mesmo motivo o painel **Consumo de LLM** só aparece para o `admin` — custo
-em dólar é informação de quem opera a aplicação. O *alerta* de orçamento
-estourado, esse, todo mundo vê: sem ele o chat pararia de responder sem
-explicação.
+Pelo mesmo motivo, só o `admin` vê o painel **Consumo de LLM** no dashboard e,
+na aba **Conversa** da ficha, o que aquela conversa custou e os painéis das
+ferramentas que o agente usou. Custo em dólar é informação de quem opera a
+aplicação, e o SQL do agente de busca é de quem o constrói — nenhum dos dois
+ajuda a atender um lead, e na ficha eles só afastam uma fala da seguinte.
+
+O *alerta* de orçamento estourado, esse, todo mundo vê: sem ele o chat pararia
+de responder sem explicação.
 
 O papel vem de `config/credentials.yaml`. **Ele esconde links do menu e não é
 controle de acesso** — quem edita esse arquivo se dá o papel que quiser.
@@ -168,12 +172,18 @@ Quatro réguas, escolhidas pelo estágio do lead no funil:
 | Pós-envio de imóveis | 24h de silêncio | 2 |
 | Pós-agendamento | até 24h antes da visita | 2 |
 
-Um job varre os leads a cada 30 minutos, mas ele roda **junto do processo do
-Telegram**. Sem esse processo no ar, o disparo automático não acontece.
+Um job varre os leads a cada 30 minutos — o intervalo vem de
+`FOLLOWUP_INTERVAL_MINUTES` —, mas ele roda **junto do processo do Telegram**.
+Sem esse processo no ar, o disparo automático não acontece.
 
 O botão **Disparar follow-up** na ficha usa a mesma lógica com outro gatilho:
 dispensa só a janela de tempo — quem está olhando o lead já decidiu que é hora
-— e mantém o teto de tentativas da régua e o orçamento de LLM.
+— e mantém o teto de tentativas da régua e o orçamento de LLM. Ao terminar,
+ele mostra a mensagem que a Marina escreveu, a régua e quantas tentativas dela
+já foram usadas, num aviso no canto da tela que some sozinho em 15 segundos —
+ou antes, no X. Num lead do Telegram,
+quem envia é o processo do bot: se ele não estiver no ar nos 15 minutos
+seguintes, ou se o lead responder antes, a mensagem é descartada sem sair.
 
 Esgotadas as tentativas de uma régua de silêncio, o lead vai para `inativo`.
 Ele volta ao funil sozinho se responder.
@@ -211,6 +221,41 @@ dele indicam.
 """,
     ),
     (
+        "Por que só consigo marcar um agendamento por lead?",
+        """
+Porque o corretor vai uma vez e vê com a pessoa os imóveis que ela quiser —
+não se marca uma visita por imóvel. Enquanto houver compromisso `pendente` ou
+`confirmado`, o botão **Novo agendamento** fica desabilitado; cancele o que
+está de pé para marcar outro.
+
+Na conversa, o agente avisa a pessoa que ela já tem algo marcado e pergunta se
+ela quer trocar. Só com o sim dela é que ele remarca — e aí o compromisso
+antigo fica no histórico, cancelado, com a nota de para quando foi remarcado.
+Sem essa nota você leria o cancelamento como desistência.
+
+O banco também cobra: há índice único sobre o lead para os status ativos. A
+regra já existia no código e não se sustentou — um lead chegou a ter duas
+visitas pendentes ao mesmo tempo.
+""",
+    ),
+    (
+        "Onde vejo quais imóveis o lead quer visitar?",
+        """
+Na **observação do agendamento**, com o ID de cada um. O compromisso não se
+prende a um imóvel: prende-se a um horário, e os imóveis de interesse vão
+escritos ali.
+
+A mesma observação aparece no **Resumo** do lead, junto do perfil narrativo —
+são os três textos que orientam você antes de ligar ou de sair.
+
+O agente é obrigado a preencher isso: uma visita que chega sem observação é
+recusada na hora, com o pedido de escrever os imóveis e o ID de cada um. O
+conteúdo em si não é conferido — adivinhar se um texto livre cita imóvel
+erraria nos dois sentidos, e o preço do engano seria recusar uma visita que a
+pessoa acabou de combinar.
+""",
+    ),
+    (
         "Quando um lead vira *inativo*?",
         """
 Quando ele **para de responder** e o follow-up esgota as tentativas de uma
@@ -232,14 +277,19 @@ disparo manual de follow-up, que aliás não funciona para ele, porque `inativo`
     (
         "Disparei o follow-up e a mensagem não chegou no lead.",
         """
-A mensagem foi **gerada e registrada** na conversa, mas não despachada. Duas
+A mensagem foi **gerada e registrada** na conversa, mas não despachada. As
 causas possíveis:
 
 - **O lead não tem canal vinculado.** A aba **Canal** da ficha avisa quando é o
   caso. Sem identidade de canal não há para onde enviar.
-- **O canal não tem envio ativo.** Só o Telegram envia, e só com o processo do
-  bot no ar. Um lead que veio do simulador não tem para onde receber push — a
-  mensagem fica no histórico, visível para você.
+- **O canal não tem envio ativo.** Só o Telegram envia. Um lead que veio do
+  simulador não tem para onde receber push — a mensagem fica no histórico,
+  visível para você e no chat dele.
+- **O bot não pegou a mensagem a tempo.** Num lead do Telegram, quem envia o
+  que a tela gerou é o processo do bot, que olha as pendentes a cada 10
+  segundos. A mensagem é descartada se o bot não estiver no ar nos 15 minutos
+  seguintes, se o lead responder antes, ou se houver um follow-up mais novo
+  para ele — só o último sai.
 """,
     ),
     (
@@ -315,12 +365,21 @@ fora; para o agente assumir a conversa, ainda falta trabalho.
     (
         "De onde vem o score?",
         """
-De cinco dimensões: completude dos dados, urgência declarada, aderência ao
-catálogo, engajamento na conversa e sinal de intenção de agendamento.
+De cinco dimensões, somando 10: completude da ficha (3.0), urgência declarada
+(2.0), definição do pedido (1.0), engajamento na conversa (1.5) e visita
+marcada (2.5).
 
-Ele é recalculado quando o lead avança e quando você salva a ficha. Por isso
-não é editável na mão — seria um número dizendo uma coisa e os dados dizendo
-outra.
+**Visita marcada nunca fica abaixo de 7.0.** É o evento que o atendimento
+inteiro persegue, e a lista é ordenada por este número — sem um piso próprio,
+um lead com visita na agenda empatava com um que parou de responder. Visita
+cancelada ou já realizada não conta.
+
+O telefone entra na completude junto com intenção, orçamento, região, quartos
+e urgência, meio ponto cada. Ficha impecável sem número não vira ligação.
+
+Ele é recalculado quando o lead avança, quando você salva a ficha e a cada
+mexida na agenda. Por isso não é editável na mão — seria um número dizendo uma
+coisa e os dados dizendo outra.
 """,
     ),
     (
@@ -339,7 +398,6 @@ A exclusão é definitiva e pede confirmação.
     (
         "O que esta POC não faz?",
         """
-- **O canal Telegram nunca foi exercitado** com um bot real.
 - **Sem streaming**: a resposta do chat aparece inteira de uma vez.
 - **Sem CRM nem agenda externa**: agendamento é uma linha no banco.
 - **O custo é estimado** por tabela de preços fixa; modelo fora da tabela cai

@@ -11,10 +11,17 @@ import pytest
 
 from src.agent import followup_agent as followup_agent_mod
 from src.db.models import FollowUpAttempt, Lead, Mensagem
-from src.scheduler.followup_runner import run_followup_para_lead
+from src.scheduler.followup_runner import DisparoManual, run_followup_para_lead
 from src.services.followup_service import REGUAS, FollowUpService
 from src.services.lead_service import LeadService
 from src.services.llm_usage_service import LLMUsageService
+from src.ui.leads import (
+    DURACAO_DO_AVISO_CURTO,
+    DURACAO_DO_AVISO_GERADO,
+    aviso_do_followup,
+    corpo_do_followup_gerado,
+    titulo_do_followup_gerado,
+)
 
 
 @pytest.fixture
@@ -118,3 +125,105 @@ def test_lead_inexistente_nao_explode(llm_fake):
 
     assert not resultado.executado
     assert "não encontrado" in resultado.motivo
+
+
+def test_devolve_a_mensagem_e_quanto_resta_da_regua(lead_em_qualificacao, llm_fake):
+    """É o que a tela mostra ao corretor depois do clique."""
+    resultado = _disparar(lead_em_qualificacao, llm_fake, texto="Rita, e aí?")
+
+    assert resultado.texto == "Rita, e aí?"
+    assert resultado.regua == "qualificacao_interrompida"
+    assert (resultado.tentativa, resultado.maximo) == (
+        1, REGUAS["qualificacao_interrompida"]["max_tentativas"]
+    )
+    assert resultado.canal == "telegram"
+    assert not resultado.enviado
+
+
+def test_falha_na_geracao_nao_se_passa_por_sucesso(lead_em_qualificacao, llm_fake):
+    """O ciclo engole a exceção para um lead não derrubar os outros.
+
+    O botão não pode herdar esse silêncio: sem o desfecho, a tela dizia
+    "gerado" para uma mensagem que nunca existiu.
+    """
+    resultado = _disparar(lead_em_qualificacao, llm_fake, texto="")
+
+    assert not resultado.executado
+    assert resultado.falhou
+    assert resultado.motivo.startswith("A geração falhou")
+
+
+def test_regra_que_barra_o_disparo_nao_e_falha(lead_em_qualificacao, llm_fake, monkeypatch):
+    monkeypatch.setattr(
+        LLMUsageService, "is_daily_budget_exceeded", lambda self, db: True
+    )
+
+    resultado = _disparar(lead_em_qualificacao, llm_fake)
+
+    assert not resultado.executado
+    assert not resultado.falhou
+
+
+# --- O desfecho na tela ------------------------------------------------------
+
+
+def _gerado(**campos):
+    base = dict(executado=True, texto="Oi", regua="qualificacao_interrompida",
+                tentativa=2, maximo=3, canal="streamlit")
+    return DisparoManual(**{**base, **campos})
+
+
+def test_titulo_diz_a_regua_e_quanto_dela_ja_foi_usado():
+    titulo = titulo_do_followup_gerado(_gerado())
+
+    assert REGUAS["qualificacao_interrompida"]["descricao"] in titulo
+    assert "tentativa 2 de 3" in titulo
+
+
+def test_mensagem_citada_inteira_e_como_a_conversa_a_mostra():
+    """Dois preços na mesma fala viravam fórmula; e cada linha é uma linha."""
+    texto = "Rita, olha esses:\n\nR$ 390 mil na Mooca\nR$ 460 mil no Tatuapé"
+
+    citacao = corpo_do_followup_gerado(_gerado(texto=texto)).rsplit("\n\n", 1)[0]
+
+    assert all(linha.startswith(">") for linha in citacao.split("\n"))
+    assert "R\\$ 390 mil na Mooca  \n> R\\$ 460" in citacao
+
+
+@pytest.mark.parametrize(
+    ("campos", "esperado"),
+    [
+        ({"canal": "streamlit"}, "chat do lead"),
+        ({"canal": "telegram"}, "próximos 15 minutos"),
+        ({"canal": "telegram", "enviado": True}, "Enviada pelo Telegram"),
+    ],
+)
+def test_corpo_diz_para_onde_a_mensagem_vai(campos, esperado):
+    assert esperado in corpo_do_followup_gerado(_gerado(**campos))
+
+
+def test_aviso_do_gerado_traz_titulo_e_mensagem_e_fica_mais_tempo():
+    """A mensagem da Marina é para ler; a recusa é uma frase."""
+    corpo, icone, duracao = aviso_do_followup(_gerado(texto="Rita, ainda procurando?"))
+
+    assert corpo.startswith(f"**{titulo_do_followup_gerado(_gerado())}**")
+    assert "> Rita, ainda procurando?" in corpo
+    assert icone == ":material/mark_chat_read:"
+    assert duracao == DURACAO_DO_AVISO_GERADO > DURACAO_DO_AVISO_CURTO
+
+
+@pytest.mark.parametrize(
+    ("campos", "titulo", "icone"),
+    [
+        ({"falhou": True}, "Não foi possível gerar o follow-up", ":material/error:"),
+        ({}, "Follow-up não disparado", ":material/block:"),
+    ],
+)
+def test_aviso_de_falha_e_de_recusa_diz_o_motivo(campos, titulo, icone):
+    resultado = DisparoManual(executado=False, motivo="Régua esgotada.", **campos)
+
+    corpo, icone_do_aviso, duracao = aviso_do_followup(resultado)
+
+    assert corpo == f"**{titulo}**\n\nRégua esgotada."
+    assert icone_do_aviso == icone
+    assert duracao == DURACAO_DO_AVISO_CURTO

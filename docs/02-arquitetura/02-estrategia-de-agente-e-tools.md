@@ -15,36 +15,62 @@ O agente atua como um SDR consultivo, com foco em:
 - registrar e resumir o atendimento;
 - **manter atualizado o perfil narrativo do lead** a cada interação significativa.
 
-Na primeira mensagem de cada conversa o agente se apresenta em uma linha:
-nome, que é a assistente virtual da imobiliária e o que faz. Depois disso não
-se reapresenta.
+Na primeira mensagem de cada conversa o agente se apresenta em uma linha —
+um oi, o nome e que é da imobiliária — e pede o contato. Depois disso não se
+reapresenta.
+
+Fala como uma pessoa da equipe e não se anuncia como assistente virtual. Se o
+lead perguntar se está falando com uma pessoa, a resposta é a verdade — é a
+assistente virtual Marina — e a conversa segue.
+
+Nome e telefone se pedem na primeira mensagem, numa frase só, dizendo para
+que o telefone serve: é por ele que o corretor fala com o lead. Pede-se só o
+que falta — no Telegram o nome já vem do perfil, e o agente chama por ele e
+pede só o telefone. O que a pessoa procura fica para a mensagem seguinte; se
+ela já chegou dizendo, a abertura mostra que ouviu antes de pedir o contato.
+Nenhum dos dois é condição para nada; se o lead não quiser dar, a conversa
+segue sem insistência. Se ainda faltarem quando a visita é marcada, o retorno
+de `agendar_reuniao` lembra o agente de pedir — ali o motivo é evidente para a
+pessoa.
 
 O objetivo é a visita marcada, e a qualificação é o meio. Filtrar por preço e
 bairro qualquer site faz; o que justifica a conversa é ligar o que a pessoa
 conta de si ao que o imóvel tem. Por isso a persona alterna dois registros:
-consultiva enquanto entende e apresenta, direta no fechamento — telefone, dia,
-hora, agendamento.
+consultiva enquanto entende e apresenta, direta no fechamento — dia, hora,
+agendamento.
 
 ## 2. Estratégia conversacional
 
 O agente não despeja um questionário de uma vez. O fluxo é:
 
 1. identificar intenção principal;
-2. **uma pergunta sobre a vida do lead antes da primeira busca** — quem vai
-   morar junto, o que o faz sair de onde mora, como é a rotina, o que seria
-   decisivo. A resposta entra no pedido que vai à ferramenta, com as palavras
-   dele: "casal com um filho, ela atende pacientes em casa" procura coisa
-   diferente de "2 ou 3 quartos até 900 mil";
+2. **curiosidade em toda resposta, junto da apresentação de imóveis** — um
+   fio da vida do lead por vez, com educação: o que faz, quem vai morar junto
+   (filhos e idades, pets, alguém mais velho), por que aquele bairro, o que o
+   faz sair de onde mora, a rotina, o que seria decisivo, e a faixa de renda —
+   por faixa, nunca o valor exato, com o porquê (a renda que o aluguel exige,
+   o financiamento na compra) e só depois de alguma conversa. O prazo vem
+   cedo, até a terceira mensagem do lead: é o dado que mais mexe no score e o
+   que as conversas mais deixavam de colher. Profissão, família e renda vão
+   para o perfil narrativo, e não para campos próprios; o perfil vai no pedido
+   à ferramenta: "casal com um filho, ela atende pacientes em casa" procura
+   coisa diferente de "2 ou 3 quartos até 900 mil";
 3. atualizar o estado estruturado do lead;
 4. **atualizar o perfil narrativo** com novas informações, objeções ou preferências capturadas;
 5. buscar imóveis quando houver contexto mínimo suficiente;
 6. apresentar em duas camadas: **um destaque** de duas ou três linhas, com o
    que a descrição tem de concreto e a ligação com o que ele contou de si, e
-   até quatro alternativas de uma linha, cada uma dizendo sua diferença para o
-   destaque;
+   até cinco alternativas de uma linha, cada uma dizendo sua diferença para o
+   destaque, com o ID de cada imóvel. A pergunta do fim se liga a um dos
+   imóveis e puxa a vida do lead — "o terceiro quarto daria um escritório:
+   você trabalha de casa?". Com menos de três imóveis, o retorno da busca manda
+   buscar mais uma vez, por alternativas que afrouxam o que o lead não marcou
+   como essencial e nunca o que ele recusou; só na primeira busca do turno,
+   para um catálogo sem opção não virar um laço de buscas;
 7. oferecer agendamento quando houver aderência e interesse.
 
-Uma pergunta por mensagem, sempre. E o que o lead conta sem ser perguntado
+Uma pergunta por mensagem — a exceção é o pedido de nome e telefone da
+abertura. E o que o lead conta sem ser perguntado
 reaparece na mensagem seguinte, ligado a um imóvel concreto: ouvir e não usar
 é o mesmo que não ter perguntado.
 
@@ -52,6 +78,17 @@ reaparece na mensagem seguinte, ligado a um imóvel concreto: ouvir e não usar
 o agente pergunta o que não serviu, registra no perfil e busca de novo. Só o
 pedido explícito de parar, o pedido de falar com uma pessoa ou a visita marcada
 encerram a conversa.
+
+**A recusa vale pelo motivo dito.** "Não, quero algo com 2 quartos" diante de
+um sobrado de 3 quartos recusa os 3 quartos, não o sobrado: o perfil e o pedido
+à busca levam só o que a pessoa disse, e o agente não acrescenta restrição ao
+repetir o que entendeu. Quando a recusa não diz o quê — "não gostei", um "não"
+seco —, o agente pergunta antes de buscar de novo. Estender a recusa às outras
+características do imóvel tirou da busca, numa conversa real, os sobrados de 2
+quartos que a pessoa queria. A mesma regra está nas instruções do agente de
+busca, que lê o perfil e o pedido: a recusa se escreve pelo motivo — "não
+aceita 3 quartos" —, e não pelo imóvel — "sem sobrado de 3 quartos" —, que ele
+lia como recusa a todo sobrado.
 
 ## 3. Estratégia de perfil narrativo incremental
 
@@ -84,18 +121,22 @@ O custo da consolidação é registrado em `llm_usage` com `operation="perfil"`:
 | `detalhar_imoveis` | Relê do catálogo a ficha completa do que já foi apresentado |
 | `registrar_qualificacao` | Persiste dados estruturados do lead (campos do schema) |
 | `atualizar_perfil_lead` | **Acrescenta ao perfil narrativo** a novidade do turno, via consolidador |
-| `agendar_reuniao` | Registra visita ou reunião no banco |
-| `listar_agendamentos` | Devolve os compromissos de pé do lead, com o ID de cada um |
-| `confirmar_agendamento` | Move um compromisso para `confirmado`, quando a pessoa confirma |
-| `cancelar_agendamento` | Move um compromisso para `cancelado`, com o motivo registrado |
+| `agendar_reuniao` | Registra a visita ou reunião — uma de pé por lead — com os imóveis de interesse na observação |
+| `listar_agendamentos` | Devolve o compromisso de pé do lead — tipo, data e status |
+| `confirmar_agendamento` | Move o compromisso do lead para `confirmado`, quando a pessoa confirma |
+| `cancelar_agendamento` | Move o compromisso do lead para `cancelado`, com o motivo registrado |
 | `encerrar_atendimento` | Fecha o atendimento, entrega o briefing executivo ao corretor e tira o lead da régua |
 
-As três tools de compromisso existente trabalham sobre IDs que o agente recebe
-nas instruções do turno, remontadas do banco. `agendar_reuniao` cria; as outras
-mudam o estado do que já existe — usar a primeira para confirmar criaria um
-segundo compromisso no mesmo horário.
+As tools de compromisso não recebem qual compromisso: é um de pé por lead, e o
+serviço o encontra pelo lead do turno. `agendar_reuniao` cria — e, havendo
+outro de pé, avisa em vez de marcar, até o agente voltar com `remarcar=true`;
+confirmar e cancelar mudam o estado do que já existe.
 
-> **Nota de escopo da POC:** a capacidade de geração de follow-up contextual existe no sistema, mas **não será exposta como tool do agente conversacional com o cliente**. Na POC, ela será usada exclusivamente pelo `FollowUpService`, que controla a régua, a elegibilidade, as tentativas e o envio, acionando a LLM apenas para compor a mensagem.
+> A geração de follow-up não é tool do agente conversacional. É um agente
+> próprio (`src/agent/followup_agent.py`), acionado pelo `followup_runner`:
+> quem escolhe o lead e a régua é o `FollowUpService`, quem grava e envia é o
+> runner, e o LLM só compõe a mensagem. Ver
+> [`04-contratos-das-tools.md`](./04-contratos-das-tools.md#7-geração-do-follow-up-fora-das-tools).
 
 ## 5. Boas práticas de tool calling adotadas
 
@@ -226,8 +267,11 @@ perguntou em seguida. Sem registro durável, responder "quantas vagas tem o de
 66 m²" custava uma busca inteira: dezenas de milhares de tokens, meio minuto, e
 imóveis diferentes dos que ela tinha visto.
 
-É o mesmo registro que sustenta o agendamento. `agendar_reuniao` exige
-`imovel_id`, e um ID perdido no truncamento deixaria a visita sem imóvel.
+É o mesmo registro que sustenta o agendamento. O compromisso não aponta para
+uma linha do catálogo: quem diz ao corretor o que será visitado é a
+`observacoes`, com o ID de cada imóvel — e a tool recusa a visita que chega sem
+ela. Um ID perdido no truncamento deixaria o corretor com um horário e nada
+mais.
 
 No banco, e não em memória: Streamlit e bot do Telegram rodam em processos
 separados (ADR 0004), e nada aqui pode depender de qual deles atendeu o turno
@@ -237,17 +281,23 @@ anterior.
 
 As consultas do agente de busca não viram mensagem — é o que torna a delegação
 barata —, então a única cópia delas é o `metadata_json` da chamada. A aba
-**Conversa** da ficha e o simulador leem dali e mostram, num painel fechado ao
-lado da fala que aquilo produziu: o pedido em texto livre, cada `SELECT`
+**Conversa** da ficha e o simulador leem dali e mostram ao `admin`, num painel
+fechado ao lado da fala que aquilo produziu: o pedido em texto livre, cada `SELECT`
 escrito, o custo em tokens e o que a ferramenta devolveu ao agente.
 
 Fechado por padrão porque quem abre a ficha quer ler a conversa; o painel existe
 para a pergunta seguinte, que é como aqueles imóveis foram parar ali.
 
-O renderizador é o mesmo nas duas telas (`src/ui/conversa.py`). O canal do
-Telegram não passa por ele: o que chega à pessoa lá é só a resposta final.
+O renderizador é o mesmo nas duas telas (`src/ui/conversa.py`). O `corretor`
+vê só as falas: as chamadas de ferramenta e o custo da conversa são
+bastidores, de quem opera. O canal do Telegram não passa por ele: o que chega à
+pessoa lá é só a resposta final.
 
 ### Quando o provider falha
+
+Só quando a busca falha — provider fora do ar ou IDs que não existem. Lista
+vazia de uma busca que rodou é a conclusão do agente de busca e chega ao agente
+conversacional como tal (ver contratos das tools).
 
 A tool monta filtros a partir da ficha estruturada do lead, usa o pedido como
 termo livre e consulta o catálogo sem LLM nenhum, com a escada de relaxamento

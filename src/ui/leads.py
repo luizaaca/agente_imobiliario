@@ -20,14 +20,28 @@ from typing import Optional
 
 import streamlit as st
 
-from src.db.models import Agendamento, Imovel, Lead
+from src.db.models import Agendamento, Lead
 from src.db.session import get_db
-from src.scheduler.followup_runner import run_followup_para_lead
+from src.scheduler.followup_runner import (
+    VALIDADE_DO_PENDENTE,
+    DisparoManual,
+    run_followup_para_lead,
+)
+from src.services.followup_service import REGUAS
 from src.services.lead_service import LeadService
-from src.services.scheduling_service import SchedulingService
+from src.services.scheduling_service import (
+    CompromissoJaMarcado,
+    SchedulingService,
+)
 from src.tempo import agora, formatar, para_exibir, para_guardar
-from src.ui.conversa import falas_do_lead, quantas_falas, renderizar
+from src.ui.conversa import (
+    custo_da_conversa,
+    falas_do_lead,
+    legenda_da_conversa,
+    renderizar,
+)
 from src.ui.navegacao import abrir_lista_de_leads, abrir_pagina_da_ficha
+from src.ui.papeis import papeis_da_sessao, ve_os_bastidores
 from src.ui.tabela import (
     AJUDA_DA_BUSCA,
     PLACEHOLDER_DA_BUSCA,
@@ -42,7 +56,7 @@ from src.ui.tabela import (
     temperatura,
     texto,
 )
-from src.ui.texto import markdown_seguro
+from src.ui.texto import markdown_seguro, mensagem_para_markdown
 
 # Lead cuja ficha esta aberta. Zero significa "ficha em branco", porque nenhum
 # lead tem id 0. Ausente na pagina da ficha significa que se chegou nela sem
@@ -50,8 +64,13 @@ from src.ui.texto import markdown_seguro
 CHAVE_LEAD_ABERTO = "lead_aberto"
 # Lead cujo botao de excluir foi clicado, para o segundo clique ser deliberado.
 CHAVE_EXCLUSAO = "lead_a_excluir"
-# Desfecho do ultimo disparo manual: (lead_id, tipo, texto).
-CHAVE_AVISO_FOLLOWUP = "aviso_followup"
+# Lead cujo follow-up o corretor pediu; a geracao roda no rerun seguinte.
+CHAVE_FOLLOWUP_PENDENTE = "followup_pendente"
+# Segundos que o aviso do follow-up fica na tela, se nao for fechado antes. O
+# gerado cita a mensagem da Marina, que o corretor quer ler inteira; recusa e
+# falha sao uma frase.
+DURACAO_DO_AVISO_GERADO = 15
+DURACAO_DO_AVISO_CURTO = 8
 # Formulario de agendamento aberto: (lead_id, agendamento_id ou None p/ novo).
 CHAVE_AGENDAMENTO = "agendamento_em_edicao"
 # Agendamento cujo botao de excluir foi clicado, para o segundo clique ser
@@ -245,15 +264,12 @@ def _pedir_exclusao(lead: Lead) -> None:
 
 
 def _confirmacao_na_lista(lead: Lead) -> None:
-    """Desfecho do follow-up e confirmacao de exclusao, abaixo da linha.
+    """Andamento do follow-up e confirmacao de exclusao, abaixo da linha.
 
     Na coluna dos botoes nao caberiam: o aviso quebraria em varias linhas e os
     botoes ficariam menores que o alvo confortavel de clique.
     """
-    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
-    if aviso and aviso[0] == lead.id:
-        mostrar = st.success if aviso[1] == "ok" else st.info
-        mostrar(aviso[2], icon=":material/send:")
+    _followup_do_lead(lead)
 
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return
@@ -447,12 +463,12 @@ def _formulario(lead: Optional[Lead]) -> None:
                     else servico.editar_lead(lead.id, campos, db)
                 )
                 lead_id = alvo.id
-                servico.calculate_score(lead_id, db)
-                # O status escolhido na ficha vale para os estagios de
-                # julgamento; `agendado` e fato verificavel, e quem manda e a
-                # agenda. Sem isto daria para marcar `agendado` sem visita
-                # nenhuma, ou tirar de `agendado` quem tem visita marcada.
-                SchedulingService().sincronizar_status_do_lead(lead_id, db)
+                # Score e status saem os dois daqui. O status escolhido na
+                # ficha vale para os estagios de julgamento; `agendado` e fato
+                # verificavel, e quem manda e a agenda. Sem isto daria para
+                # marcar `agendado` sem visita nenhuma, ou tirar de `agendado`
+                # quem tem visita marcada.
+                SchedulingService().sincronizar_lead_com_a_agenda(lead_id, db)
 
             st.toast(
                 "Lead criado." if novo else "Ficha salva.", icon=":material/check:"
@@ -554,19 +570,20 @@ def _conversa(lead: Lead) -> None:
     algumas dezenas de turnos empurra as ações do lead para fora da tela e
     obriga a rolar tudo de volta para chegar a elas.
     """
+    bastidores = ve_os_bastidores(papeis_da_sessao())
     with get_db() as db:
         falas = falas_do_lead(lead.id, db, 200)
+        custo = custo_da_conversa(lead.id, db, bastidores)
 
     if not falas:
         st.caption("Nenhuma mensagem registrada para este lead.")
         return
 
-    st.caption(
-        f"{quantas_falas(falas)} mensagem(ns) — as ferramentas que o agente "
-        f"usou abrem nos painéis"
-    )
+    st.caption(legenda_da_conversa(falas, bastidores))
+    if custo:
+        st.caption(custo)
     with st.container(height=ALTURA_DA_CONVERSA):
-        renderizar(falas)
+        renderizar(falas, bastidores)
 
 
 def _resumo_para_o_corretor(lead: Lead) -> None:
@@ -585,23 +602,6 @@ def _resumo_para_o_corretor(lead: Lead) -> None:
     st.markdown(markdown_seguro(lead.resumo))
 
 
-def _opcoes_de_imovel(db) -> list[tuple[Optional[int], str]]:
-    """(id, rótulo) dos imóveis disponíveis, com uma opção vazia na frente.
-
-    Só id e título: carregar o objeto inteiro de 300 imóveis a cada render da
-    ficha seria pagar caro por dois campos.
-    """
-    linhas = (
-        db.query(Imovel.id, Imovel.titulo, Imovel.bairro)
-        .filter(Imovel.disponivel.is_(True))
-        .order_by(Imovel.titulo)
-        .all()
-    )
-    return [(None, "— nenhum —")] + [
-        (id_, f"#{id_} · {titulo} ({bairro})") for id_, titulo, bairro in linhas
-    ]
-
-
 def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> None:
     """Cria um agendamento, ou reescreve um existente.
 
@@ -612,7 +612,6 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
     editando = agendamento_id is not None
 
     with get_db() as db:
-        opcoes = _opcoes_de_imovel(db)
         atual = SchedulingService().get(agendamento_id, db) if editando else None
         if editando and atual is None:
             st.error("Agendamento não encontrado. Ele pode ter sido excluído.")
@@ -625,11 +624,7 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
             ),
             "status": atual.status if atual else "pendente",
             "observacoes": (atual.observacoes if atual else "") or "",
-            "imovel_id": atual.imovel_id if atual else None,
         }
-
-    ids = [id_ for id_, _ in opcoes]
-    rotulos = dict(opcoes)
 
     with st.form(f"agendamento_{agendamento_id or 'novo'}"):
         col_tipo, col_data, col_hora = st.columns(3)
@@ -642,17 +637,12 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
             "Hora", value=inicial["quando"].time(), step=timedelta(minutes=15)
         )
 
-        imovel_id = st.selectbox(
-            "Imóvel",
-            ids,
-            index=ids.index(inicial["imovel_id"])
-            if inicial["imovel_id"] in ids else 0,
-            format_func=lambda i: rotulos[i],
-            help="Opcional. Uma reunião de alinhamento não precisa de imóvel.",
-        )
         observacoes = st.text_area(
-            "Observações", value=inicial["observacoes"], height=90,
-            placeholder="O que o corretor precisa saber antes de ir.",
+            "Observações", value=inicial["observacoes"], height=140,
+            placeholder=(
+                "Os imóveis que a pessoa quer ver, com o ID de cada um, e o "
+                "que pesa na decisão dela. É o que você lê antes de ir."
+            ),
         )
         status = (
             st.selectbox(
@@ -679,19 +669,28 @@ def _formulario_de_agendamento(lead: Lead, agendamento_id: Optional[int]) -> Non
         # O formulário devolve hora de São Paulo; o banco guarda em UTC.
         quando = para_guardar(datetime.combine(data, hora))
         servico = SchedulingService()
-        with get_db() as db:
-            if editando:
-                servico.editar(
-                    agendamento_id, db, tipo=tipo, data_hora=quando,
-                    status=status, observacoes=observacoes.strip() or None,
-                    imovel_id=imovel_id,
-                )
-            else:
-                servico.create(
-                    lead_id=lead.id, tipo=tipo, data_hora=quando,
-                    observacoes=observacoes.strip() or None, db=db,
-                    imovel_id=imovel_id,
-                )
+        try:
+            with get_db() as db:
+                if editando:
+                    servico.editar(
+                        agendamento_id, db, tipo=tipo, data_hora=quando,
+                        status=status, observacoes=observacoes.strip() or None,
+                    )
+                else:
+                    servico.create(
+                        lead_id=lead.id, tipo=tipo, data_hora=quando,
+                        observacoes=observacoes.strip() or None, db=db,
+                    )
+        except CompromissoJaMarcado as conflito:
+            # O indice unico recusaria do mesmo jeito, mas com erro de banco
+            # na tela. Aqui o corretor le o que ja esta marcado e decide.
+            st.error(
+                f"Este lead já tem {conflito.existente.tipo} em "
+                f"{formatar(conflito.existente.data_hora)}, e só se permite um "
+                f"compromisso de pé. Cancele esse antes de marcar outro."
+            )
+            return
+
         st.session_state.pop(CHAVE_AGENDAMENTO, None)
         st.toast(
             "Agendamento salvo." if editando else "Agendamento criado.",
@@ -742,17 +741,20 @@ def _agendamentos(lead: Lead) -> None:
 
     with get_db() as db:
         itens = [
-            (
-                a.id, a.tipo, a.data_hora, a.status,
-                a.imovel.titulo if a.imovel else None,
-                a.imovel.id if a.imovel else None,
-                a.observacoes,
-            )
+            (a.id, a.tipo, a.data_hora, a.status, a.observacoes)
             for a in SchedulingService().list_by_lead(lead.id, db)
         ]
+        tem_ativo = SchedulingService().tem_compromisso_ativo(lead.id, db)
 
+    # Desabilitado com compromisso de pe, em vez de escondido: sumindo, o
+    # botao parece um defeito da tela. Assim o motivo vem junto.
     if st.button(
-        "Novo agendamento", icon=":material/event:", key=f"novo_ag_{lead.id}"
+        "Novo agendamento", icon=":material/event:", key=f"novo_ag_{lead.id}",
+        disabled=tem_ativo,
+        help=(
+            "Este lead já tem um compromisso de pé — cancele-o antes"
+            if tem_ativo else "Marcar visita ou reunião para este lead"
+        ),
     ):
         st.session_state[CHAVE_AGENDAMENTO] = (lead.id, None)
         st.rerun()
@@ -761,15 +763,13 @@ def _agendamentos(lead: Lead) -> None:
         st.caption("Nenhum agendamento para este lead.")
         return
 
-    for id_, tipo, data_hora, status, titulo, imovel_id, observacoes in itens:
+    for id_, tipo, data_hora, status, observacoes in itens:
         with st.container(border=True):
             col_quando, col_status, col_acoes = st.columns(
                 [7, 3, 2], vertical_alignment="center"
             )
             with col_quando:
                 st.markdown(f"**{tipo.capitalize()}** · {formatar(data_hora)}")
-                if titulo:
-                    st.caption(f":material/home: #{imovel_id} · {titulo}")
                 if observacoes:
                     st.caption(markdown_seguro(observacoes))
             with col_status:
@@ -794,36 +794,99 @@ def _agendamentos(lead: Lead) -> None:
 
 
 def _disparar_followup(lead: Lead) -> None:
-    """Gera o follow-up deste lead agora.
+    """Marca o lead para disparo de follow-up no próximo rerun.
 
-    Sem `sender`: a UI não tem canal de saída próprio. A mensagem é gerada,
-    persistida e aparece na conversa — nos canais com push quem despacha é o
-    processo do Telegram.
+    A geração acontece em ``_followup_do_lead``, que desenha na largura toda
+    da página — e não dentro da micro-coluna do botão, onde o aviso de
+    andamento quebraria em várias linhas.
     """
-    with st.spinner("Gerando follow-up..."):
-        resultado = asyncio.run(run_followup_para_lead(lead.id))
-
-    st.session_state[CHAVE_AVISO_FOLLOWUP] = (
-        lead.id,
-        "ok" if resultado.executado else "aviso",
-        "Follow-up gerado e registrado na conversa do lead."
-        if resultado.executado
-        else resultado.motivo,
-    )
+    st.session_state[CHAVE_FOLLOWUP_PENDENTE] = lead.id
     st.rerun()
 
 
+def _followup_do_lead(lead: Lead) -> None:
+    """Gera o follow-up pedido para este lead e avisa como terminou.
+
+    O andamento fica na linha do lead, que e onde o corretor clicou. O
+    desfecho sai flutuando, fora da tabela: some sozinho depois de um tempo,
+    ou no X, sem empurrar as linhas de baixo.
+    """
+    if st.session_state.get(CHAVE_FOLLOWUP_PENDENTE) != lead.id:
+        return
+
+    st.session_state.pop(CHAVE_FOLLOWUP_PENDENTE, None)
+    nome = markdown_seguro(rotulo_do_lead(lead))
+    with st.status(f"Escrevendo o follow-up de **{nome}**…"):
+        resultado = asyncio.run(run_followup_para_lead(lead.id))
+    corpo, icone, duracao = aviso_do_followup(resultado)
+    st.toast(corpo, icon=icone, duration=duracao)
+    # O rerun atualiza a linha e a conversa, que ja estavam desenhadas.
+    st.rerun()
+
+
+def aviso_do_followup(resultado: DisparoManual) -> tuple[str, str, int]:
+    """Texto, icone e duracao do aviso de como o disparo terminou."""
+    if resultado.executado:
+        return (
+            f"**{titulo_do_followup_gerado(resultado)}**\n\n"
+            f"{corpo_do_followup_gerado(resultado)}",
+            ":material/mark_chat_read:",
+            DURACAO_DO_AVISO_GERADO,
+        )
+    if resultado.falhou:
+        return (
+            f"**Não foi possível gerar o follow-up**\n\n{resultado.motivo}",
+            ":material/error:",
+            DURACAO_DO_AVISO_CURTO,
+        )
+    return (
+        f"**Follow-up não disparado**\n\n{resultado.motivo}",
+        ":material/block:",
+        DURACAO_DO_AVISO_CURTO,
+    )
+
+
+def titulo_do_followup_gerado(resultado: DisparoManual) -> str:
+    """Régua e tentativa: o que o corretor precisa para saber quanto resta."""
+    regua = REGUAS[resultado.regua]["descricao"] if resultado.regua else ""
+    return (
+        f"Follow-up gerado · {regua} · "
+        f"tentativa {resultado.tentativa} de {resultado.maximo}"
+    )
+
+
+def corpo_do_followup_gerado(resultado: DisparoManual) -> str:
+    """A mensagem citada, e para onde ela vai.
+
+    Preparada como a conversa prepara uma fala — cifrão escapado, quebras
+    preservadas —, para o corretor ler aqui o mesmo que vai ler lá.
+    """
+    citacao = "\n".join(
+        f"> {linha}"
+        for linha in mensagem_para_markdown(resultado.texto.strip()).split("\n")
+    )
+    if resultado.enviado:
+        destino = "Enviada pelo Telegram."
+    elif resultado.canal == "telegram":
+        minutos = int(VALIDADE_DO_PENDENTE.total_seconds() // 60)
+        destino = (
+            "Registrada na conversa; o bot do Telegram a envia em instantes. "
+            f"Se ele não estiver no ar nos próximos {minutos} minutos, ela é "
+            "descartada sem sair."
+        )
+    else:
+        destino = "Registrada na conversa — aparece no chat do lead."
+    return f"{citacao}\n\n{destino}"
+
+
 def _avisos_e_confirmacao(lead: Lead) -> None:
-    """Desfecho do follow-up e confirmacao de exclusao, na largura da pagina.
+    """Andamento do follow-up e confirmacao de exclusao, na largura da pagina.
 
     Fora do cabecalho de proposito: espremidos na faixa dos botoes de icone
     eles quebrariam em varias linhas, e a confirmacao de uma acao sem desfazer
     precisa de espaco para ser lida antes de clicada.
     """
-    aviso = st.session_state.get(CHAVE_AVISO_FOLLOWUP)
-    if aviso and aviso[0] == lead.id:
-        mostrar = st.success if aviso[1] == "ok" else st.info
-        mostrar(aviso[2], icon=":material/send:")
+    _followup_do_lead(lead)
 
     if st.session_state.get(CHAVE_EXCLUSAO) != lead.id:
         return

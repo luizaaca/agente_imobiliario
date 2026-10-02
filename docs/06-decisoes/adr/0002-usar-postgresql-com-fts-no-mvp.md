@@ -1,6 +1,6 @@
 # ADR 0002 — Usar PostgreSQL com Full-Text Search no MVP
 
-- **Status:** Aceito
+- **Status:** Aceito; quem monta a consulta é definido pelo [ADR 0007](./0007-agente-de-busca-dedicado.md)
 - **Data:** 2026-09-16
 
 ## Contexto
@@ -44,4 +44,4 @@ Adotar **PostgreSQL** como banco principal e usar **Full-Text Search (FTS)** com
 
 ## Impacto arquitetural
 
-A camada de catálogo deve aplicar busca em camadas: filtros estruturados primeiro, ranking textual depois.
+O catálogo combina filtros estruturados e ranking textual (`search_vector` com índice GIN, `websearch_to_tsquery`, `ts_rank`). Quem escreve essa consulta é o agente de busca do ADR 0007; a busca estruturada do `CatalogService`, com filtros primeiro e ranking depois, é o caminho de degradação quando o provider falha.

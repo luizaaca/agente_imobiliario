@@ -440,3 +440,20 @@ def test_um_imovel_so_nunca_e_recusado(catalogo):
         resultado = asyncio.run(buscar("sala comercial para alugar"))
 
     assert resultado.ids == [6]
+
+
+def test_mais_proximo_so_vale_quando_nada_atende(catalogo):
+    """Com imóveis que atendem, uma alternativa que não atende é ruído."""
+    def resposta(escolhidos):
+        args = {
+            "escolhidos": [{"imovel_id": i, "porque": p} for i, p in escolhidos],
+            "observacao": "",
+            "mais_proximo": 5,
+        }
+        return ModelResponse(parts=[ToolCallPart(tool_name="final_result", args=args)])
+
+    vazio = rodar(resposta([]), pedido="casa de 2 quartos na zona leste")
+    cheio = rodar(resposta([(1, "serve")]), pedido="apartamento na Bela Vista")
+
+    assert vazio.mais_proximo == 5
+    assert cheio.mais_proximo is None

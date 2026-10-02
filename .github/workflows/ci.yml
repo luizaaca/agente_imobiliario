@@ -1,0 +1,53 @@
+# Lint e suite completa a cada push e pull request.
+#
+# Mesmo ambiente da imagem: Python 3.11 e PostgreSQL 16. Os testes rodam
+# contra um Postgres de verdade (ver tests/conftest.py): a suite cria o banco
+# `<banco>_test` sozinha e as migrations criam a role somente-leitura da busca.
+# Nenhum teste fala com provider de LLM -- o conftest troca a chave por uma
+# ficticia --, entao o CI nao precisa de segredo nenhum.
+name: CI
+
+on:
+  push:
+    branches: [main, correcoes/gerais]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sdr
+          POSTGRES_PASSWORD: sdr_dev_pass
+          POSTGRES_DB: agente_sdr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sdr -d agente_sdr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://sdr:sdr_dev_pass@127.0.0.1:5432/agente_sdr
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Dependencias
+        run: pip install -r requirements.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Testes
+        run: pytest -q

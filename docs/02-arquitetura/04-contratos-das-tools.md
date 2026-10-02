@@ -84,7 +84,7 @@ permissão para isso.
 - o que a pessoa procura não é trocado por outra coisa (ver abaixo).
 
 ### Erros tratáveis
-- provider fora do ar ou resposta vazia — degrada para a busca estruturada, sem LLM;
+- provider fora do ar, ou IDs devolvidos que não existem no banco — degrada para a busca estruturada, sem LLM. Lista vazia de uma busca que rodou não é falha e não degrada (ver abaixo);
 - SQL inválido gerado pelo agente de busca — volta a ele como texto, para reescrever;
 - falha de banco;
 - catálogo indisponível.
@@ -110,6 +110,23 @@ Quando não há nada, o retorno traz os números do catálogo: quantos existem d
 que foi pedido, qual o mais barato, em que bairros há. É com eles que o agente
 diz o que existe de verdade, em vez de pedir desculpa no vazio ou oferecer
 outra coisa.
+
+O agente de busca pode indicar um `mais_proximo`: o imóvel que chega mais perto
+sem atender — mesma operação, finalidade e tipo, diferindo só em bairro, preço,
+quartos ou metragem, e nunca um já apresentado. A ficha dele é relida do banco,
+como a dos escolhidos, e vai rotulada como o que não atende ao pedido. Sem ele,
+nenhum imóvel volta.
+
+O retorno vazio não traz a instrução de apresentação: ela manda abrir pelo que
+há, e com um imóvel na mão o agente conversacional o apresentava, atendesse ou
+não. No lugar vem uma instrução própria — dizer em uma linha que não há, citar o
+mais próximo se houver, não reoferecer o que a pessoa recusou e perguntar o que
+ela aceita mudar.
+
+Por isso lista vazia não cai na degradação. Ela fazia isso, e a degradação
+afrouxa filtros da ficha sem saber o que a pessoa recusou: numa conversa real,
+quem dispensou apartamento e 3 quartos recebeu de volta, três vezes, os mesmos
+apartamentos de 3 quartos e o sobrado que já tinha recusado.
 
 ### Uma operação por lista
 Venda e aluguel não se misturam numa lista só: ordenada por preço, os aluguéis
@@ -170,8 +187,9 @@ tudo de novo. Medido numa conversa real: *"o que os condomínios oferecem,
 piscina, vagas?"* disparou uma busca completa de **25.523 tokens de entrada e
 29 segundos**, que ainda trouxe imóveis diferentes dos que a pessoa tinha visto.
 
-É também por aqui que o `imovel_id` de `agendar_reuniao` é recuperado quando o
-truncamento do histórico o levou embora.
+É também por aqui que o agente recupera o ID de cada imóvel para escrever na
+`observacoes` de `agendar_reuniao`, quando o truncamento do histórico o levou
+embora.
 
 ### De onde vêm os IDs
 Do `metadata_json` das mensagens de ferramenta, onde cada busca grava o que
@@ -186,25 +204,24 @@ dois.
 ## 2b. `listar_agendamentos`
 
 ### Objetivo
-Devolver os compromissos de pé do lead, com o ID de cada um.
+Devolver o compromisso de pé do lead.
 
 ### Input esperado
 Nenhum: o lead vem das dependências.
 
 ### Output esperado
-O mesmo texto que abre as instruções — id, tipo, data e imóvel de cada
-compromisso, ou a linha "nenhum".
+O mesmo texto que abre as instruções — tipo, data e status do compromisso, ou
+a linha "nenhum". Sem id: nenhuma tool recebe qual compromisso, então não há o
+que o modelo precise guardar.
 
 ### Efeitos colaterais
 Nenhum.
 
-### Por que existe, se a lista já está nas instruções
+### Por que existe, se a informação já está nas instruções
 Posição. As instruções abrem a requisição; o histórico vem depois delas. Numa
-conversa em que o agente já respondeu várias vezes que não achava os IDs, o
-modelo seguiu o padrão recente e contradisse a própria lista — chegou a chamar
-outra tool como substituto e a relatar honestamente que aquilo não trazia os
-IDs. A tool devolve a mesma verdade na posição mais recente da
-conversa, que é onde o modelo olha.
+conversa em que o agente já tinha repetido que não achava o compromisso, o
+modelo seguiu o padrão recente e contradisse o próprio contexto. A tool devolve
+a mesma verdade na posição mais recente da conversa, que é onde o modelo olha.
 
 ---
 
@@ -230,16 +247,17 @@ Campos estruturados do lead, como:
 - `amenidades_desejadas`
 
 ### Nome e telefone
-O telefone e normalizado para `(11) 98765-4321`: aceita com ou sem DDI, com ou
-sem pontuacao, fixo de dez digitos ou celular de onze. Sem DDD a tool recusa com
-`ModelRetry` pedindo o DDD — gravar um numero incompleto so se descobre errado
+O telefone é normalizado para `(11) 98765-4321`: aceita com ou sem DDI, com ou
+sem pontuação, fixo de dez dígitos ou celular de onze. Sem DDD a tool recusa com
+`ModelRetry` pedindo o DDD — gravar um número incompleto só se descobre errado
 na hora em que o corretor liga.
 
-Quando pedir cada um e regra da persona, nao da tool: o nome cedo, na conversa;
-o telefone na hora de marcar a visita, que e quando ha um motivo que a pessoa
-entende. `agendar_reuniao` acrescenta ao proprio retorno a cobranca do que
-faltar, porque o retorno da tool e a ultima coisa que o modelo le antes de
-escrever.
+Quando pedir cada um é regra da persona, não da tool: o que faltar dos dois,
+na primeira mensagem, e sem insistir se a pessoa não quiser dar. O que ainda faltar quando
+a visita é marcada, `agendar_reuniao` cobra no próprio retorno — ali há um
+motivo que a pessoa entende, e o retorno da tool é a última coisa que o modelo
+lê antes de escrever. O contexto do turno diz se o telefone já foi informado,
+sem o número, para o modelo não pedir de novo.
 
 ### Output esperado
 - lead atualizado;
@@ -299,8 +317,8 @@ Registrar visita ou reunião para handover ao corretor.
 ### Input esperado
 - `tipo` (`visita` ou `reuniao`)
 - `data_hora`
-- `observacoes` (opcional)
-- `imovel_id` (opcional, quando aplicável)
+- `observacoes` — o que o corretor lê antes de ir
+- `remarcar` (default `false`)
 
 ### Output esperado
 - agendamento criado;
@@ -308,21 +326,52 @@ Registrar visita ou reunião para handover ao corretor.
 - dados principais do compromisso.
 
 ### Efeitos colaterais
-Criação de registro de agendamento e possível atualização do status do lead.
+Criação do registro, recálculo do score e possível mudança de status do lead —
+os três saem de `SchedulingService.sincronizar_lead_com_a_agenda`.
 
 ### Regras
-- não criar agendamento sem dados mínimos;
-- validar formato de data/hora;
-- registrar observações relevantes para o corretor;
-- **idempotente**: mesmo lead, mesma data e hora, mesmo imóvel e ainda de pé
-  devolve o compromisso existente em vez de criar outro. Sem isso, pedir duas
-  vezes a mesma visita — o que acontece quando o modelo não acha a ferramenta
-  certa, e quando alguém clica duas vezes na tela — põe dois compromissos na
-  agenda do corretor para o mesmo horário.
+
+**Um compromisso de pé por pessoa.** O corretor vai uma vez e vê com ela os
+imóveis que ela quiser; não se marca uma visita por imóvel. A regra é cobrada
+por índice único parcial sobre `lead_id` para os status ativos, e não só no
+código: uma checagem na aplicação cede a dois turnos gravando ao mesmo tempo, e
+a um modelo que erra qual compromisso trocar.
+
+**Marcar sobre um compromisso existente avisa e não marca.** O retorno diz qual
+é o compromisso de pé e pede que o agente combine a troca com a pessoa; só com
+o sim dela ele chama de novo com `remarcar=true`. Volta como retorno, e não
+como `ModelRetry`, porque a correção não está com o modelo: está com a pessoa.
+Uma retentativa imediata marcaria por cima de um compromisso que ela talvez
+queira manter.
+
+**Remarcar cancela e cria.** Duas linhas, e não uma reescrita: o compromisso
+antigo fica no histórico com a nota *"Remarcado para …"* na `observacoes`. Sem
+a nota o corretor lê o cancelamento como desistência; sem a linha, ninguém vê
+que a pessoa já trocou de data uma vez.
+
+**A `observacoes` é o vínculo com os imóveis.** O agendamento não aponta para
+uma linha do catálogo: quem diz o que será visitado é esse texto, com o ID de
+cada imóvel — *"Quer ver os imóveis 142 (sobrado na Mooca) e 144 (Tatuapé)"*. É
+o que o corretor lê junto do perfil narrativo e do resumo executivo, e por isso
+uma `visita` sem observação é recusada com `ModelRetry`, que diz o que
+escrever.
+
+Só se cobra que exista. Conferir o conteúdo — se cita imóvel, se o ID é de um
+já apresentado — é adivinhar a intenção de um texto livre, e erraria nos dois
+sentidos; o preço do falso negativo é recusar um agendamento que a pessoa
+acabou de combinar. Uma `reuniao` não precisa de observação: nem todo encontro
+é num imóvel do catálogo.
+
+**Idempotente**: mesmo lead, mesmo tipo, mesma data e hora, e ainda de pé
+devolve o compromisso existente em vez de recusar. Pedir duas vezes o mesmo
+horário é o que o duplo clique na tela faz, e o que o modelo faz quando repete
+a chamada sem ter lido o retorno da primeira.
 
 ### Erros tratáveis
 - lead inexistente;
 - data inválida;
+- compromisso já marcado (`CompromissoJaMarcado`, traduzido em aviso para o
+  agente e em mensagem na tela para o corretor);
 - falha de persistência.
 
 ---
@@ -330,17 +379,20 @@ Criação de registro de agendamento e possível atualização do status do lead
 ## 5.1 `confirmar_agendamento` e `cancelar_agendamento`
 
 ### Objetivo
-Mover um compromisso existente para `confirmado` ou `cancelado`, a partir do
-que a pessoa disse na conversa.
+Mover o compromisso do lead para `confirmado` ou `cancelado`, a partir do que a
+pessoa disse na conversa.
 
 ### Input esperado
-- `agendamento_id` — de um compromisso listado no contexto do lead
 - `motivo` (só no cancelamento) — o que a pessoa deu como razão, até 120 caracteres
+
+Nenhuma das duas recebe **qual** compromisso. É um de pé por pessoa, e o
+serviço o encontra pelo lead do turno.
 
 ### Output esperado
 - confirmação do novo estado, com tipo e data do compromisso;
-- recusa explicativa quando o id não existe, não é deste lead, ou o
-  compromisso já está no estado pedido.
+- quando não há compromisso de pé, uma recusa que aponta a saída: marcar com
+  `agendar_reuniao`, ou dizer à pessoa que o que ela cita já foi cancelado ou
+  já aconteceu.
 
 ### Efeitos colaterais
 Mudança de status do agendamento. O cancelamento grava também uma mensagem
@@ -350,37 +402,40 @@ Sendo o último compromisso de pé, o lead sai de `agendado`.
 ### Regras
 - só agir sobre decisão explícita: hesitação (*"acho que consigo"*, *"vou
   ver"*) não confirma nem cancela;
-- nunca usar `agendar_reuniao` para confirmar — isso cria um segundo
-  compromisso em vez de mudar o primeiro;
-- remarcar é cancelar o antigo e marcar o novo.
+- nunca usar `agendar_reuniao` para confirmar — isso avisa que já há
+  compromisso, e não muda o que existe;
+- remarcar não passa por aqui: é `agendar_reuniao` com `remarcar=true`, que
+  cancela o antigo e marca o novo numa chamada só.
 
 ### Erros tratáveis
-- `agendamento_id` inexistente ou de outro lead;
-- compromisso já cancelado ou realizado.
+- nenhum compromisso de pé;
+- compromisso já no estado pedido.
 
-### Por que o id vem do contexto
-As instruções do agente listam os compromissos de pé com id, data **e imóvel**,
-do mais próximo ao mais distante, dizendo que aquela é a lista completa e que
-IDs citados antes na conversa devem ser ignorados.
+### Por que nenhuma delas recebe id
+Porque um id é algo que o modelo pode errar. Ele tiraria números antigos do
+histórico e agiria sobre um compromisso já apagado — e um id de outra pessoa
+alcançaria a agenda dela, o que exigiria uma checagem de dono em cada tool. Com
+um compromisso por lead, cobrado por índice único, o argumento não tem função:
+o dono é o lead do turno, por construção.
 
-São `@agent.instructions`, e não `@agent.system_prompt`, por uma razão de
-mecânica: o pydantic-ai só insere o system prompt quando o `message_history`
-chega vazio. Como o histórico é reidratado do banco a cada turno, um system
-prompt valeria apenas na primeira mensagem da conversa — e desta seção
-dependem as duas tools de compromisso.
+O contexto do turno traz o compromisso, sem id, porque a conversa precisa saber
+**quando** ele é. São `@agent.instructions`, e não
+`@agent.system_prompt`, por uma razão de mecânica: o pydantic-ai só insere o
+system prompt quando o `message_history` chega vazio. Como o histórico é
+reidratado do banco a cada turno, um system prompt valeria apenas na primeira
+mensagem da conversa.
 
 Cada parte disso resolve uma falha observada:
 
 | Sem isso | O que acontece |
 |---|---|
-| a lista | o modelo inventa um número ou chama `agendar_reuniao` de novo |
-| o imóvel | *"confirma aquele da Mooca"* não tem como virar um id, e o modelo vai procurar a ligação no histórico — onde encontra compromissos já apagados |
-| o aviso sobre a conversa | o histórico compete com o contexto, e o modelo às vezes acredita nele |
+| o compromisso no contexto | o modelo responde pelo que a conversa disse, e ela envelhece |
+| o aviso de que aquilo vale acima da conversa | o histórico compete com o contexto, e o modelo às vezes acredita nele |
 | a linha "nenhum" quando a agenda está vazia | o silêncio deixa valer o que a conversa disse antes |
 
-A recusa das duas tools também lista os IDs válidos. Só dizer "não existe" faz
-o modelo desistir e repassar o problema à pessoa; com as opções na própria
-recusa, ele pode acertar na retentativa.
+A recusa das duas tools aponta a saída. Só dizer "não existe" faz o modelo
+desistir e repassar o problema à pessoa; com o caminho na própria recusa, ele
+segue sozinho.
 
 ---
 
@@ -417,49 +472,46 @@ Confirmação do encerramento e a instrução de se despedir sem nova pergunta. 
 
 ---
 
-## 7. `gerar_followup`
+## 7. Geração do follow-up (fora das tools)
 
 ### Objetivo
-Gerar mensagem contextual de reengajamento com base no estágio do funil e histórico.
+Compor a mensagem contextual de reengajamento de um lead calado.
 
-### Papel arquitetural na POC
-Na POC, `gerar_followup` deve ser entendido como uma **capacidade interna de geração textual acionada pelo `FollowUpService`**, e não como uma tool exposta ao agente conversacional com o cliente.
+### Papel arquitetural
+Não é tool: o agente conversacional não a vê nem a chama. É um agente próprio,
+em `src/agent/followup_agent.py` (`gerar_mensagem_followup`), acionado pelo
+`followup_runner` — no ciclo automático, no disparo manual da tela e no ciclo
+avulso de `scripts/run_followup_once.py`.
 
-O `FollowUpService` continua responsável por:
-- selecionar leads elegíveis;
-- aplicar a régua correta;
-- verificar tentativas e janela temporal;
-- persistir mensagem e tentativa;
-- acionar o canal de envio.
+Quem decide tudo o que não é texto está fora dele:
 
-A responsabilidade de `gerar_followup` é apenas **compor a mensagem contextual** via LLM.
+| Responsabilidade | Onde |
+|---|---|
+| quais leads são elegíveis, em qual régua, e o teto de tentativas | `FollowUpService` |
+| orçamento de LLM, persistência da mensagem e da tentativa, envio pelo canal | `followup_runner` |
+| se o canal tem envio ativo | `src/channels/envio.py` (`CANAIS_COM_ENVIO`) |
 
-### Input esperado
-- `lead_id`
-- `regua_followup`
-- histórico recente;
-- `perfil_narrativo`;
-- número de tentativas anteriores.
+### Input
+- o contexto do lead, montado pelo runner: nome, intenção, orçamento, bairro,
+  região, quartos, urgência, motivo da busca, perfil narrativo, a última
+  mensagem trocada e, no pós-agendamento, o compromisso;
+- a régua, que escolhe a instrução da situação;
+- o número da tentativa, que deixa a mensagem mais curta e leve a cada vez.
 
-### Output esperado
-- mensagem de follow-up;
-- classificação da régua aplicada;
-- indicação se o envio é recomendado.
-
-### Efeitos colaterais
-Nenhum obrigatório na geração; o envio e registro ocorrem em camada superior, sob responsabilidade do `FollowUpService`.
+### Output
+`FollowUpGerado`: o texto da mensagem e os tokens de entrada e saída, que o
+runner registra em `llm_usage` com `operation="followup"`.
 
 ### Regras
-- respeitar limite de tentativas;
-- evitar tom insistente ou genérico;
-- usar contexto real da conversa.
-- não controlar elegibilidade, envio ou persistência;
-- não ser invocado pelo agente conversacional com o cliente na POC.
+- uma mensagem curta, com uma pergunta ou um próximo passo;
+- só cita o que está no contexto: o agente não busca imóveis, então não diz que
+  separou ou achou opções, nem comenta mercado ou clima;
+- não controla elegibilidade, envio nem persistência.
 
 ### Erros tratáveis
-- lead inexistente;
-- contexto insuficiente;
-- falha de geração.
+- configuração de LLM ausente — o runner registra e segue para o próximo lead;
+- falha do provider ou texto vazio — a tentativa é registrada como `failed`, e
+  no disparo manual a tela mostra o motivo.
 
 ---
 
