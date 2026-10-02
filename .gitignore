@@ -112,3 +112,9 @@ htmlcov/
 # Gemini / Antigravity
 # =============================================
 .gemini/
+
+# =============================================
+# Ferramentas de assistente de codigo
+# =============================================
+# Configuracao local do editor/assistente; nao interessa a quem clona.
+.claude/

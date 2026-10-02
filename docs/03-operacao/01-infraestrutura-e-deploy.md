@@ -223,8 +223,18 @@ CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0
 ```
 
 O `.dockerignore` mantém fora do contexto de build o `.venv`, o `.git`, os
-caches, o `.env`, e o que não serve para rodar a aplicação: `docs/`, `seed/`,
-`tests/` e os arquivos Markdown.
+caches, o `.env`, e o que não serve para rodar a aplicação: `docs/`, `seed/` e
+os arquivos Markdown. A pasta `tests/` entra de propósito: com ela na imagem,
+quem avalia roda a suíte com `docker compose exec app pytest`, sem Python na
+máquina.
+
+### CI
+
+`.github/workflows/ci.yml` roda `ruff check .` e a suíte inteira a cada push e
+pull request, em Python 3.11 com um PostgreSQL 16 como serviço — o mesmo par
+da imagem. Não usa segredo nenhum: a suíte troca a chave de LLM por uma
+fictícia e não fala com provider. No CI, banco fora do ar é falha, e não testes
+pulados: um badge verde com zero testes rodados seria pior que nenhum.
 
 ### `.env.example`
 

@@ -1,10 +1,22 @@
 # Agente SDR Imobiliário com IA
 
+[![CI](https://github.com/luizaaca/agente_imobiliario/actions/workflows/ci.yml/badge.svg)](https://github.com/luizaaca/agente_imobiliario/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/luizaaca/agente_imobiliario?label=vers%C3%A3o)](https://github.com/luizaaca/agente_imobiliario/releases)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-todos%20os%20direitos%20reservados-lightgrey)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.64-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![PydanticAI](https://img.shields.io/badge/PydanticAI-2.46-E92063?logo=pydantic&logoColor=white)](https://ai.pydantic.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Telegram](https://img.shields.io/badge/Telegram-bot-26A5E4?logo=telegram&logoColor=white)](#telegram-opcional)
+[![LLM](https://img.shields.io/badge/LLM-OpenAI--compatible-412991?logo=openai&logoColor=white)](#o-que-llm_provider-faz--e-o-que-n%C3%A3o-faz)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FIAP — Tech Challenge (Fase 5).
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 604 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e o scheduler de follow-up roda junto dele — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 605 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e o scheduler de follow-up roda junto dele — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -47,7 +59,15 @@ O **`perfil_narrativo`** é o artefato central: um texto incremental mantido ao 
 
 ### Opção 1 — Docker Compose (caminho recomendado)
 
-Um comando, a partir do repositório recém-clonado:
+Clone a versão entregue e suba — é um comando:
+
+```bash
+git clone --branch v0.1.0 https://github.com/luizaaca/agente_imobiliario.git
+```
+
+```bash
+cd agente_imobiliario
+```
 
 ```bash
 docker compose up --build
@@ -295,11 +315,13 @@ O agente nunca toca no banco: ele chama tools, que chamam services. O canal não
 
 ## Testes
 
+Com o Compose no ar, sem Python na máquina:
+
 ```bash
-pytest
+docker compose exec app pytest
 ```
 
-604 testes, ~1 minuto. Rodam no ambiente da [Opção 2](#opção-2--local) — Python local e o PostgreSQL do Compose (`docker compose up -d postgres`) —, porque a pasta `tests/` fica fora da imagem. Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+No ambiente da [Opção 2](#opção-2--local), é só `pytest`. São 605 testes, ~1 minuto, e rodam a cada push no [CI](.github/workflows/ci.yml). Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -310,7 +332,7 @@ Duas decisões que explicam a suíte:
 Lint:
 
 ```bash
-ruff check .
+docker compose exec app ruff check .
 ```
 
 ---
@@ -357,7 +379,7 @@ agente_imobiliario/
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 604 testes
+├── tests/                  # 605 testes
 └── docs/                   # especificação funcional e técnica
 ```
 
@@ -404,3 +426,9 @@ As versões têm teto de major em `requirements.txt` de propósito: sem isso o p
 - Preços reais por modelo na tabela de custo.
 - Fechar o ciclo do lead criado à mão: validar o identificador no canal e resolver o caso do Telegram, em que o bot não inicia conversa.
 - Busca vetorial com `pgvector` como evolução do ranking textual.
+
+---
+
+## Licença
+
+**Todos os direitos reservados.** Este repositório não é de código aberto: ler, clonar, executar e testar são permitidos exclusivamente para avaliar este trabalho no POSTECH/FIAP — Tech Challenge, Fase 5. Qualquer outro uso, comercial ou não, depende de autorização por escrito. Ver [`LICENSE`](LICENSE).

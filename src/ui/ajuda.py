@@ -15,7 +15,7 @@ from src.agent.provider import configuracao_ausente
 from src.config import settings
 from src.ui.papeis import e_admin, papeis_da_sessao
 
-VERSAO = "0.1"
+VERSAO = "0.1.0"
 
 
 def _estado_da_aplicacao() -> None:

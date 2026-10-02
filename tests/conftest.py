@@ -84,6 +84,11 @@ def banco_de_teste():
     try:
         _recriar_banco_de_teste()
     except psycopg.OperationalError as e:
+        # No CI, banco fora do ar é falha: pular daria um badge verde com zero
+        # testes rodados. Na máquina de quem desenvolve, pular avisa sem
+        # derrubar a sessão inteira por um container parado.
+        if os.getenv("CI"):
+            raise
         pytest.skip(f"PostgreSQL indisponível para os testes: {e}")
 
     # Config sem arquivo: o alembic.ini só traz script_location e a seção de
