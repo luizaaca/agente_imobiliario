@@ -16,7 +16,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 605 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e o scheduler de follow-up roda junto dele — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 605 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e os follow-ups, automático e manual, chegaram pelo bot — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -42,7 +42,7 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 | Menu conforme o papel do usuário (`admin` / `corretor`) | funcionando |
 | Página de ajuda com estado da instalação e FAQ | funcionando |
 | Budgets de token (conversa, dia, mês) e custo estimado, também por conversa | funcionando |
-| Canal Telegram | bot no ar com token real; sem conversa exercitada |
+| Canal Telegram | funcionando; percorrido com conversa real, do bot ao painel, e com follow-ups automático e manual entregues pelo bot |
 
 ### O diferencial
 
