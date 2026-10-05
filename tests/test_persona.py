@@ -153,3 +153,12 @@ def test_abertura_que_pede_contato_nao_busca():
     """A busca da primeira mensagem custava ~8 mil tokens e não aparecia."""
     assert "não chame `buscar_imoveis` agora" in abertura_da_conversa(_lead(nome=None))
     assert "buscar_imoveis" not in abertura_da_conversa(_lead(telefone="(11) 98765-4321"))
+
+
+def test_abertura_registra_o_que_ela_ja_disse():
+    """Sem busca na abertura, o modelo deixava de chamar ferramenta nenhuma.
+
+    Um lead que disse nome, intenção, quartos e bairro ficava com a ficha em
+    branco e score zero — e era tudo o que o corretor teria se ele não voltasse.
+    """
+    assert "`registrar_qualificacao` nesta mesma mensagem" in abertura_da_conversa(_lead(nome=None))

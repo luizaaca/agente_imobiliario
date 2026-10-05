@@ -16,7 +16,7 @@ POC de um **agente conversacional de pré-venda imobiliária** para o POSTECH/FI
 
 O agente atende o lead em linguagem natural, qualifica pela conversa, busca imóveis no catálogo, registra visitas e entrega ao corretor um resumo do que foi conversado.
 
-> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 605 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e os follow-ups, automático e manual, chegaram pelo bot — ver [Limitações](#limitações-conhecidas).
+> **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 606 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e os follow-ups, automático e manual, chegaram pelo bot — ver [Limitações](#limitações-conhecidas).
 
 ---
 
@@ -53,9 +53,9 @@ O **`perfil_narrativo`** é o artefato central: um texto incremental mantido ao 
 ## Como executar
 
 ### Pré-requisitos
-- Docker e Docker Compose — é só disso que a Opção 1 precisa
-- Python 3.11+ (desenvolvido em 3.13), apenas para a Opção 2
-- Uma chave de um provider OpenAI-compatible, apenas para o chat responder
+- **Opção 1:** Docker e Docker Compose — é só disso que ela precisa
+- **Opção 2:** Python 3.11+ (desenvolvido em 3.13) e um PostgreSQL 16 — o seu, ou o do Compose
+- Uma chave de um provider OpenAI-compatible, para o chat responder; um token de bot, para o [Telegram](#telegram)
 
 ### Opção 1 — Docker Compose (caminho recomendado)
 
@@ -159,25 +159,60 @@ Para encerrar: `docker compose down`. **Não use `-v`** a menos que queira apaga
 
 ### Opção 2 — Local
 
-Suba só o banco pelo Compose e rode a aplicação na sua máquina:
+A aplicação roda direto na sua máquina, com Python. O banco pode ser um PostgreSQL seu — **sem Docker nenhum** — ou o do Compose.
+
+**1. O banco.** Com Docker, o Compose sobe um já preparado:
 
 ```bash
 docker compose up -d postgres
 ```
 
-```bash
-python -m venv .venv && .venv/Scripts/activate
+Sem Docker, use um PostgreSQL 16 seu. Como superusuário (`psql -U postgres`), crie o usuário e o banco da aplicação:
+
+```sql
+CREATE ROLE sdr LOGIN PASSWORD 'sdr_dev_pass' CREATEDB CREATEROLE;
+CREATE DATABASE agente_sdr OWNER sdr;
 ```
+
+Não precisa de superusuário, só dessas duas permissões: `CREATEROLE` porque a migration cria a role somente-leitura `busca_ro`, que executa o SQL do agente de busca, e `CREATEDB` porque a suíte de testes cria o próprio banco, `agente_sdr_test`. Se o seu PostgreSQL não estiver na porta 5432, ajuste a `DATABASE_URL` no passo 3.
+
+**2. O ambiente Python.** No Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+```
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Se o PowerShell recusar o script, libere só nesta janela com `Set-ExecutionPolicy -Scope Process Bypass`. No Linux ou macOS:
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+source .venv/bin/activate
+```
+
+Com o ambiente ativo, em qualquer sistema:
 
 ```bash
 pip install -r requirements.txt
 ```
 
+**3. O `.env`.** Copie o exemplo — `copy .env.example .env` no Windows:
+
 ```bash
 cp .env.example .env
 ```
 
-Preencha no `.env` pelo menos `LLM_API_KEY`, `LLM_MODEL` e `AUTH_COOKIE_KEY`. Depois:
+Preencha as chaves como em [Chaves: o `.env`](#chaves-o-env). A `DATABASE_URL` do exemplo já aponta para `sdr:sdr_dev_pass@127.0.0.1:5432/agente_sdr`, que serve aos dois bancos do passo 1.
+
+> **Use `127.0.0.1`, não `localhost`, na `DATABASE_URL`.** Em Windows `localhost` resolve para `::1` primeiro e, com o banco do Compose, a conexão fica pendurada até o timeout, porque o container só escuta em IPv4.
+
+**4. Schema, catálogo e aplicação:**
 
 ```bash
 alembic upgrade head
@@ -191,9 +226,7 @@ python -m scripts.seed_imoveis
 streamlit run app.py
 ```
 
-> **Use `127.0.0.1`, não `localhost`, na `DATABASE_URL`.** Em Windows `localhost` resolve para `::1` primeiro e a conexão fica pendurada até o timeout, porque o container só escuta em IPv4.
-
-O login é o mesmo das [credenciais de acesso](#credenciais-de-acesso) acima.
+O Streamlit abre em **http://localhost:8501**, com o login das [credenciais de acesso](#credenciais-de-acesso) acima. Os testes rodam com `pytest`, e o bot do Telegram com `python run_telegram.py`.
 
 ### Telegram
 
@@ -363,7 +396,7 @@ Com o Compose no ar, sem Python na máquina:
 docker compose exec app pytest
 ```
 
-No ambiente da [Opção 2](#opção-2--local), é só `pytest`. São 605 testes, ~1 minuto, e rodam a cada push no [CI](.github/workflows/ci.yml). Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
+No ambiente da [Opção 2](#opção-2--local), é só `pytest`. São 606 testes, ~1 minuto, e rodam a cada push no [CI](.github/workflows/ci.yml). Cobrem services, contrato das nove tools, agente de busca e a fronteira da role somente-leitura, despacho de follow-up, ciclo de mensagem, budgets, livro-caixa de chamadas ao provider, réguas de follow-up e disparo manual, edição de lead e vínculo de canal, visibilidade de menu por papel, alinhamento dos schemas com o ORM e os **3 cenários obrigatórios** (`tests/test_cenarios.py`): compra residencial, investimento e follow-up automático.
 
 Duas decisões que explicam a suíte:
 
@@ -421,7 +454,7 @@ agente_imobiliario/
 ├── alembic/versions/       # migrations
 ├── data/                   # catálogo de imóveis (CSV)
 ├── scripts/                # seed, hash de senha, follow-up manual
-├── tests/                  # 605 testes
+├── tests/                  # 606 testes
 └── docs/                   # especificação funcional e técnica
 ```
 
