@@ -2,6 +2,8 @@
 
 Este documento funciona como portal de navegação da documentação do projeto.
 
+Para avaliar a POC na prática — subir, conversar com o agente nos três cenários do enunciado e saber onde conferir cada requisito —, comece pelo [Guia do avaliador](../GUIA_DO_AVALIADOR.md).
+
 ---
 
 ## 1. Como navegar

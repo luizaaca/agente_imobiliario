@@ -18,6 +18,8 @@ O agente atende o lead em linguagem natural, qualifica pela conversa, busca imó
 
 > **Status:** implementação funcional, rodando ponta a ponta no Streamlit contra PostgreSQL e um provider OpenAI-compatible. 606 testes automatizados. O canal Telegram foi percorrido com conversa real, do bot ao dashboard, e os follow-ups, automático e manual, chegaram pelo bot — ver [Limitações](#limitações-conhecidas).
 
+> **Vai avaliar?** O [Guia do avaliador](GUIA_DO_AVALIADOR.md) é um percurso de 30 a 40 minutos: subir, entrar, conversar com o agente nos três cenários do enunciado e saber onde conferir cada requisito.
+
 ---
 
 ## O que funciona hoje
@@ -51,6 +53,8 @@ O **`perfil_narrativo`** é o artefato central: um texto incremental mantido ao 
 ---
 
 ## Como executar
+
+Para um percurso guiado depois de subir, veja o [Guia do avaliador](GUIA_DO_AVALIADOR.md).
 
 ### Pré-requisitos
 - **Opção 1:** Docker e Docker Compose — é só disso que ela precisa
